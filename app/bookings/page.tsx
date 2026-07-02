@@ -37,6 +37,9 @@ import {
   Archive,
   RotateCcw,
   Tag,
+  ShoppingCart,
+  TrendingUp,
+  CheckCircle,
 } from "lucide-react"
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
@@ -45,6 +48,7 @@ import { useToast } from "@/hooks/use-toast"
 import { BookingCalendar } from "@/components/bookings/booking-calendar"
 import { BookingBarcodes } from "@/components/bookings/booking-barcodes"
 import { InvoiceFormatDialog } from "@/components/invoices"
+import { DetailedBookingViewDialog } from "@/components/bookings/detailed-view-dialog"
 import type { Booking } from "@/lib/types"
 import { TableSkeleton, StatCardSkeleton, PageLoader } from "@/components/ui/skeleton-loader"
 import { ItemsDisplayDialog, ItemsSelectionDialog, CompactItemsDisplayDialog } from "@/components/shared"
@@ -100,6 +104,39 @@ export default function BookingsPage() {
   }
   const [viewMode, setViewMode] = useState<"table" | "calendar">("table")
   const [selectedDate, setSelectedDate] = useState<string | null>(null)
+  const [dateRange, setDateRange] = useState<"today" | "month" | "quarter" | "year" | "all">("all")
+  const [bookingMode, setBookingMode] = useState<"rental" | "sale">("sale")
+
+  // Date period filtering logic
+  const filterByDateRange = (booking: any) => {
+    if (dateRange === "all") return true
+    
+    // Fallback: created_at, booking_date, event_date
+    const dateStr = booking.created_at || booking.booking_date || booking.event_date
+    if (!dateStr) return true
+    
+    const date = new Date(dateStr)
+    const now = new Date()
+    
+    if (dateRange === "today") {
+      const startOfToday = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+      return date >= startOfToday
+    }
+    if (dateRange === "month") {
+      const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1)
+      return date >= startOfMonth
+    }
+    if (dateRange === "quarter") {
+      const quarterStartMonth = Math.floor(now.getMonth() / 3) * 3
+      const startOfQuarter = new Date(now.getFullYear(), quarterStartMonth, 1)
+      return date >= startOfQuarter
+    }
+    if (dateRange === "year") {
+      const startOfYear = new Date(now.getFullYear(), 0, 1)
+      return date >= startOfYear
+    }
+    return true
+  }
   
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1)
@@ -148,6 +185,13 @@ export default function BookingsPage() {
       router.replace('/bookings')
     }
   }, [searchParams, refresh, router])
+
+  // Auto-reset view mode to table when switching to sale mode
+  useEffect(() => {
+    if (bookingMode === "sale" && viewMode === "calendar") {
+      setViewMode("table")
+    }
+  }, [bookingMode, viewMode])
 
   useEffect(() => {
     ;(async () => {
@@ -366,14 +410,33 @@ export default function BookingsPage() {
   const archivedBookings = (bookings || []).filter((b: any) => b.is_archived === true)
   const activeBookings = (bookings || []).filter((b: any) => !b.is_archived)
 
+  // Filter active bookings by selected date range
+  const dateFilteredBookings = activeBookings.filter(filterByDateRange)
+
   const { data: statsData } = useData<any>("booking-stats")
   const stats = statsData || {}
 
   // Rental/Sale switch — Zomato-style toggle in the header, drives both the stat cards and the table below
-  const [bookingMode, setBookingMode] = useState<"rental" | "sale">("sale")
-  const modeBookings = activeBookings.filter((b: any) =>
+  const modeBookings = dateFilteredBookings.filter((b: any) =>
     bookingMode === "rental" ? (b.type === "rental" || b.type === "package") : b.type === "sale"
   )
+
+  // Calculate payment pending stats dynamically based on the active mode (rental or sale)
+  const pendingPaymentsList = modeBookings.filter((b: any) => {
+    const pending = (b as any).pending_amount ?? ((b.total_amount || 0) - ((b as any).paid_amount || (b as any).amount_paid || 0))
+    return pending > 0
+  })
+  const totalPendingAmount = pendingPaymentsList.reduce((sum, b) => {
+    const pending = (b as any).pending_amount ?? ((b.total_amount || 0) - ((b as any).paid_amount || (b as any).amount_paid || 0))
+    return sum + pending
+  }, 0)
+  const pendingPaymentsCount = pendingPaymentsList.length
+
+  // Calculate ready for delivery/pickup dynamically
+  const readyForDeliveryCount = modeBookings.filter(b => {
+    const isNotDelivered = b.status !== 'delivered' && b.status !== 'order_complete' && b.status !== 'returned' && b.status !== 'cancelled'
+    return isNotDelivered && (b as any).has_items
+  }).length
 
   // Calculate smart stats based on business logic (scoped to the active Rental/Sale mode)
   const smartStats = {
@@ -651,7 +714,7 @@ export default function BookingsPage() {
     }
   }
 
-  const filteredBookings = activeBookings.filter((booking) => {
+  const filteredBookings = dateFilteredBookings.filter((booking) => {
     const searchLower = searchTerm.toLowerCase()
     const matchesSearch =
       !searchTerm ||
@@ -664,7 +727,10 @@ export default function BookingsPage() {
       (productFilter === 'selected' && (booking as any).has_items) ||
       (productFilter === 'pending' && !(booking as any).has_items)
 
-    const matchesStatus = statusFilter === "all" || booking.status === statusFilter
+    const matchesStatus = statusFilter === "all" || 
+      (statusFilter === "pending_modification" 
+        ? (booking.has_modifications === true && booking.status !== "cancelled" && booking.status !== "order_complete")
+        : booking.status === statusFilter)
 
     // booking.type: 'rental' | 'sale' for product orders, 'package' for packages
     const matchesType = typeFilter === "all" || (booking as any).type === typeFilter
@@ -1242,7 +1308,7 @@ export default function BookingsPage() {
         </div>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-6">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-6">
         {loading ? (
           <>
             <StatCardSkeleton />
@@ -1254,79 +1320,134 @@ export default function BookingsPage() {
           </>
         ) : (
           <>
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">{bookingMode === "rental" ? "Total Rentals" : "Total Sales"}</CardTitle>
-                <Package className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{smartStats.total}</div>
-                <p className="text-xs text-muted-foreground">
-                  {bookingMode === "rental" ? "packages included" : "direct sales"}
-                </p>
+            {/* Card 1: Date Period Selector */}
+            <Card className="border-indigo-100 dark:border-indigo-900/30 bg-indigo-50/10 dark:bg-indigo-950/10 shadow-sm hover:shadow-md transition-all duration-300">
+              <CardContent className="p-4 flex flex-col justify-between h-full min-h-[140px]">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider">Date Period</span>
+                  <Calendar className="h-4 w-4 text-indigo-500" />
+                </div>
+                <div className="grid grid-cols-2 gap-1.5 mt-3">
+                  {[
+                    { value: "all", label: "All Time" },
+                    { value: "today", label: "Today" },
+                    { value: "month", label: "Month" },
+                    { value: "quarter", label: "Quarter" },
+                    { value: "year", label: "Year" }
+                  ].map((opt) => (
+                    <button
+                      key={opt.value}
+                      onClick={() => setDateRange(opt.value as any)}
+                      className={`px-2 py-1 text-[11px] font-semibold rounded-lg transition-all duration-200 text-center ${
+                        dateRange === opt.value
+                          ? "bg-indigo-600 text-white shadow-sm shadow-indigo-600/20"
+                          : "bg-slate-100/80 hover:bg-slate-200/80 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-600 dark:text-slate-300"
+                      } ${opt.value === "all" ? "col-span-2" : ""}`}
+                    >
+                      {opt.value === "today" ? "Today" : opt.value === "month" ? "This Month" : opt.value === "quarter" ? "This Quarter" : opt.value === "year" ? "This Year" : "All Time"}
+                    </button>
+                  ))}
+                </div>
               </CardContent>
             </Card>
 
-            <Card className="border-orange-200 bg-orange-50/30 dark:bg-orange-950/30">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Confirmed (Selection Pending)</CardTitle>
-                <Clock className="h-4 w-4 text-orange-600" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-orange-600">{smartStats.pendingSelection}</div>
-                <p className="text-xs text-muted-foreground">
-                  {bookingMode === "rental"
-                    ? `Product Rent: ${smartStats.pendingProductRental} • Package: ${smartStats.pendingPackage}`
-                    : `Sale: ${smartStats.pendingProductSale}`}
-                </p>
+            {/* Card 2: Sales / Rentals Count */}
+            <Card className="border-blue-100 dark:border-blue-900/30 bg-blue-50/10 dark:bg-blue-950/10 shadow-sm hover:shadow-md transition-all duration-300">
+              <CardContent className="p-4 flex flex-col justify-between h-full min-h-[140px]">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider">
+                    {bookingMode === "rental" ? "Rentals" : "Sales"}
+                  </span>
+                  {bookingMode === "rental" ? (
+                    <Package className="h-4 w-4 text-blue-500" />
+                  ) : (
+                    <ShoppingCart className="h-4 w-4 text-blue-500" />
+                  )}
+                </div>
+                <div className="mt-3">
+                  <div className="text-3xl font-extrabold text-slate-800 dark:text-slate-100 tracking-tight">
+                    {smartStats.total}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-1.5">
+                    {bookingMode === "rental" ? "Total rentals booked" : "Total sales placed"}
+                  </p>
+                </div>
               </CardContent>
             </Card>
 
-            <Card className="border-blue-200 bg-blue-50/30 dark:bg-blue-950/30">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Ready for Delivery</CardTitle>
-                <CalendarDays className="h-4 w-4 text-blue-600" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-blue-600">{smartStats.confirmed}</div>
-                <p className="text-xs text-muted-foreground">
-                  {bookingMode === "rental"
-                    ? `Product Rent: ${smartStats.confirmedProductRental} • Package: ${smartStats.confirmedPackage}`
-                    : `Sale: ${smartStats.confirmedProductSale}`}
-                </p>
+            {/* Card 3: Revenue */}
+            <Card className="border-emerald-100 dark:border-emerald-900/30 bg-emerald-50/10 dark:bg-emerald-950/10 shadow-sm hover:shadow-md transition-all duration-300">
+              <CardContent className="p-4 flex flex-col justify-between h-full min-h-[140px]">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Revenue</span>
+                  <TrendingUp className="h-4 w-4 text-emerald-500" />
+                </div>
+                <div className="mt-3">
+                  <div className="text-3xl font-extrabold text-emerald-600 dark:text-emerald-400 tracking-tight">
+                    ₹{smartStats.revenue.toLocaleString()}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-1.5">
+                    {bookingMode === "rental" ? "Combined rental values" : "Combined sales values"}
+                  </p>
+                </div>
               </CardContent>
             </Card>
 
-            <Card className="border-green-200 bg-green-50/30 dark:bg-green-950/30">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Delivered</CardTitle>
-                <Package className="h-4 w-4 text-green-600" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-green-600">{smartStats.delivered}</div>
-                <p className="text-xs text-muted-foreground">{bookingMode === "rental" ? "Rentals in use" : "Sales delivered ✓"}</p>
+            {/* Card 4: Payment Pending */}
+            <Card className="border-rose-100 dark:border-rose-900/30 bg-rose-50/10 dark:bg-rose-950/10 shadow-sm hover:shadow-md transition-all duration-300">
+              <CardContent className="p-4 flex flex-col justify-between h-full min-h-[140px]">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-rose-600 dark:text-rose-400 uppercase tracking-wider">Payment Pending</span>
+                  <DollarSign className="h-4 w-4 text-rose-500" />
+                </div>
+                <div className="mt-3">
+                  <div className="text-3xl font-extrabold text-rose-600 dark:text-rose-400 tracking-tight">
+                    ₹{totalPendingAmount.toLocaleString()}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-1.5 font-medium">
+                    {pendingPaymentsCount} booking{pendingPaymentsCount !== 1 ? 's' : ''} with balance
+                  </p>
+                </div>
               </CardContent>
             </Card>
 
-            <Card className="border-purple-200 bg-purple-50/30 dark:bg-purple-950/30">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">{bookingMode === "rental" ? "Rental Completed" : "Fully Paid"}</CardTitle>
-                <RefreshCw className="h-4 w-4 text-purple-600" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-purple-600">{bookingMode === "rental" ? smartStats.returned : smartStats.fullyPaid}</div>
-                <p className="text-xs text-muted-foreground">{bookingMode === "rental" ? "Rentals completed ✓" : "No balance due ✓"}</p>
+            {/* Card 5: Ready for Delivery/Pickup */}
+            <Card className="border-amber-100 dark:border-amber-900/30 bg-amber-50/10 dark:bg-amber-950/10 shadow-sm hover:shadow-md transition-all duration-300">
+              <CardContent className="p-4 flex flex-col justify-between h-full min-h-[140px]">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">
+                    {bookingMode === "rental" ? "Ready for Pickup" : "Ready for Delivery"}
+                  </span>
+                  <Clock className="h-4 w-4 text-amber-500" />
+                </div>
+                <div className="mt-3">
+                  <div className="text-3xl font-extrabold text-amber-600 dark:text-amber-400 tracking-tight">
+                    {readyForDeliveryCount}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-1.5">
+                    {bookingMode === "rental" ? "Ready to dispatch / pickup" : "Ready for dispatch / shipping"}
+                  </p>
+                </div>
               </CardContent>
             </Card>
 
-            <Card className="border-emerald-200 bg-emerald-50/30 dark:bg-emerald-950/30">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">{bookingMode === "rental" ? "Rental Revenue" : "Sale Revenue"}</CardTitle>
-                <DollarSign className="h-4 w-4 text-emerald-600" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-emerald-600">₹{smartStats.revenue.toLocaleString()}</div>
-                <p className="text-xs text-muted-foreground">{bookingMode === "rental" ? "Rentals combined" : "Sales combined"}</p>
+            {/* Card 6: Delivered / In Use */}
+            <Card className="border-teal-100 dark:border-teal-900/30 bg-teal-50/10 dark:bg-teal-950/10 shadow-sm hover:shadow-md transition-all duration-300">
+              <CardContent className="p-4 flex flex-col justify-between h-full min-h-[140px]">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-teal-600 dark:text-teal-400 uppercase tracking-wider">
+                    {bookingMode === "rental" ? "In Use" : "Delivered"}
+                  </span>
+                  <CheckCircle className="h-4 w-4 text-teal-500" />
+                </div>
+                <div className="mt-3">
+                  <div className="text-3xl font-extrabold text-teal-600 dark:text-teal-400 tracking-tight">
+                    {smartStats.delivered}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground mt-1.5">
+                    {bookingMode === "rental" ? "Rentals currently active" : "Sales successfully delivered"}
+                  </p>
+                </div>
               </CardContent>
             </Card>
           </>
@@ -1337,16 +1458,18 @@ export default function BookingsPage() {
         <div className="flex flex-col gap-4">
           {/* Top row: View tabs and search */}
           <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-            <TabsList>
-              <TabsTrigger value="table" className="flex items-center gap-2">
-                <List className="h-4 w-4" />
-                Table View
-              </TabsTrigger>
-              <TabsTrigger value="calendar" className="flex items-center gap-2">
-                <Calendar className="h-4 w-4" />
-                Calendar View
-              </TabsTrigger>
-            </TabsList>
+            {bookingMode === "rental" && (
+              <TabsList>
+                <TabsTrigger value="table" className="flex items-center gap-2">
+                  <List className="h-4 w-4" />
+                  Table View
+                </TabsTrigger>
+                <TabsTrigger value="calendar" className="flex items-center gap-2">
+                  <Calendar className="h-4 w-4" />
+                  Calendar View
+                </TabsTrigger>
+              </TabsList>
+            )}
 
             <div className="relative w-full sm:w-64">
               <Search className="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -1362,64 +1485,79 @@ export default function BookingsPage() {
           {/* Filter row - wraps on smaller screens */}
           <div className="flex flex-wrap items-center gap-2">
             <Select value={pendingFilters.status} onValueChange={(v)=>updateFilter('status',v)}>
-              <SelectTrigger className="w-36">
+              <SelectTrigger className="w-44">
                 <SelectValue placeholder="All Status" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">All Status</SelectItem>
                 <SelectItem value="pending_payment">Pending Payment</SelectItem>
-                <SelectItem value="pending_selection">Pending Selection</SelectItem>
-                <SelectItem value="confirmed">Confirmed</SelectItem>
-                <SelectItem value="delivered">Delivered</SelectItem>
-                <SelectItem value="returned">Rental Completed</SelectItem>
-                <SelectItem value="order_complete">Order Complete</SelectItem>
+                {bookingMode === "rental" ? (
+                  <>
+                    <SelectItem value="pending_selection">Pending Selection</SelectItem>
+                    <SelectItem value="confirmed">Confirmed</SelectItem>
+                    <SelectItem value="returned">Rental Completed</SelectItem>
+                  </>
+                ) : (
+                  <>
+                    <SelectItem value="pending_modification">Pending Modification</SelectItem>
+                    <SelectItem value="confirmed">Ready for Delivery</SelectItem>
+                    <SelectItem value="delivered">Delivered</SelectItem>
+                    <SelectItem value="order_complete">Order Complete</SelectItem>
+                  </>
+                )}
                 <SelectItem value="cancelled">Cancelled</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={pendingFilters.type} onValueChange={(v)=>updateFilter('type',v)}>
-              <SelectTrigger className="w-32">
-                <SelectValue placeholder="All Types" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Types</SelectItem>
-                <SelectItem value="rental">Rental</SelectItem>
-                <SelectItem value="sale">Sale</SelectItem>
-                <SelectItem value="package">Package</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={pendingFilters.products} onValueChange={(v)=>updateFilter('products',v)}>
-              <SelectTrigger className="w-40">
-                <SelectValue placeholder="Product Status" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Products</SelectItem>
-                <SelectItem value="selected">Products Selected</SelectItem>
-                <SelectItem value="pending">Selection Pending</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={pendingFilters.safaSort} onValueChange={(v)=>updateFilter('safaSort',v)}>
-              <SelectTrigger className="w-40">
-                <SelectValue placeholder="Safa Quantity" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Safa Qty</SelectItem>
-                <SelectItem value="low-to-high">Safa: Low→High</SelectItem>
-                <SelectItem value="high-to-low">Safa: High→Low</SelectItem>
-              </SelectContent>
-            </Select>
-            <Select value={pendingFilters.distanceSort} onValueChange={(v)=>updateFilter('distanceSort',v)}>
-              <SelectTrigger className="w-36">
-                <SelectValue placeholder="Distance" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">All Distances</SelectItem>
-                <SelectItem value="low-to-high">Near→Far</SelectItem>
-                <SelectItem value="high-to-low">Far→Near</SelectItem>
-              </SelectContent>
-            </Select>
+
+            {bookingMode === "rental" && (
+              <>
+                <Select value={pendingFilters.type} onValueChange={(v)=>updateFilter('type',v)}>
+                  <SelectTrigger className="w-32">
+                    <SelectValue placeholder="All Types" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Types</SelectItem>
+                    <SelectItem value="rental">Rental</SelectItem>
+                    <SelectItem value="sale">Sale</SelectItem>
+                    <SelectItem value="package">Package</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={pendingFilters.products} onValueChange={(v)=>updateFilter('products',v)}>
+                  <SelectTrigger className="w-40">
+                    <SelectValue placeholder="Product Status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Products</SelectItem>
+                    <SelectItem value="selected">Products Selected</SelectItem>
+                    <SelectItem value="pending">Selection Pending</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={pendingFilters.safaSort} onValueChange={(v)=>updateFilter('safaSort',v)}>
+                  <SelectTrigger className="w-40">
+                    <SelectValue placeholder="Safa Quantity" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Safa Qty</SelectItem>
+                    <SelectItem value="low-to-high">Safa: Low→High</SelectItem>
+                    <SelectItem value="high-to-low">Safa: High→Low</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={pendingFilters.distanceSort} onValueChange={(v)=>updateFilter('distanceSort',v)}>
+                  <SelectTrigger className="w-36">
+                    <SelectValue placeholder="Distance" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Distances</SelectItem>
+                    <SelectItem value="low-to-high">Near→Far</SelectItem>
+                    <SelectItem value="high-to-low">Far→Near</SelectItem>
+                  </SelectContent>
+                </Select>
+              </>
+            )}
+
             <Button variant="ghost" size="sm" onClick={resetFilters}>Reset</Button>
             {/* Active filter result count */}
-            {(statusFilter !== 'all' || typeFilter !== 'all' || productFilter !== 'all') && (
+            {(statusFilter !== 'all' || (bookingMode === "rental" && (typeFilter !== 'all' || productFilter !== 'all'))) && (
               <span className="text-xs text-indigo-600 font-medium bg-indigo-50 px-2 py-1 rounded-full border border-indigo-200">
                 {filteredBookings.length} result{filteredBookings.length !== 1 ? 's' : ''}
               </span>
@@ -1508,7 +1646,6 @@ export default function BookingsPage() {
       </Dialog>
 
       {/* Full-Featured Booking View Dialog */}
-      {/* View Details — shows the real invoice preview (same renderer used to print/send), not a card dump */}
       {(() => {
         const isItemsLoading = selectedBooking ? itemsLoading[selectedBooking.id] === true : false
         const items = selectedBooking ? (bookingItems[selectedBooking.id] || []) : []
@@ -1519,7 +1656,7 @@ export default function BookingsPage() {
               <DialogContent className="max-w-md">
                 <div className="flex items-center justify-center py-16 gap-3">
                   <RefreshCw className="h-5 w-5 animate-spin text-indigo-500" />
-                  <span className="text-sm text-slate-500">Loading invoice...</span>
+                  <span className="text-sm text-slate-500">Loading details...</span>
                 </div>
               </DialogContent>
             </Dialog>
@@ -1527,11 +1664,12 @@ export default function BookingsPage() {
         }
 
         return (
-          <InvoiceFormatDialog
+          <DetailedBookingViewDialog
             open={showViewDialog && !!selectedBooking}
             onOpenChange={setShowViewDialog}
             booking={selectedBooking}
             bookingItems={items}
+            onStatusUpdate={handleStatusUpdate}
           />
         )
       })()}
