@@ -36,7 +36,7 @@ interface DetailedBookingViewDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   bookingItems: any[]
-  onStatusUpdate?: (bookingId: string, status: string, source?: string) => Promise<void>
+  onStatusUpdate?: (bookingId: string, status: any, source?: string) => Promise<void>
 }
 
 export function DetailedBookingViewDialog({
@@ -162,6 +162,7 @@ export function DetailedBookingViewDialog({
       setUpdatingStatus(false)
     }
   }
+
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -583,6 +584,7 @@ export function DetailedBookingViewDialog({
                   Order Complete
                 </Button>
               )}
+
               {booking.status !== "cancelled" && (
                 <Button size="sm" variant="destructive" onClick={() => handleQuickStatusChange("cancelled")} disabled={updatingStatus} className="h-8">
                   <XCircle className="h-3.5 w-3.5 mr-1.5" />
