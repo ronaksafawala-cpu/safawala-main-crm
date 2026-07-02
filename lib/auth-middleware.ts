@@ -62,103 +62,6 @@ export async function authenticateRequest(
   request: NextRequest,
   options: AuthOptions = {}
 ): Promise<AuthenticationResult> {
-  // Global bypass — fetch real admin user + franchise from DB so FK constraints (created_by, franchise_id) are satisfied
-  let bypassUserId = 'mock-admin-id';
-  let bypassEmail = 'admin@mysafawala.com';
-  let bypassName = 'Super Admin';
-  let bypassFranchiseId: string | undefined;
-  let bypassFranchiseName: string | undefined;
-  let bypassFranchiseCode: string | undefined;
-
-  try {
-    // Look up the real super_admin user from the DB
-    const { data: adminUser } = await supabaseServer
-      .from('users')
-      .select('id, email, name, franchise_id')
-      .eq('role', 'super_admin')
-      .eq('is_active', true)
-      .order('created_at', { ascending: true })
-      .limit(1)
-      .single();
-
-    if (adminUser?.id) {
-      bypassUserId = adminUser.id;
-      bypassEmail = adminUser.email || bypassEmail;
-      bypassName = adminUser.name || bypassName;
-      bypassFranchiseId = adminUser.franchise_id || undefined;
-    }
-  } catch (_) {
-    // ignore — fall back to mock values
-  }
-
-  // If we still don't have a franchise_id, fetch the first franchise
-  if (!bypassFranchiseId) {
-    try {
-      const { data: franchiseData } = await supabaseServer
-        .from('franchises')
-        .select('id, name, code')
-        .order('created_at', { ascending: true })
-        .limit(1)
-        .single();
-      if (franchiseData?.id) {
-        bypassFranchiseId = franchiseData.id;
-        bypassFranchiseName = franchiseData.name;
-        bypassFranchiseCode = franchiseData.code;
-      }
-    } catch (_) {
-      // ignore
-    }
-  } else {
-    // Fetch franchise details for the name/code
-    try {
-      const { data: franchiseData } = await supabaseServer
-        .from('franchises')
-        .select('id, name, code')
-        .eq('id', bypassFranchiseId)
-        .single();
-      if (franchiseData) {
-        bypassFranchiseName = franchiseData.name;
-        bypassFranchiseCode = franchiseData.code;
-      }
-    } catch (_) {}
-  }
-
-  return {
-    authorized: true,
-    user: {
-      id: bypassUserId,
-      email: bypassEmail,
-      name: bypassName,
-      role: 'super_admin',
-      franchise_id: bypassFranchiseId,
-      franchise_name: bypassFranchiseName,
-      franchise_code: bypassFranchiseCode,
-      is_super_admin: true,
-      permissions: {
-        dashboard: true,
-        bookings: true,
-        customers: true,
-        inventory: true,
-        quotes: true,
-        expenses: true,
-        reports: true,
-        staff: true,
-        settings: true,
-        packages: true,
-        vendors: true,
-        invoices: true,
-        laundry: true,
-        deliveries: true,
-        productArchive: true,
-        payroll: true,
-        attendance: true,
-        financials: true,
-        franchises: true,
-        integrations: true,
-      }
-    }
-  };
-
   const {
     minRole = 'readonly',
     requirePermission,
@@ -315,8 +218,8 @@ export async function authenticateRequest(
 
             // Check role — map all custom roles to levels
             const userLevel2 = ROLE_LEVELS[fallbackUser.role] ??
-              (fallbackUser.role === 'manager' || fallbackUser.role === 'franchise_owner' ? 3 :
-               fallbackUser.role?.endsWith('_staff') || fallbackUser.role === 'stylist' ? 2 : 0)
+              ((fallbackUser.role as any) === 'manager' || (fallbackUser.role as any) === 'franchise_owner' ? 3 :
+               (fallbackUser.role as any)?.endsWith('_staff') || (fallbackUser.role as any) === 'stylist' ? 2 : 0)
             const requiredLevel2 = ROLE_LEVELS[minRole] || 0
             if (userLevel2 < requiredLevel2) {
               return { authorized: false, error: { error: 'Forbidden', message: `Requires ${minRole} role` }, statusCode: 403 }
@@ -354,8 +257,8 @@ export async function authenticateRequest(
     // 3. Check role hierarchy
     // Department-specific roles mapped to appropriate levels
     const userLevel = ROLE_LEVELS[user.role] ??
-      (user.role === 'manager' || user.role === 'franchise_owner' ? 3 :
-       user.role?.endsWith('_staff') || user.role === 'stylist' ? 2 : 0);
+      ((user.role as any) === 'manager' || (user.role as any) === 'franchise_owner' ? 3 :
+       (user.role as any)?.endsWith('_staff') || (user.role as any) === 'stylist' ? 2 : 0);
     const requiredLevel = ROLE_LEVELS[minRole] || 0;
 
     if (userLevel < requiredLevel) {
@@ -454,6 +357,7 @@ function getDefaultPermissions(role: AppRole): UserPermissions {
         staff: true,
         integrations: true,
         settings: true,
+        invoice_payment_access: true,
       };
     
     case 'franchise_admin':
@@ -478,6 +382,7 @@ function getDefaultPermissions(role: AppRole): UserPermissions {
         staff: true,
         integrations: false, // Only super_admin
         settings: true,
+        invoice_payment_access: true,
       };
     
     case 'staff':
@@ -502,6 +407,7 @@ function getDefaultPermissions(role: AppRole): UserPermissions {
         staff: false,
         integrations: false,
         settings: false,
+        invoice_payment_access: true,
       };
     
     case 'readonly':
@@ -526,6 +432,7 @@ function getDefaultPermissions(role: AppRole): UserPermissions {
         staff: false,
         integrations: false,
         settings: false,
+        invoice_payment_access: false,
       };
     
     default:
@@ -551,6 +458,7 @@ function getDefaultPermissions(role: AppRole): UserPermissions {
         staff: false,
         integrations: false,
         settings: false,
+        invoice_payment_access: false,
       };
   }
 }
