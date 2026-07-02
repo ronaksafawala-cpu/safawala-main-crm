@@ -410,9 +410,9 @@ export function TeamChat() {
   }, [input, currentUser, userStatus])
 
   const getRightPosition = () => {
-    if (!aiState.open) return 220
-    if (aiState.minimized) return 328
-    return 440
+    if (!aiState.open) return 100
+    if (aiState.minimized) return 320
+    return 382
   }
 
   // Draggable logic for floating button
@@ -1391,7 +1391,7 @@ export function TeamChat() {
                       ref={fileInputRef} 
                       onChange={handleFileChange} 
                       accept={fileAccept}
-                      capture={fileCapture}
+                      capture={fileCapture as any}
                       style={{ display: "none" }} 
                     />
 
