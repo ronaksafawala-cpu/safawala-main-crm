@@ -640,17 +640,7 @@ export function ProductEditorModal({
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <Label htmlFor="product-brand" className="text-sm">Brand</Label>
-                  <Input
-                    id="product-brand"
-                    placeholder="e.g., Sabyasachi"
-                    value={formData.brand || ""}
-                    onChange={(e) => setFormData({ ...formData, brand: e.target.value })}
-                    className="mt-1"
-                  />
-                </div>
+              <div className="grid grid-cols-3 gap-3">
                 <div>
                   <Label htmlFor="product-size" className="text-sm">Size</Label>
                   <Input
