@@ -44,8 +44,7 @@ import { useData } from "@/hooks/use-data"
 import { useToast } from "@/hooks/use-toast"
 import { BookingCalendar } from "@/components/bookings/booking-calendar"
 import { BookingBarcodes } from "@/components/bookings/booking-barcodes"
-import { DirectSalesBookingDetails } from "@/components/bookings/direct-sales-booking-details"
-import { DirectSalesOrderDetails } from "@/components/bookings/direct-sales-order-details"
+import { InvoiceFormatDialog } from "@/components/invoices"
 import type { Booking } from "@/lib/types"
 import { TableSkeleton, StatCardSkeleton, PageLoader } from "@/components/ui/skeleton-loader"
 import { ItemsDisplayDialog, ItemsSelectionDialog, CompactItemsDisplayDialog } from "@/components/shared"
@@ -58,7 +57,6 @@ import { formatVenueWithCity, getCityForExport, getVenueNameForExport } from "@/
 import ManageOffersDialog from "@/components/ManageOffersDialog"
 import { apiClient } from "@/lib/api-client"
 import { archiveBooking, restoreBooking } from "@/lib/bookings"
-import { PackageBookingView } from "@/components/bookings/package-booking-view"
 import { BookingsTabs } from "@/components/bookings/bookings-tabs"
 
 export default function BookingsPage() {
@@ -1510,47 +1508,33 @@ export default function BookingsPage() {
       </Dialog>
 
       {/* Full-Featured Booking View Dialog */}
-      <Dialog open={showViewDialog} onOpenChange={setShowViewDialog}>
-        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>📋 Booking Details</DialogTitle>
-            <DialogDescription>Complete booking information and timeline</DialogDescription>
-          </DialogHeader>
+      {/* View Details — shows the real invoice preview (same renderer used to print/send), not a card dump */}
+      {(() => {
+        const isItemsLoading = selectedBooking ? itemsLoading[selectedBooking.id] === true : false
+        const items = selectedBooking ? (bookingItems[selectedBooking.id] || []) : []
 
-          {selectedBooking && (() => {
-            // Wait for items to finish loading before rendering — this fixes the double-click issue
-            const isItemsLoading = itemsLoading[selectedBooking.id] === true
-            const items = bookingItems[selectedBooking.id] || []
-            // Only show loading if items are actively being fetched (not already loaded)
-            if (isItemsLoading && items.length === 0) {
-              return (
+        if (selectedBooking && isItemsLoading && items.length === 0) {
+          return (
+            <Dialog open={showViewDialog} onOpenChange={setShowViewDialog}>
+              <DialogContent className="max-w-md">
                 <div className="flex items-center justify-center py-16 gap-3">
                   <RefreshCw className="h-5 w-5 animate-spin text-indigo-500" />
-                  <span className="text-sm text-slate-500">Loading booking details...</span>
+                  <span className="text-sm text-slate-500">Loading invoice...</span>
                 </div>
-              )
-            }
-            return (
-              <>
-                {(selectedBooking as any).source === 'direct_sales' ? (
-                  <DirectSalesOrderDetails
-                    booking={{ ...selectedBooking, bookingItems: items }}
-                  />
-                ) : ((selectedBooking as any).booking_type === 'sale' || (selectedBooking as any).booking_subtype === 'sale' || (selectedBooking as any).source === 'product_orders' || (selectedBooking.booking_number && (selectedBooking.booking_number as string).startsWith('ORD'))) ? (
-                  <DirectSalesBookingDetails
-                    booking={{ ...selectedBooking, bookingItems: items }}
-                  />
-                ) : (
-                  <PackageBookingView
-                    booking={selectedBooking}
-                    bookingItems={items}
-                  />
-                )}
-              </>
-            )
-          })()}
-        </DialogContent>
-      </Dialog>
+              </DialogContent>
+            </Dialog>
+          )
+        }
+
+        return (
+          <InvoiceFormatDialog
+            open={showViewDialog && !!selectedBooking}
+            onOpenChange={setShowViewDialog}
+            booking={selectedBooking}
+            bookingItems={items}
+          />
+        )
+      })()}
 
       {/* OLD CODE - TO BE REMOVED */}
       {(false as boolean) && selectedBooking && (
