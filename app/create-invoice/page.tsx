@@ -262,6 +262,10 @@ export default function CreateInvoicePage() {
   const [sendWhatsAppInvoice, setSendWhatsAppInvoice] = useState(true)
   const [applyGst, setApplyGst] = useState(false)
 
+  // Send-as-quote dialog: lets the user confirm/edit which numbers get the WhatsApp quote
+  const [showSendQuoteDialog, setShowSendQuoteDialog] = useState(false)
+  const [quotePhoneNumbers, setQuotePhoneNumbers] = useState<string[]>([""])
+
   // Leads selection and conversion states
   const [customerMode, setCustomerMode] = useState<"customer" | "lead">("customer")
   const [leads, setLeads] = useState<any[]>([])
@@ -1727,7 +1731,7 @@ export default function CreateInvoicePage() {
   }
 
   // Save as Quote
-  const handleSaveAsQuote = async () => {
+  const handleSaveAsQuote = async (sendToPhones?: string[]) => {
     if (!selectedCustomer) {
       toast({ title: "Error", description: "Please select a customer", variant: "destructive" })
       return
@@ -1854,12 +1858,14 @@ export default function CreateInvoicePage() {
       const message = isUpdate ? `Quote ${order.order_number} updated` : `Quote ${order.order_number} created`
       toast({ title: isUpdate ? "Quote Updated" : "Quote Saved", description: message })
 
-      // Auto-send Quote via WhatsApp (fire & forget, only when checkbox is ON)
-      if (order?.id && sendWhatsAppInvoice) {
-        sendInvoiceViaWhatsApp({ 
-          orderId: order.id, 
-          orderType: "product_order", 
-          sendConfirmation: false 
+      // Send Quote via WhatsApp — to the customer's own number plus any extra numbers picked in the dialog
+      const cleanedExtraPhones = (sendToPhones || []).map(p => p.trim()).filter(Boolean)
+      if (order?.id && (sendWhatsAppInvoice || cleanedExtraPhones.length > 0)) {
+        sendInvoiceViaWhatsApp({
+          orderId: order.id,
+          orderType: "product_order",
+          extraPhones: cleanedExtraPhones,
+          sendConfirmation: false
         })
           .then(r => {
             if (r.success) {
@@ -2907,6 +2913,7 @@ export default function CreateInvoicePage() {
                                       </SelectTrigger>
                                       <SelectContent>
                                         <SelectItem value="Stitching">Stitching</SelectItem>
+                                        <SelectItem value="Live Stitching">Live Stitching</SelectItem>
                                         <SelectItem value="Alteration">Alteration</SelectItem>
                                         <SelectItem value="Dry Cleaning">Dry Cleaning</SelectItem>
                                         <SelectItem value="Pressing">Pressing</SelectItem>
@@ -3338,10 +3345,78 @@ export default function CreateInvoicePage() {
               </button>
             </div>
 
-            <p className="text-xs text-gray-400 mt-6">You can change this later inside the form</p>
           </div>
         </div>
       )}
+
+      {/* ── Send as Quote: pick which numbers get the WhatsApp quote ── */}
+      <Dialog open={showSendQuoteDialog} onOpenChange={setShowSendQuoteDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Send className="h-4 w-4 text-green-600" />
+              Send quote on WhatsApp
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            {selectedCustomer && (
+              <p className="text-xs text-gray-500">
+                Sending to <span className="font-semibold text-gray-800">{selectedCustomer.name}</span>
+                {!selectedCustomer.phone && <span className="text-red-500"> — no number on file, add one below</span>}
+              </p>
+            )}
+            <Label className="text-xs text-gray-500">Numbers to send to</Label>
+            {quotePhoneNumbers.map((num, idx) => (
+              <div key={idx} className="flex items-center gap-2">
+                <Input
+                  value={num}
+                  placeholder={idx === 0 ? "Customer's number" : "Additional number"}
+                  onChange={(e) => {
+                    const next = [...quotePhoneNumbers]
+                    next[idx] = e.target.value
+                    setQuotePhoneNumbers(next)
+                  }}
+                  className="h-9 text-sm"
+                />
+                {quotePhoneNumbers.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => setQuotePhoneNumbers(quotePhoneNumbers.filter((_, i) => i !== idx))}
+                    className="text-gray-400 hover:text-red-500 shrink-0"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+            ))}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="w-full h-8 text-xs"
+              onClick={() => setQuotePhoneNumbers([...quotePhoneNumbers, ""])}
+            >
+              <Plus className="h-3.5 w-3.5 mr-1" /> Add another number
+            </Button>
+          </div>
+          <div className="flex justify-end gap-2 pt-2">
+            <Button variant="outline" size="sm" onClick={() => setShowSendQuoteDialog(false)}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              disabled={saving || quotePhoneNumbers.every(n => !n.trim())}
+              onClick={() => {
+                setShowSendQuoteDialog(false)
+                handleSaveAsQuote(quotePhoneNumbers)
+              }}
+            >
+              {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Send className="h-4 w-4 mr-2" />}
+              Send quote
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       <div className="min-h-screen bg-slate-50 p-4 print:p-0 print:bg-white invoice-scaled">
       {/* Header - Hidden on print */}
@@ -3386,9 +3461,17 @@ export default function CreateInvoicePage() {
           </Button>
           {/* Save as Quote - only show in new mode, not in edit mode */}
           {mode !== "edit" && (
-            <Button variant="outline" size="sm" onClick={handleSaveAsQuote} disabled={saving}>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={saving}
+              onClick={() => {
+                setQuotePhoneNumbers([selectedCustomer?.phone || ""])
+                setShowSendQuoteDialog(true)
+              }}
+            >
               <FileText className="h-4 w-4 mr-2" />
-              Save as Quote
+              Send as Quote
             </Button>
           )}
           <Button 

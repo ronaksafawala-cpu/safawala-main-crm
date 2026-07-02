@@ -21,7 +21,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { Search, Package, AlertCircle, Eye, Plus, Scan, Minus, Check, Trash2 } from "lucide-react"
+import { Search, Package, AlertCircle, Eye, Plus, Scan, Minus, Check, Trash2, Camera, X } from "lucide-react"
 import { InventoryAvailabilityPopup } from "@/components/bookings/inventory-availability-popup"
 import { toast } from "sonner"
 
@@ -45,6 +45,7 @@ export interface Product {
 export interface Category {
   id: string
   name: string
+  type?: "rental" | "sale" | "both"
 }
 
 export interface Subcategory {
@@ -102,6 +103,9 @@ export function ProductSelector({
   const productRefs = useRef<{ [key: string]: HTMLDivElement | null }>({})
   const barcodeInputRef = useRef<HTMLInputElement>(null)
   const scanTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const [showCameraScanner, setShowCameraScanner] = useState(false)
+  const [cameraError, setCameraError] = useState<string | null>(null)
+  const html5QrCodeRef = useRef<any>(null)
 
   // Barcode scan handler - auto add to cart
   const handleBarcodeScan = async (code: string) => {
@@ -194,6 +198,56 @@ export function ProductSelector({
     }
   }
 
+  // Camera scanning (mobile) — reuses the same handleBarcodeScan lookup as the hardware scanner
+  const startCameraScanner = () => {
+    setCameraError(null)
+    setShowCameraScanner(true)
+
+    setTimeout(async () => {
+      try {
+        const { Html5Qrcode } = await import("html5-qrcode")
+        const scanner = new Html5Qrcode("product-selector-camera-reader")
+        html5QrCodeRef.current = scanner
+
+        await scanner.start(
+          { facingMode: "environment" },
+          {
+            fps: 10,
+            qrbox: (width, height) => {
+              const minDim = Math.min(width, height)
+              const boxDim = Math.floor(minDim * 0.7)
+              return { width: boxDim, height: Math.floor(boxDim * 0.5) }
+            },
+          },
+          (decodedText) => {
+            handleBarcodeScan(decodedText)
+            stopCameraScanner()
+          },
+          () => {}
+        )
+      } catch (error: any) {
+        console.error("[ProductSelector] Camera error:", error)
+        setCameraError(error?.message || "Failed to start camera scanner")
+      }
+    }, 250)
+  }
+
+  const stopCameraScanner = () => {
+    const scanner = html5QrCodeRef.current
+    if (scanner) {
+      if (scanner.isScanning) {
+        scanner.stop().then(() => scanner.clear()).catch(() => {})
+      }
+      html5QrCodeRef.current = null
+    }
+    setShowCameraScanner(false)
+    setCameraError(null)
+  }
+
+  useEffect(() => {
+    return () => { stopCameraScanner() }
+  }, [])
+
   // Barcode input change handler with debounce
   const handleBarcodeInputChange = (value: string) => {
     setBarcodeInput(value)
@@ -222,9 +276,23 @@ export function ProductSelector({
     })
   }, [products, categories, subcategories])
 
+  // Categories restricted to the other transaction type (used to hide their products)
+  const categoryTypeById = useMemo(() => {
+    const map = new Map<string, "rental" | "sale" | "both">()
+    categories.forEach((c) => map.set(c.id, c.type || "both"))
+    return map
+  }, [categories])
+
   // Filter products based on search and categories
   const filteredProducts = useMemo(() => {
     let result = products
+
+    // Hide products whose category is restricted to the other transaction type
+    result = result.filter((p) => {
+      const type = p.category_id ? categoryTypeById.get(p.category_id) : undefined
+      if (!type || type === "both") return true
+      return type === bookingType
+    })
 
     // Filter by category
     if (selectedCategory) {
@@ -261,7 +329,7 @@ export function ProductSelector({
     })
 
     return result
-  }, [products, productSearch, selectedCategory, selectedSubcategory, selectedItems])
+  }, [products, productSearch, selectedCategory, selectedSubcategory, selectedItems, categoryTypeById, bookingType])
 
   // Calculate reserved quantities
   const getReservedQuantity = (productId: string): number => {
@@ -400,7 +468,7 @@ export function ProductSelector({
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Category Filter Buttons */}
-        {categories.length > 0 && (
+        {categories.filter((cat) => !cat.type || cat.type === "both" || cat.type === bookingType).length > 0 && (
           <div className="flex flex-wrap gap-1.5">
             <Button
               size="sm"
@@ -413,7 +481,7 @@ export function ProductSelector({
             >
               All Categories
             </Button>
-            {categories.map((cat) => (
+            {categories.filter((cat) => !cat.type || cat.type === "both" || cat.type === bookingType).map((cat) => (
               <Button
                 key={cat.id}
                 size="sm"
@@ -459,30 +527,64 @@ export function ProductSelector({
           )}
 
         {/* Barcode Scanner Input - Auto adds to cart */}
-        <div className="relative">
-          <Scan className="absolute left-3 top-3 h-4 w-4 text-green-600" />
-          <Input
-            ref={barcodeInputRef}
-            placeholder="Scan barcode to auto-add product..."
-            value={barcodeInput}
-            onChange={(e) => handleBarcodeInputChange(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && barcodeInput.trim()) {
-                e.preventDefault()
-                if (scanTimeoutRef.current) clearTimeout(scanTimeoutRef.current)
-                handleBarcodeScan(barcodeInput)
-              }
-            }}
-            className="pl-10 pr-10 border-green-200 focus:border-green-500 focus:ring-green-500 bg-green-50/50"
-            disabled={isScanning}
-            autoComplete="off"
-          />
-          {isScanning && (
-            <div className="absolute right-3 top-3">
-              <div className="animate-spin rounded-full h-4 w-4 border-2 border-green-500 border-t-transparent" />
-            </div>
-          )}
+        <div className="flex gap-2">
+          <div className="relative flex-1">
+            <Scan className="absolute left-3 top-3 h-4 w-4 text-green-600" />
+            <Input
+              ref={barcodeInputRef}
+              placeholder="Scan barcode to auto-add product..."
+              value={barcodeInput}
+              onChange={(e) => handleBarcodeInputChange(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && barcodeInput.trim()) {
+                  e.preventDefault()
+                  if (scanTimeoutRef.current) clearTimeout(scanTimeoutRef.current)
+                  handleBarcodeScan(barcodeInput)
+                }
+              }}
+              className="pl-10 pr-10 border-green-200 focus:border-green-500 focus:ring-green-500 bg-green-50/50"
+              disabled={isScanning}
+              autoComplete="off"
+            />
+            {isScanning && (
+              <div className="absolute right-3 top-3">
+                <div className="animate-spin rounded-full h-4 w-4 border-2 border-green-500 border-t-transparent" />
+              </div>
+            )}
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            className="shrink-0 border-green-200 text-green-700 hover:bg-green-50"
+            onClick={startCameraScanner}
+            title="Scan with phone camera"
+          >
+            <Camera className="h-4 w-4" />
+          </Button>
         </div>
+
+        {/* Camera Scanner Dialog (mobile) */}
+        {showCameraScanner && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.65)" }}>
+            <div className="bg-white rounded-xl shadow-2xl w-full max-w-md p-4">
+              <div className="flex items-center justify-between mb-3">
+                <span className="font-semibold text-sm flex items-center gap-1.5"><Camera className="h-4 w-4" />Camera scanner</span>
+                <button onClick={stopCameraScanner} className="text-gray-400 hover:text-gray-600"><X className="h-4 w-4" /></button>
+              </div>
+              {cameraError ? (
+                <div className="bg-red-50 border border-red-200 rounded-lg p-4 text-center text-sm text-red-700">
+                  {cameraError}
+                  <Button size="sm" variant="outline" onClick={startCameraScanner} className="mt-3 w-full">Try again</Button>
+                </div>
+              ) : (
+                <div className="relative bg-black rounded-lg overflow-hidden min-h-[240px]">
+                  <div id="product-selector-camera-reader" className="w-full h-full" />
+                </div>
+              )}
+              <p className="text-[11px] text-muted-foreground text-center mt-2">Point the camera at the barcode</p>
+            </div>
+          </div>
+        )}
 
         {/* Search Input */}
         <div className="relative">
