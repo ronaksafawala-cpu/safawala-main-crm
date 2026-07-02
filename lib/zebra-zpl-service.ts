@@ -18,7 +18,7 @@ export interface ZebraBarcodeItem {
 
 export interface ZebraPrintConfig {
   barcodes: ZebraBarcodeItem[]
-  style?: 1 | 2
+  style?: 1 | 2 | 3
   labelWidthMM?: number
   labelHeightMM?: number
   columns?: number
