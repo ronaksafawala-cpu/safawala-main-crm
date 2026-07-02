@@ -1035,25 +1035,25 @@ export default function InventoryDashboard() {
               <tbody className="divide-y">
                 {bulkProducts.map(p => (
                   <tr key={p.id} className="hover:bg-slate-50/50">
-                    <td className="px-4 py-2 font-medium text-slate-800 flex items-center gap-3 min-w-[240px]">
+                    <td className="px-4 py-2 font-medium text-slate-800 flex items-center gap-3 min-w-[320px]">
                       {/* Image Thumbnail with zoom effect on hover */}
-                      <div className="relative w-8 h-8 rounded border border-slate-100 overflow-visible shrink-0 group">
+                      <div className="relative w-16 h-16 rounded-lg border border-slate-200 overflow-visible shrink-0 group bg-slate-50">
                         {p.image_url ? (
                           <img
                             src={p.image_url}
                             alt={p.name}
-                            className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-[4.5] group-hover:shadow-2xl group-hover:z-50 rounded origin-center bg-white"
+                            className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-[3] group-hover:shadow-2xl group-hover:z-50 rounded-lg origin-left bg-white border border-slate-200"
                           />
                         ) : (
-                          <div className="w-full h-full bg-slate-100 flex items-center justify-center rounded">
-                            <Package className="h-4 w-4 text-slate-400" />
+                          <div className="w-full h-full flex items-center justify-center rounded-lg">
+                            <Package className="h-6 w-6 text-slate-400" />
                           </div>
                         )}
                       </div>
                       <Input
                         value={p.name}
                         onChange={e => handleBulkCellChange(p.id, 'name', e.target.value)}
-                        className="h-8 text-xs border-slate-200 text-slate-800 font-medium"
+                        className="h-8 text-xs border-slate-200 text-slate-800 font-medium flex-1"
                       />
                     </td>
                     <td className="px-2 py-1">
