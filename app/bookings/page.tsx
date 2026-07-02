@@ -372,7 +372,7 @@ export default function BookingsPage() {
   const stats = statsData || {}
 
   // Rental/Sale switch — Zomato-style toggle in the header, drives both the stat cards and the table below
-  const [bookingMode, setBookingMode] = useState<"rental" | "sale">("rental")
+  const [bookingMode, setBookingMode] = useState<"rental" | "sale">("sale")
   const modeBookings = activeBookings.filter((b: any) =>
     bookingMode === "rental" ? (b.type === "rental" || b.type === "package") : b.type === "sale"
   )
@@ -516,6 +516,18 @@ export default function BookingsPage() {
           Draft
         </Badge>
       )
+    } else if (hasPartialPayment || status === 'pending_payment') {
+      // Short badge instead of the long "Payment Pending / Advance paid" label
+      return (
+        <div className="flex flex-col gap-1 items-start">
+          <Badge className="whitespace-nowrap shadow-sm font-semibold bg-green-50 text-green-700 border border-green-200 hover:bg-green-50">
+            Advance paid
+          </Badge>
+          <span className="text-[9px] text-orange-600 font-semibold">
+            Pending payment · Bal: ₹{pendingAmount.toLocaleString()}
+          </span>
+        </div>
+      )
     } else if (status === 'cancelled') {
       label = "Cancelled"
       variant = "destructive"
@@ -525,9 +537,6 @@ export default function BookingsPage() {
     } else if (isUnpaid && totalAmount > 0) {
       label = "Full Payment Pending"
       variant = "destructive" // Red
-    } else if (hasPartialPayment || status === 'pending_payment') {
-      label = "Payment Pending / Advance paid"
-      variant = "pending" // Orange
     } else {
       // Confirmed, Delivered, Returned, etc. (fully paid)
       if (status === 'delivered') {

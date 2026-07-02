@@ -158,13 +158,13 @@ export function BookingsTabs({
           {/* Header Row */}
           <div className="hidden lg:grid grid-cols-12 gap-4 px-5 py-3 bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-500 tracking-wider uppercase">
             <div className="col-span-2">Booking #</div>
-            <div className="col-span-2">Customer</div>
-            <div className="col-span-2">Type</div>
-            <div className="col-span-2">Products</div>
-            <div className="col-span-1">Status</div>
-            <div className="col-span-1 text-right">Amount</div>
+            <div className={mode ? "col-span-3" : "col-span-2"}>Customer</div>
+            {!mode && <div className="col-span-2">Type</div>}
+            {!mode && <div className="col-span-2">Products</div>}
+            <div className={mode ? "col-span-2" : "col-span-1"}>Status</div>
+            <div className={mode ? "col-span-2 text-right" : "col-span-1 text-right"}>Amount</div>
             <div className="col-span-1 text-center">Event Date</div>
-            <div className="col-span-1 text-right">Actions</div>
+            <div className={mode ? "col-span-2 text-right" : "col-span-1 text-right"}>Actions</div>
           </div>
 
           {/* Body Rows */}
@@ -182,7 +182,7 @@ export function BookingsTabs({
                   </span>
                 </div>
 
-                <div className="col-span-2 flex items-center justify-between lg:block">
+                <div className={`${mode ? "col-span-3" : "col-span-2"} flex items-center justify-between lg:block`}>
                   <span className="lg:hidden text-xs font-semibold text-muted-foreground uppercase">Customer</span>
                   <div className="flex items-center gap-3 text-left">
                     <div className={`w-8 h-8 rounded-full bg-gradient-to-br ${getAvatarColor(booking.customer?.name)} flex items-center justify-center text-xs font-bold border shadow-sm`}>
@@ -195,6 +195,7 @@ export function BookingsTabs({
                   </div>
                 </div>
 
+                {!mode && (
                 <div className="col-span-2 flex items-center justify-between lg:block">
                   <span className="lg:hidden text-xs font-semibold text-muted-foreground uppercase">Type</span>
                   <div className="text-left w-full lg:w-auto">
@@ -231,7 +232,9 @@ export function BookingsTabs({
                     })()}
                   </div>
                 </div>
+                )}
 
+                {!mode && (
                 <div className="col-span-2 flex items-center justify-between lg:block">
                   <span className="lg:hidden text-xs font-semibold text-muted-foreground uppercase">Products</span>
                   <div className="text-left">
@@ -317,15 +320,16 @@ export function BookingsTabs({
                     })()}
                   </div>
                 </div>
+                )}
 
-                <div className="col-span-1 flex items-center justify-between lg:block">
+                <div className={`${mode ? "col-span-2" : "col-span-1"} flex items-center justify-between lg:block`}>
                   <span className="lg:hidden text-xs font-semibold text-muted-foreground uppercase">Status</span>
                   <div>
                     {getStatusBadge?.(booking.status, booking)}
                   </div>
                 </div>
 
-                <div className="col-span-1 flex items-center justify-between lg:block text-right">
+                <div className={`${mode ? "col-span-2" : "col-span-1"} flex items-center justify-between lg:block text-right`}>
                   <span className="lg:hidden text-xs font-semibold text-muted-foreground uppercase">Amount</span>
                   <div className="flex flex-col items-end w-full">
                     <span className="font-bold text-gray-900">₹{booking.total_amount?.toLocaleString() || 0}</span>
@@ -345,26 +349,38 @@ export function BookingsTabs({
                   </div>
                 </div>
 
-                <div className="col-span-1 flex items-center justify-between lg:block text-right">
+                <div className={`${mode ? "col-span-2" : "col-span-1"} flex items-center justify-between lg:block text-right`}>
                   <span className="lg:hidden text-xs font-semibold text-muted-foreground uppercase">Actions</span>
                   <div className="flex items-center justify-end gap-1">
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
+                    <Button
+                      variant="ghost"
+                      size="icon"
                       className="h-8 w-8 hover:bg-green-50 hover:text-green-900 border border-transparent hover:border-green-200/50 transition-all rounded-lg"
                       onClick={() => handleViewInvoice(booking)}
                       title="View Invoice"
                     >
                       <FileText className="h-4 w-4 text-green-600"/>
                     </Button>
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
+                    <Button
+                      variant="ghost"
+                      size="icon"
                       className="h-8 w-8 hover:bg-slate-100 hover:text-slate-900 transition-colors rounded-lg"
                       onClick={() => handleEditBooking?.(booking.id, (booking as any).source)}
                       title="Edit Booking"
                     >
                       <Edit className="h-4 w-4 text-slate-500"/>
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 hover:bg-blue-50 hover:text-blue-900 transition-colors rounded-lg"
+                      onClick={() => {
+                        setSelectedBooking?.(booking)
+                        setShowViewDialog?.(true)
+                      }}
+                      title="View Products & Details"
+                    >
+                      <Eye className="h-4 w-4 text-blue-500"/>
                     </Button>
                     <Button
                       variant="ghost"
