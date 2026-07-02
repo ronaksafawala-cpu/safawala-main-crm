@@ -574,7 +574,8 @@ export default function InventoryDashboard() {
       const updates = bulkProducts.filter(bp => {
         const orig = products.find(p => p.id === bp.id)
         if (!orig) return false
-        return bp.price !== orig.price ||
+        return bp.name !== orig.name ||
+               bp.price !== orig.price ||
                bp.rental_price !== orig.rental_price ||
                bp.stock_total !== orig.stock_total ||
                bp.stock_available !== orig.stock_available ||
@@ -592,6 +593,7 @@ export default function InventoryDashboard() {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
+            name: p.name,
             price: Number(p.price) || 0,
             regular_price: Number(p.price) || 0,
             rental_price: Number(p.rental_price) || 0,
@@ -1033,8 +1035,26 @@ export default function InventoryDashboard() {
               <tbody className="divide-y">
                 {bulkProducts.map(p => (
                   <tr key={p.id} className="hover:bg-slate-50/50">
-                    <td className="px-4 py-2 font-medium text-slate-800 max-w-[240px] truncate">
-                      {p.name}
+                    <td className="px-4 py-2 font-medium text-slate-800 flex items-center gap-3 min-w-[240px]">
+                      {/* Image Thumbnail with zoom effect on hover */}
+                      <div className="relative w-8 h-8 rounded border border-slate-100 overflow-visible shrink-0 group">
+                        {p.image_url ? (
+                          <img
+                            src={p.image_url}
+                            alt={p.name}
+                            className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-[4.5] group-hover:shadow-2xl group-hover:z-50 rounded origin-center bg-white"
+                          />
+                        ) : (
+                          <div className="w-full h-full bg-slate-100 flex items-center justify-center rounded">
+                            <Package className="h-4 w-4 text-slate-400" />
+                          </div>
+                        )}
+                      </div>
+                      <Input
+                        value={p.name}
+                        onChange={e => handleBulkCellChange(p.id, 'name', e.target.value)}
+                        className="h-8 text-xs border-slate-200 text-slate-800 font-medium"
+                      />
                     </td>
                     <td className="px-2 py-1">
                       <Input
