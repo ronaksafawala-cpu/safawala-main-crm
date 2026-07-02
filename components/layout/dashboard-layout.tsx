@@ -248,8 +248,8 @@ export function DashboardLayout({ children, userRole }: DashboardLayoutProps) {
         onLocked={(ld) => setLockedDates(prev => [...prev, ld])}
         onUnlocked={(id) => setLockedDates(prev => prev.filter(d => d.id !== id))}
       />
-      {/* Safawala AI Floating Assistant - Only visible to Franchise Admin */}
-      {user?.role === "franchise_admin" && <SafawalaAIAssistant />}
+      {/* Safawala AI Floating Assistant - Only visible to Franchise Admin & Super Admin */}
+      {(user?.role === "franchise_admin" || user?.role === "super_admin") && <SafawalaAIAssistant />}
       {/* Team Chat Floating Assistant */}
       <TeamChat />
     </SidebarProvider>
