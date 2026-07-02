@@ -153,12 +153,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const franchiseId = authContext!.user.franchise_id
     const isSuperAdmin = authContext!.user.role === 'super_admin'
     const supabase = createClient()
 
   const body = await request.json()
   const { name, phone, whatsapp, email, address, city, state, pincode, notes } = body
+
+    // Super admins aren't tied to one franchise — trust an explicit franchise_id from the
+    // client (e.g. a franchise picker) when provided, since their own account has none.
+    const franchiseId = isSuperAdmin && body.franchise_id ? body.franchise_id : authContext!.user.franchise_id
 
     // Validation
     if (!name || name.trim().length === 0) {
@@ -167,6 +170,15 @@ export async function POST(request: NextRequest) {
 
     if (!phone || phone.trim().length < 10) {
       return NextResponse.json({ error: "Valid phone number is required" }, { status: 400 })
+    }
+
+    if (!franchiseId) {
+      return NextResponse.json(
+        { error: isSuperAdmin
+          ? "Your account isn't linked to a franchise. Select a franchise before creating a customer."
+          : "Your account isn't linked to a franchise. Contact an admin to fix your account setup." },
+        { status: 400 }
+      )
     }
 
     // Insert new customer with franchise_id
