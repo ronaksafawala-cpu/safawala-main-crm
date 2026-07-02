@@ -1085,31 +1085,36 @@ export default function BookingsPage() {
     loadBarcodesForView()
   }, [showViewDialog, selectedBooking])
 
-  const handleStatusUpdate = async (bookingId: string, newStatus: string, source?: string) => {
+  const handleStatusUpdate = async (bookingId: string, updateData: string | Record<string, any>, source?: string) => {
     try {
-      const url = `/api/bookings/${bookingId}${source ? `?type=${source}` : ''}`
+      const normalizedSource = source 
+        ? (source.endsWith('s') ? source.slice(0, -1) : source)
+        : ''
+      const url = `/api/bookings/${bookingId}${normalizedSource ? `?type=${normalizedSource}` : ''}`
+      const body = typeof updateData === 'string' ? { status: updateData } : updateData
+
       const response = await fetch(url, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ status: newStatus }),
+        body: JSON.stringify(body),
       })
 
       if (!response.ok) {
-        throw new Error("Failed to update booking status")
+        throw new Error("Failed to update booking")
       }
 
       toast({
         title: "Success",
-        description: "Booking status updated successfully",
+        description: "Booking updated successfully",
       })
 
       // Fire-and-forget audit entry (non-blocking)
       try {
         fetch('/api/audit', {
           method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({
-            entity_type:'booking', entity_id: bookingId, action:'update', changes:{ after:{ status:newStatus } }
+            entity_type:'booking', entity_id: bookingId, action:'update', changes:{ after: body }
           })
         })
       } catch {}
@@ -1118,7 +1123,7 @@ export default function BookingsPage() {
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to update booking status",
+        description: "Failed to update booking details",
         variant: "destructive",
       })
     }
