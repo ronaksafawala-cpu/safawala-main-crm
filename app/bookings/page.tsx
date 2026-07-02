@@ -567,6 +567,9 @@ export default function BookingsPage() {
     const pendingAmount = totalAmount - paidAmount
     const isFullyPaid = paidAmount >= totalAmount
     const isUnpaid = paidAmount === 0
+
+    const hasModifications = booking?.has_modifications === true
+    const isNotFinished = status !== 'cancelled' && status !== 'order_complete' && status !== 'returned'
     
     let label = "Confirmed"
     let variant: "warning" | "success" | "pending" | "destructive" | "secondary" | "info" = "success"
@@ -587,6 +590,11 @@ export default function BookingsPage() {
           <span className="text-[9px] text-orange-600 font-semibold">
             Pending payment · Bal: ₹{pendingAmount.toLocaleString()}
           </span>
+          {hasModifications && isNotFinished && (
+            <Badge variant="outline" className="mt-1 bg-amber-50 text-amber-700 border-amber-200 text-[10px] font-semibold whitespace-nowrap shadow-sm">
+              Modification Pending
+            </Badge>
+          )}
         </div>
       )
     } else if (status === 'cancelled') {
@@ -634,6 +642,11 @@ export default function BookingsPage() {
             </span>
           )}
         </div>
+        {hasModifications && isNotFinished && (
+          <Badge variant="outline" className="mt-1 bg-amber-50 text-amber-700 border-amber-200 text-[10px] font-semibold whitespace-nowrap shadow-sm">
+            Modification Pending
+          </Badge>
+        )}
       </div>
     )
   }
