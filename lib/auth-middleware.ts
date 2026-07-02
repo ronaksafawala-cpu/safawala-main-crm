@@ -62,32 +62,73 @@ export async function authenticateRequest(
   request: NextRequest,
   options: AuthOptions = {}
 ): Promise<AuthenticationResult> {
-  // Global bypass to remove security features and allow all access as Super Admin
-  // Fetch real franchise_id so franchise-scoped inserts (customers, bookings, etc.) work correctly
+  // Global bypass — fetch real admin user + franchise from DB so FK constraints (created_by, franchise_id) are satisfied
+  let bypassUserId = 'mock-admin-id';
+  let bypassEmail = 'admin@mysafawala.com';
+  let bypassName = 'Super Admin';
   let bypassFranchiseId: string | undefined;
   let bypassFranchiseName: string | undefined;
   let bypassFranchiseCode: string | undefined;
+
   try {
-    const { data: franchiseData } = await supabaseServer
-      .from('franchises')
-      .select('id, name, code')
+    // Look up the real super_admin user from the DB
+    const { data: adminUser } = await supabaseServer
+      .from('users')
+      .select('id, email, name, franchise_id')
+      .eq('role', 'super_admin')
+      .eq('is_active', true)
       .order('created_at', { ascending: true })
       .limit(1)
       .single();
-    if (franchiseData?.id) {
-      bypassFranchiseId = franchiseData.id;
-      bypassFranchiseName = franchiseData.name;
-      bypassFranchiseCode = franchiseData.code;
+
+    if (adminUser?.id) {
+      bypassUserId = adminUser.id;
+      bypassEmail = adminUser.email || bypassEmail;
+      bypassName = adminUser.name || bypassName;
+      bypassFranchiseId = adminUser.franchise_id || undefined;
     }
   } catch (_) {
-    // ignore — franchise_id stays undefined (super_admin can still operate without it)
+    // ignore — fall back to mock values
   }
+
+  // If we still don't have a franchise_id, fetch the first franchise
+  if (!bypassFranchiseId) {
+    try {
+      const { data: franchiseData } = await supabaseServer
+        .from('franchises')
+        .select('id, name, code')
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .single();
+      if (franchiseData?.id) {
+        bypassFranchiseId = franchiseData.id;
+        bypassFranchiseName = franchiseData.name;
+        bypassFranchiseCode = franchiseData.code;
+      }
+    } catch (_) {
+      // ignore
+    }
+  } else {
+    // Fetch franchise details for the name/code
+    try {
+      const { data: franchiseData } = await supabaseServer
+        .from('franchises')
+        .select('id, name, code')
+        .eq('id', bypassFranchiseId)
+        .single();
+      if (franchiseData) {
+        bypassFranchiseName = franchiseData.name;
+        bypassFranchiseCode = franchiseData.code;
+      }
+    } catch (_) {}
+  }
+
   return {
     authorized: true,
     user: {
-      id: 'mock-admin-id',
-      email: 'admin@mysafawala.com',
-      name: 'Super Admin (Bypassed)',
+      id: bypassUserId,
+      email: bypassEmail,
+      name: bypassName,
       role: 'super_admin',
       franchise_id: bypassFranchiseId,
       franchise_name: bypassFranchiseName,
