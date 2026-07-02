@@ -36,6 +36,7 @@ import {
   AlertCircle,
   Archive,
   RotateCcw,
+  Tag,
 } from "lucide-react"
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
@@ -370,31 +371,42 @@ export default function BookingsPage() {
   const { data: statsData } = useData<any>("booking-stats")
   const stats = statsData || {}
 
-  // Calculate smart stats based on business logic (using only active bookings)
+  // Rental/Sale switch — Zomato-style toggle in the header, drives both the stat cards and the table below
+  const [bookingMode, setBookingMode] = useState<"rental" | "sale">("rental")
+  const modeBookings = activeBookings.filter((b: any) =>
+    bookingMode === "rental" ? (b.type === "rental" || b.type === "package") : b.type === "sale"
+  )
+
+  // Calculate smart stats based on business logic (scoped to the active Rental/Sale mode)
   const smartStats = {
-    total: activeBookings.length,
+    total: modeBookings.length,
     // Pending Selection: bookings without items (matching table logic)
-    pendingSelection: activeBookings.filter(b => !(b as any).has_items).length,
-    pendingProductRental: activeBookings.filter(b => !(b as any).has_items && (b as any).source === 'product_orders' && (b as any).type === 'rental').length,
-    pendingProductSale: activeBookings.filter(b => !(b as any).has_items && (b as any).source === 'product_orders' && (b as any).type === 'sale').length,
-    pendingPackage: activeBookings.filter(b => !(b as any).has_items && (b as any).source === 'package_bookings').length,
+    pendingSelection: modeBookings.filter(b => !(b as any).has_items).length,
+    pendingProductRental: modeBookings.filter(b => !(b as any).has_items && (b as any).source === 'product_orders' && (b as any).type === 'rental').length,
+    pendingProductSale: modeBookings.filter(b => !(b as any).has_items && (b as any).source === 'product_orders' && (b as any).type === 'sale').length,
+    pendingPackage: modeBookings.filter(b => !(b as any).has_items && (b as any).source === 'package_bookings').length,
     // Confirmed with Items Selected: bookings that have items selected (regardless of status)
-    confirmed: activeBookings.filter(b => (b as any).has_items).length,
-    confirmedProductRental: activeBookings.filter(b => (b as any).has_items && (b as any).source === 'product_orders' && (b as any).type === 'rental').length,
-    confirmedProductSale: activeBookings.filter(b => (b as any).has_items && (b as any).source === 'product_orders' && (b as any).type === 'sale').length,
-    confirmedPackage: activeBookings.filter(b => (b as any).has_items && (b as any).source === 'package_bookings').length,
-    delivered: activeBookings.filter(b => {
+    confirmed: modeBookings.filter(b => (b as any).has_items).length,
+    confirmedProductRental: modeBookings.filter(b => (b as any).has_items && (b as any).source === 'product_orders' && (b as any).type === 'rental').length,
+    confirmedProductSale: modeBookings.filter(b => (b as any).has_items && (b as any).source === 'product_orders' && (b as any).type === 'sale').length,
+    confirmedPackage: modeBookings.filter(b => (b as any).has_items && (b as any).source === 'package_bookings').length,
+    delivered: modeBookings.filter(b => {
       // For SALES: Delivered is FINAL
       // For RENTAL: Delivered is intermediate step
       const isSale = (b as any).type === 'sale'
       return b.status === 'delivered' || (isSale && b.status === 'order_complete')
     }).length,
-    returned: activeBookings.filter(b => {
+    returned: modeBookings.filter(b => {
       // For RENTAL: Returned is FINAL
       const isRental = (b as any).type === 'rental' || (b as any).type === 'package'
       return isRental && b.status === 'returned'
     }).length,
-    revenue: activeBookings.reduce((sum, b) => sum + (b.total_amount || 0), 0),
+    // For SALE mode: fully paid count (returned doesn't apply to sales)
+    fullyPaid: modeBookings.filter(b => {
+      const pending = (b as any).pending_amount ?? ((b.total_amount || 0) - ((b as any).paid_amount || (b as any).amount_paid || 0))
+      return pending <= 0
+    }).length,
+    revenue: modeBookings.reduce((sum, b) => sum + (b.total_amount || 0), 0),
     // Additional insights
     rentalCount: activeBookings.filter(b => (b as any).type === 'rental' || (b as any).type === 'package').length,
     saleCount: activeBookings.filter(b => (b as any).type === 'sale').length,
@@ -1136,7 +1148,7 @@ export default function BookingsPage() {
 
   return (
     <div className="flex-1 space-y-4 p-4 md:p-8 pt-6">
-      <div className="flex items-center justify-between">
+      <div className="grid grid-cols-1 md:grid-cols-3 items-center gap-3">
         <div className="flex items-center space-x-4">
           <Button
             variant="ghost"
@@ -1150,7 +1162,38 @@ export default function BookingsPage() {
             <p className="text-muted-foreground">Manage your customer bookings and orders</p>
           </div>
         </div>
-        <div className="flex items-center gap-2">
+
+        {/* Rental / Sale switch — Zomato veg/non-veg style, instantly flips stats + table */}
+        <div className="flex justify-center">
+          <button
+            type="button"
+            onClick={() => setBookingMode(m => (m === "rental" ? "sale" : "rental"))}
+            className="flex items-center gap-2 bg-white border rounded-full pl-3.5 pr-1.5 py-1.5 shadow-sm hover:shadow transition-shadow"
+          >
+            <span className={`text-xs font-bold tracking-wide ${bookingMode === "rental" ? "text-emerald-700" : "text-amber-700"}`}>
+              {bookingMode === "rental" ? "Rental mode" : "Sale mode"}
+            </span>
+            <span
+              className={`relative w-14 h-8 rounded-full transition-colors duration-200 ${
+                bookingMode === "rental" ? "bg-emerald-600" : "bg-amber-500"
+              }`}
+            >
+              <span
+                className={`absolute top-1 left-1 w-6 h-6 rounded-full bg-white shadow flex items-center justify-center transition-transform duration-200 ${
+                  bookingMode === "rental" ? "translate-x-0" : "translate-x-6"
+                }`}
+              >
+                {bookingMode === "rental" ? (
+                  <Package className="h-3.5 w-3.5 text-emerald-600" />
+                ) : (
+                  <Tag className="h-3.5 w-3.5 text-amber-600" />
+                )}
+              </span>
+            </span>
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2 md:justify-self-end">
           {/* Secondary actions — collapsed into dropdown on mobile */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -1200,17 +1243,17 @@ export default function BookingsPage() {
           <>
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total Bookings</CardTitle>
+                <CardTitle className="text-sm font-medium">{bookingMode === "rental" ? "Total Rentals" : "Total Sales"}</CardTitle>
                 <Package className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{smartStats.total}</div>
                 <p className="text-xs text-muted-foreground">
-                  {smartStats.rentalCount} rental • {smartStats.saleCount} sale
+                  {bookingMode === "rental" ? "packages included" : "direct sales"}
                 </p>
               </CardContent>
             </Card>
-            
+
             <Card className="border-orange-200 bg-orange-50/30 dark:bg-orange-950/30">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Confirmed (Selection Pending)</CardTitle>
@@ -1219,11 +1262,13 @@ export default function BookingsPage() {
               <CardContent>
                 <div className="text-2xl font-bold text-orange-600">{smartStats.pendingSelection}</div>
                 <p className="text-xs text-muted-foreground">
-                  Product Rent: {smartStats.pendingProductRental} • Sale: {smartStats.pendingProductSale} • Package: {smartStats.pendingPackage}
+                  {bookingMode === "rental"
+                    ? `Product Rent: ${smartStats.pendingProductRental} • Package: ${smartStats.pendingPackage}`
+                    : `Sale: ${smartStats.pendingProductSale}`}
                 </p>
               </CardContent>
             </Card>
-            
+
             <Card className="border-blue-200 bg-blue-50/30 dark:bg-blue-950/30">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Ready for Delivery</CardTitle>
@@ -1232,11 +1277,13 @@ export default function BookingsPage() {
               <CardContent>
                 <div className="text-2xl font-bold text-blue-600">{smartStats.confirmed}</div>
                 <p className="text-xs text-muted-foreground">
-                  Product Rent: {smartStats.confirmedProductRental} • Sale: {smartStats.confirmedProductSale} • Package: {smartStats.confirmedPackage}
+                  {bookingMode === "rental"
+                    ? `Product Rent: ${smartStats.confirmedProductRental} • Package: ${smartStats.confirmedPackage}`
+                    : `Sale: ${smartStats.confirmedProductSale}`}
                 </p>
               </CardContent>
             </Card>
-            
+
             <Card className="border-green-200 bg-green-50/30 dark:bg-green-950/30">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Delivered</CardTitle>
@@ -1244,29 +1291,29 @@ export default function BookingsPage() {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-green-600">{smartStats.delivered}</div>
-                <p className="text-xs text-muted-foreground">Sales ✓ • Rentals in use</p>
+                <p className="text-xs text-muted-foreground">{bookingMode === "rental" ? "Rentals in use" : "Sales delivered ✓"}</p>
               </CardContent>
             </Card>
-            
+
             <Card className="border-purple-200 bg-purple-50/30 dark:bg-purple-950/30">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Rental Completed</CardTitle>
+                <CardTitle className="text-sm font-medium">{bookingMode === "rental" ? "Rental Completed" : "Fully Paid"}</CardTitle>
                 <RefreshCw className="h-4 w-4 text-purple-600" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold text-purple-600">{smartStats.returned}</div>
-                <p className="text-xs text-muted-foreground">Rentals completed ✓</p>
+                <div className="text-2xl font-bold text-purple-600">{bookingMode === "rental" ? smartStats.returned : smartStats.fullyPaid}</div>
+                <p className="text-xs text-muted-foreground">{bookingMode === "rental" ? "Rentals completed ✓" : "No balance due ✓"}</p>
               </CardContent>
             </Card>
-            
+
             <Card className="border-emerald-200 bg-emerald-50/30 dark:bg-emerald-950/30">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
+                <CardTitle className="text-sm font-medium">{bookingMode === "rental" ? "Rental Revenue" : "Sale Revenue"}</CardTitle>
                 <DollarSign className="h-4 w-4 text-emerald-600" />
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold text-emerald-600">₹{smartStats.revenue.toLocaleString()}</div>
-                <p className="text-xs text-muted-foreground">All bookings combined</p>
+                <p className="text-xs text-muted-foreground">{bookingMode === "rental" ? "Rentals combined" : "Sales combined"}</p>
               </CardContent>
             </Card>
           </>
@@ -1368,8 +1415,9 @@ export default function BookingsPage() {
         </div>
 
         <TabsContent value="table">
-          <BookingsTabs 
+          <BookingsTabs
             bookings={filteredBookings}
+            mode={bookingMode}
             loading={loading}
             paginatedBookings={paginatedBookings}
             totalItems={totalItems}

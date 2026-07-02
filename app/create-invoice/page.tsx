@@ -2966,10 +2966,12 @@ export default function CreateInvoicePage() {
                                 )}
                               </div>
     
-                              {/* Completion Date/Time */}
+                              {/* Completion Date/Time (Appointment Date/Time for Live Stitching) */}
                               <div className="grid grid-cols-2 gap-2 border-t border-slate-200 pt-3">
                                 <div>
-                                  <Label className="text-[10px] font-medium text-indigo-700 mb-0.5 block">Completion Date</Label>
+                                  <Label className="text-[10px] font-medium text-indigo-700 mb-0.5 block">
+                                    {modService === "Live Stitching" ? "Appointment Date" : "Completion Date"}
+                                  </Label>
                                   <Input
                                     type="date"
                                     value={invoiceData.modification_date ? formatDateForInput(invoiceData.modification_date) : ""}
@@ -2983,7 +2985,9 @@ export default function CreateInvoicePage() {
                                   />
                                 </div>
                                 <div>
-                                  <Label className="text-[10px] font-medium text-indigo-700 mb-0.5 block">Completion Time</Label>
+                                  <Label className="text-[10px] font-medium text-indigo-700 mb-0.5 block">
+                                    {modService === "Live Stitching" ? "Appointment Time" : "Completion Time"}
+                                  </Label>
                                   <Input
                                     type="time"
                                     value={invoiceData.modification_time}
