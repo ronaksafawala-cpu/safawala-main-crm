@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -48,6 +48,8 @@ interface BookingsTabsProps {
   setShowArchivedSection?: (show: boolean) => void
   handleRestoreBooking?: (id: string, source: string) => void
   onTabChange?: (tab: string) => void
+  /** When provided, the internal tab switcher is hidden and the table follows this instead — driven by an external toggle (e.g. the Rental/Sale switch in the page header). */
+  mode?: "rental" | "sale"
 }
 
 export function BookingsTabs({ 
@@ -70,11 +72,17 @@ export function BookingsTabs({
   archivedBookings = [],
   handleRestoreBooking,
   onTabChange,
-  itemsLoading = {} 
+  itemsLoading = {},
+  mode,
 }: BookingsTabsProps) {
   const router = useRouter()
-  const [activeTab, setActiveTab] = useState("all")
+  const [activeTab, setActiveTab] = useState(mode ? (mode === "rental" ? "product-rental" : "direct-sale") : "all")
   const [showArchived, setShowArchived] = useState(false)
+
+  // Follow the external mode prop when it changes (e.g. the header Rental/Sale switch)
+  useEffect(() => {
+    if (mode) setActiveTab(mode === "rental" ? "product-rental" : "direct-sale")
+  }, [mode])
 
   // Handler to open invoice for a booking - open create-invoice page in edit mode with auto-print
   const handleViewInvoice = (booking: Booking) => {
@@ -383,38 +391,42 @@ export function BookingsTabs({
       setActiveTab(val)
       onTabChange?.(val)
     }} className="w-full">
-      <TabsList className="grid w-full grid-cols-3 bg-slate-100 border border-slate-200 p-1 rounded-lg h-auto">
-        <TabsTrigger
-          value="all"
-          className="data-[state=active]:bg-white data-[state=active]:text-indigo-700 data-[state=active]:shadow-sm rounded-md font-medium text-slate-500 py-1.5 transition-all"
-        >
-          All ({allBookings.length})
-        </TabsTrigger>
-        <TabsTrigger
-          value="product-rental"
-          className="data-[state=active]:bg-white data-[state=active]:text-indigo-700 data-[state=active]:shadow-sm rounded-md font-medium text-slate-500 py-1.5 transition-all"
-        >
-          Rentals ({productRentals.length})
-        </TabsTrigger>
-        <TabsTrigger
-          value="direct-sale"
-          className="data-[state=active]:bg-white data-[state=active]:text-indigo-700 data-[state=active]:shadow-sm rounded-md font-medium text-slate-500 py-1.5 transition-all"
-        >
-          Sales ({directSales.length})
-        </TabsTrigger>
-      </TabsList>
+      {!mode && (
+        <TabsList className="grid w-full grid-cols-3 bg-slate-100 border border-slate-200 p-1 rounded-lg h-auto">
+          <TabsTrigger
+            value="all"
+            className="data-[state=active]:bg-white data-[state=active]:text-indigo-700 data-[state=active]:shadow-sm rounded-md font-medium text-slate-500 py-1.5 transition-all"
+          >
+            All ({allBookings.length})
+          </TabsTrigger>
+          <TabsTrigger
+            value="product-rental"
+            className="data-[state=active]:bg-white data-[state=active]:text-indigo-700 data-[state=active]:shadow-sm rounded-md font-medium text-slate-500 py-1.5 transition-all"
+          >
+            Rentals ({productRentals.length})
+          </TabsTrigger>
+          <TabsTrigger
+            value="direct-sale"
+            className="data-[state=active]:bg-white data-[state=active]:text-indigo-700 data-[state=active]:shadow-sm rounded-md font-medium text-slate-500 py-1.5 transition-all"
+          >
+            Sales ({directSales.length})
+          </TabsTrigger>
+        </TabsList>
+      )}
 
       {/* All Bookings Tab */}
-      <TabsContent value="all" className="mt-4">
-        <Card className="border border-slate-200 bg-white rounded-xl shadow-sm">
-          <CardHeader className="border-b border-slate-100 bg-slate-50 px-4 py-3">
-            <CardTitle className="text-base font-semibold text-slate-800">All Bookings ({allBookings.length})</CardTitle>
-          </CardHeader>
-          <CardContent className="p-6">
-            <BookingsTableContent bookingsList={allBookings} />
-          </CardContent>
-        </Card>
-      </TabsContent>
+      {!mode && (
+        <TabsContent value="all" className="mt-4">
+          <Card className="border border-slate-200 bg-white rounded-xl shadow-sm">
+            <CardHeader className="border-b border-slate-100 bg-slate-50 px-4 py-3">
+              <CardTitle className="text-base font-semibold text-slate-800">All Bookings ({allBookings.length})</CardTitle>
+            </CardHeader>
+            <CardContent className="p-6">
+              <BookingsTableContent bookingsList={allBookings} />
+            </CardContent>
+          </Card>
+        </TabsContent>
+      )}
 
       {/* Product Rentals Tab */}
       <TabsContent value="product-rental" className="mt-4">
