@@ -594,7 +594,7 @@ export function SafawalaAIAssistant() {
         <button
           onMouseDown={onBtnMouseDown}
           onClick={handleBtnClick}
-          className="fixed bottom-6 right-6 z-50 group flex items-center gap-2.5 bg-gradient-to-r from-yellow-500 to-yellow-400 hover:from-yellow-400 hover:to-yellow-300 text-black font-bold rounded-2xl px-4 py-3 shadow-2xl shadow-yellow-500/30 transition-all hover:scale-105 active:scale-95"
+          className="fixed bottom-4 right-4 z-50 group flex items-center gap-2.5 bg-gradient-to-r from-yellow-500 to-yellow-400 hover:from-yellow-400 hover:to-yellow-300 text-black font-bold rounded-2xl px-4 py-3 shadow-2xl shadow-yellow-500/30 transition-all hover:scale-105 active:scale-95"
           style={{
             transform: `translate(${btnOffset.x}px, ${btnOffset.y}px)`,
             cursor: btnDragging ? "grabbing" : "grab",
@@ -615,8 +615,8 @@ export function SafawalaAIAssistant() {
       {/* Chat Window */}
       {open && (
         <div
-          className={`fixed z-50 right-6 bottom-6 bg-[#0f0d1a] border border-white/10 rounded-2xl shadow-2xl shadow-black/60 flex flex-col transition-all overflow-hidden ${
-            minimized ? "w-72 h-14" : "w-[400px] h-[580px]"
+          className={`fixed z-50 right-4 bottom-4 bg-[#0f0d1a] border border-white/10 rounded-2xl shadow-2xl shadow-black/60 flex flex-col transition-all overflow-hidden ${
+            minimized ? "w-72 h-14" : "w-[350px] h-[500px]"
           }`}
           style={{
             transform: `translate(${winOffset.x}px, ${winOffset.y}px)`,
