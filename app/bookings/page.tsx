@@ -510,7 +510,13 @@ export default function BookingsPage() {
     let label = "Confirmed"
     let variant: "warning" | "success" | "pending" | "destructive" | "secondary" | "info" = "success"
 
-    if (status === 'cancelled') {
+    if (status === 'draft') {
+      return (
+        <Badge variant="secondary" className="whitespace-nowrap shadow-sm font-semibold">
+          Draft
+        </Badge>
+      )
+    } else if (status === 'cancelled') {
       label = "Cancelled"
       variant = "destructive"
     } else if (status === 'pending_selection' || status === 'pending' || status === 'waiting') {

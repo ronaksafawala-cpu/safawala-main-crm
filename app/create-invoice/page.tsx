@@ -1883,6 +1883,140 @@ export default function CreateInvoicePage() {
     setSaving(false)
   }
 
+  // Save as Draft — saves whatever's filled in so far (not sent to the customer) so
+  // anyone with access can reopen it in edit mode and finish filling in the rest.
+  const handleSaveAsDraft = async () => {
+    if (!selectedCustomer) {
+      toast({ title: "Error", description: "Please select a customer", variant: "destructive" })
+      return
+    }
+
+    setSaving(true)
+    try {
+      let currentFranchiseId = franchiseId
+      if (!currentFranchiseId) {
+        const userRes = await fetch('/api/auth/user', { cache: 'no-store' })
+        const user = userRes.ok ? await userRes.json() : null
+        currentFranchiseId = user?.franchise_id
+        if (currentFranchiseId) setFranchiseId(currentFranchiseId)
+      }
+
+      if (!currentFranchiseId) {
+        toast({ title: "Error", description: "Session expired. Please refresh the page.", variant: "destructive" })
+        setSaving(false)
+        return
+      }
+
+      const orderData = {
+        order_number: invoiceData.invoice_number ? invoiceData.invoice_number.replace("ORD", "DFT").replace("INV", "DFT").replace("SAL", "DFT") : "DFT001",
+        invoice_date: invoiceData.invoice_date || new Date().toISOString().split('T')[0],
+        customer_id: selectedCustomer.id,
+        franchise_id: currentFranchiseId,
+        booking_type: invoiceData.invoice_type || 'rental',
+        event_type: invoiceData.event_type || 'wedding',
+        event_participant: invoiceData.event_participant || 'both',
+        event_date: invoiceData.event_date || new Date().toISOString().split('T')[0],
+        event_time: invoiceData.event_time || null,
+        delivery_date: invoiceData.delivery_date || null,
+        delivery_time: invoiceData.delivery_time || null,
+        return_date: invoiceData.return_date || null,
+        return_time: invoiceData.return_time || null,
+        venue_address: invoiceData.venue_address || '',
+        groom_name: invoiceData.groom_name || '',
+        groom_whatsapp: invoiceData.groom_whatsapp || null,
+        groom_address: invoiceData.groom_address || null,
+        bride_name: invoiceData.bride_name || '',
+        bride_whatsapp: invoiceData.bride_whatsapp || null,
+        bride_address: invoiceData.bride_address || null,
+        payment_method: invoiceData.payment_method || 'Cash / Offline Payment',
+        amount_paid: 0,
+        total_amount: grandTotal || 0,
+        subtotal: subtotal || 0,
+        subtotal_amount: subtotal || 0,
+        tax_amount: gstAmount || 0,
+        gst_amount: gstAmount || 0,
+        gst_percentage: invoiceData.gst_percentage || 5,
+        discount_amount: discountAmount || 0,
+        discount_type: invoiceData.discount_type || 'fixed',
+        security_deposit: securityDeposit || 0,
+        coupon_code: invoiceData.coupon_code || null,
+        coupon_discount: invoiceData.coupon_discount || 0,
+        sales_closed_by_id: invoiceData.sales_closed_by_id || null,
+        status: 'draft',
+        pending_amount: grandTotal || 0,
+        notes: invoiceData.notes || '',
+        is_quote: false,
+        selection_mode: selectionMode || 'products',
+        variant_id: selectedPackage?.id || null,
+        use_custom_pricing: useCustomPackagePrice || false,
+        custom_package_price: customPackagePrice || 0,
+        has_modifications: invoiceData.has_modifications || false,
+        modifications_details: invoiceData.has_modifications ? invoiceData.modifications_details : null,
+        modification_date: invoiceData.has_modifications && invoiceData.modification_date
+          ? new Date(`${invoiceData.modification_date.split('T')[0]}T${invoiceData.modification_time || '10:00'}:00`).toISOString()
+          : null,
+        pdf_url: null,
+      }
+
+      const allItems = [
+        ...invoiceItems.map(item => ({
+          product_id: item.product_id === 'modification-service' ? '00000000-0000-0000-0000-000000000000' : item.product_id,
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+          total_price: item.total_price,
+          product_name: item.product_name || "",
+          barcode: item.barcode || "",
+          category: item.category || "",
+          image_url: item.image_url || "",
+        })),
+        ...extraItems.map(item => ({
+          product_id: item.product_id === 'modification-service' ? '00000000-0000-0000-0000-000000000000' : item.product_id,
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+          total_price: item.total_price,
+          product_name: item.product_name || "",
+          barcode: item.barcode || "",
+          category: item.category || "",
+          image_url: item.image_url || "",
+        }))
+      ]
+
+      let order: any
+      let isUpdate = false
+
+      if (orderId && mode === "edit") {
+        const res = await fetch("/api/orders", {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ orderId, orderData, items: allItems, lostDamagedItems: [] }),
+        })
+        const result = await res.json()
+        if (!res.ok) throw new Error(result.error || "Failed to update draft")
+        order = { id: orderId, order_number: invoiceData.invoice_number }
+        isUpdate = true
+      } else {
+        const res = await fetch("/api/orders", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ orderData, items: allItems, lostDamagedItems: [] }),
+        })
+        const result = await res.json()
+        if (!res.ok) throw new Error(result.error || "Failed to save draft")
+        order = result.order
+      }
+
+      toast({
+        title: isUpdate ? "Draft Updated" : "Draft Saved",
+        description: `${order.order_number} saved as draft — anyone with access can reopen and finish it from Bookings.`,
+      })
+
+      router.push("/bookings?refresh=" + Date.now())
+    } catch (error: any) {
+      toast({ title: "Error", description: error.message, variant: "destructive" })
+    }
+    setSaving(false)
+  }
+
   // Create or Update Order
   const handleCreateOrder = async () => {
     // Allow editing confirmed orders too
@@ -3462,6 +3596,16 @@ export default function CreateInvoicePage() {
           <Button variant="outline" size="sm" onClick={handlePrint}>
             <Printer className="h-4 w-4 mr-2" />
             Print
+          </Button>
+          {/* Save as Draft - not sent to customer, lets anyone with access pick it up later */}
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={saving}
+            onClick={handleSaveAsDraft}
+          >
+            {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+            Save as Draft
           </Button>
           {/* Save as Quote - only show in new mode, not in edit mode */}
           {mode !== "edit" && (
