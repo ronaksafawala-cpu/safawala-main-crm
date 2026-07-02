@@ -740,10 +740,16 @@ export default function BookingsPage() {
       (productFilter === 'selected' && (booking as any).has_items) ||
       (productFilter === 'pending' && !(booking as any).has_items)
 
+    const totalAmount = booking.total_amount || 0
+    const paidAmount = booking.paid_amount || 0
+    const hasOutstandingBalance = totalAmount > 0 && paidAmount < totalAmount && booking.status !== "cancelled"
+
     const matchesStatus = statusFilter === "all" || 
-      (statusFilter === "pending_modification" 
-        ? (booking.has_modifications === true && booking.status !== "cancelled" && booking.status !== "order_complete")
-        : booking.status === statusFilter)
+      (statusFilter === "pending_payment" 
+        ? (booking.status === "pending_payment" || hasOutstandingBalance)
+        : statusFilter === "pending_modification" 
+          ? (booking.has_modifications === true && booking.status !== "cancelled" && booking.status !== "order_complete")
+          : booking.status === statusFilter)
 
     // booking.type: 'rental' | 'sale' for product orders, 'package' for packages
     const matchesType = typeFilter === "all" || (booking as any).type === typeFilter
