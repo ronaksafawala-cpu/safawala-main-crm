@@ -41,7 +41,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" className={inter.variable}>
+    <html suppressHydrationWarning lang="en" className={inter.variable}>
       <head>
         <meta name="theme-color" content="#f5ebe0" />
         <meta name="mobile-web-app-capable" content="yes" />
@@ -57,11 +57,11 @@ export default function RootLayout({
         ` }} />
         <script src="//translate.google.com/translate_a/element.js?cb=googleTranslateElementInit" async defer></script>
       </head>
-      <body className={`${inter.className} antialiased`}>
+      <body suppressHydrationWarning className={`${inter.className} antialiased`}>
         <I18nProvider>
           <TooltipProvider>{children}</TooltipProvider>
         </I18nProvider>
-        <div id="google_translate_element" style={{ display: 'none' }} />
+        <div suppressHydrationWarning id="google_translate_element" style={{ display: 'none' }} />
         <div className="print:hidden">
           <Toaster />
           <SonnerToaster />
