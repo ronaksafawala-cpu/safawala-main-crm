@@ -13,6 +13,7 @@ import { Search, CalendarIcon, Package, Eye, Wrench, Lock, Trash2, User, MapPin,
 import { ItemsDisplayDialog, ItemsSelectionDialog, CompactItemsDisplayDialog } from "@/components/shared"
 import type { SelectedItem } from "@/components/shared/types/items"
 import { PincodeService } from "@/lib/pincode-service"
+import { useToast } from "@/hooks/use-toast"
 
 interface BookingData {
   id: string
@@ -50,9 +51,11 @@ interface BookingCalendarProps {
   franchiseId?: string
   compact?: boolean
   mini?: boolean // ultra-compact size
+  onViewDetails?: (booking: any) => void
 }
 
-export function BookingCalendar({ franchiseId, compact = false, mini = false }: BookingCalendarProps) {
+export function BookingCalendar({ franchiseId, compact = false, mini = false, onViewDetails }: BookingCalendarProps) {
+  const { toast } = useToast()
   const [selectedDate, setSelectedDate] = React.useState<Date>()
   const [showDateDetails, setShowDateDetails] = React.useState(false)
   const [bookings, setBookings] = React.useState<BookingData[]>([])
@@ -65,6 +68,8 @@ export function BookingCalendar({ franchiseId, compact = false, mini = false }: 
   const [activeTab, setActiveTab] = React.useState<'events' | 'modifications' | 'locked'>('events')
   const [loading, setLoading] = React.useState(true)
   const [searchTerm, setSearchTerm] = React.useState("")
+  const [currentMonth, setCurrentMonth] = React.useState<Date>(new Date())
+  const [selectedCalendarBooking, setSelectedCalendarBooking] = React.useState<BookingData | null>(null)
   
   // Items display dialog states - matching bookings page architecture
   const [showProductDialog, setShowProductDialog] = React.useState(false)
@@ -186,7 +191,7 @@ export function BookingCalendar({ franchiseId, compact = false, mini = false }: 
         return
       }
       const json = await res.json()
-      const rows: any[] = json?.data || []
+      const rows: any[] = json?.bookings || json?.data || []
 
       const toDateOnly = (v: any) => (v ? format(new Date(v), 'yyyy-MM-dd') : '')
       
@@ -416,6 +421,7 @@ export function BookingCalendar({ franchiseId, compact = false, mini = false }: 
     const isLocked = lockedDates.includes(dateStr)
     setDateBookings(dayBookings)
     setModificationBookings(dayModifications)
+    setSelectedCalendarBooking(dayBookings.length > 0 ? dayBookings[0] : null)
     setActiveTab(dayBookings.length > 0 ? 'events' : isLocked ? 'locked' : (dayModifications.length > 0 ? 'modifications' : 'events'))
     setShowDateDetails(true)
     console.log("[v0] Popup should open, showDateDetails:", true)
@@ -430,6 +436,65 @@ export function BookingCalendar({ franchiseId, compact = false, mini = false }: 
       booking.venue_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       booking.customer.city?.toLowerCase().includes(searchTerm.toLowerCase()),
   )
+
+  const prevMonth = () => {
+    setCurrentMonth(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1))
+  }
+
+  const nextMonth = () => {
+    setCurrentMonth(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1))
+  }
+
+  const getCalendarDays = () => {
+    const year = currentMonth.getFullYear()
+    const month = currentMonth.getMonth()
+    const firstDay = new Date(year, month, 1)
+    const startOfWeek = firstDay.getDay()
+    const totalDays = new Date(year, month + 1, 0).getDate()
+    
+    const days: (Date | null)[] = []
+    
+    // Previous month padding
+    for (let i = 0; i < startOfWeek; i++) {
+      days.push(null)
+    }
+    
+    // Current month days
+    for (let i = 1; i <= totalDays; i++) {
+      days.push(new Date(year, month, i))
+    }
+    
+    // Next month padding to make complete rows of 7
+    const remaining = 7 - (days.length % 7)
+    if (remaining < 7) {
+      for (let i = 0; i < remaining; i++) {
+        days.push(null)
+      }
+    }
+    
+    return days
+  }
+
+  const parseLockNote = (noteStr: string) => {
+    try {
+      const parsed = JSON.parse(noteStr)
+      return {
+        personName: parsed.personName || "Date Locked",
+        reason: parsed.reason || ""
+      }
+    } catch {
+      return {
+        personName: noteStr || "Date Locked",
+        reason: ""
+      }
+    }
+  }
+
+  const getApiType = (source: string) => {
+    if (source === "product_orders" || source === "product_order") return "product_order"
+    if (source === "package_bookings" || source === "package_booking") return "package_booking"
+    return "unified"
+  }
 
   const dayModifiers = React.useMemo(() => {
     const modifiers: Record<string, Date[]> = {
@@ -467,76 +532,132 @@ export function BookingCalendar({ franchiseId, compact = false, mini = false }: 
   }
 
   return (
-    <Card className={`shadow-md border-border/40 w-full ${compact ? 'p-2' : ''}`}>
-      <CardHeader className={`${compact ? 'py-3 px-4' : 'pb-4 px-6'} border-b bg-gradient-to-br from-background to-muted/20`}>
-        <div className="flex items-center justify-between">
-          <CardTitle className={`${compact ? 'text-base' : 'text-xl'} font-semibold flex items-center gap-2`}>
-            <CalendarIcon className="w-5 h-5 text-primary" />
-            Booking Calendar
+    <Card className="shadow-md border-border/40 w-full">
+      <CardHeader className="pb-4 px-6 border-b bg-gradient-to-br from-background to-muted/20">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <CardTitle className="text-xl font-extrabold flex items-center gap-2">
+            <CalendarIcon className="w-5 h-5 text-indigo-600" />
+            Booking Schedule
           </CardTitle>
-          {!compact && (
-            <div className="flex items-center gap-4 text-xs">
-              <div className="flex items-center gap-1.5">
-                <span className="inline-block w-3 h-3 rounded-sm bg-green-500 border border-green-600/30 shadow-sm" />
-                <span className="text-muted-foreground font-medium">0 Bookings</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="inline-block w-3 h-3 rounded-sm bg-blue-500 border border-blue-600/30 shadow-sm" />
-                <span className="text-muted-foreground font-medium">1-10 Bookings</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="inline-block w-3 h-3 rounded-sm bg-red-500 border border-red-600/30 shadow-sm" />
-                <span className="text-muted-foreground font-medium">10+ Bookings</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="inline-block w-3 h-3 rounded-sm bg-orange-400 border border-orange-500/30 shadow-sm flex items-center justify-center text-[8px]">🔧</span>
-                <span className="text-muted-foreground font-medium">Modifications</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="inline-block w-3 h-3 rounded-sm bg-gray-400 border border-gray-500/30 shadow-sm" />
-                <span className="text-muted-foreground font-medium">Past Date</span>
-              </div>
+          
+          <div className="flex items-center gap-3">
+            <Button variant="outline" size="sm" onClick={prevMonth} className="h-8 w-8 p-0 font-bold">
+              &lt;
+            </Button>
+            <span className="text-sm font-bold text-slate-800 dark:text-slate-100 min-w-[120px] text-center capitalize">
+              {format(currentMonth, "MMMM yyyy")}
+            </span>
+            <Button variant="outline" size="sm" onClick={nextMonth} className="h-8 w-8 p-0 font-bold">
+              &gt;
+            </Button>
+          </div>
+
+          <div className="flex items-center gap-4 text-[11px] flex-wrap">
+            <div className="flex items-center gap-1.5">
+              <span className="inline-block w-2.5 h-2.5 rounded-sm bg-blue-500/80 border border-blue-600/30 shadow-sm" />
+              <span className="text-muted-foreground font-medium">Rentals</span>
             </div>
-          )}
+            <div className="flex items-center gap-1.5">
+              <span className="inline-block w-2.5 h-2.5 rounded-sm bg-purple-500/80 border border-purple-600/30 shadow-sm" />
+              <span className="text-muted-foreground font-medium">Packages</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="inline-block w-2.5 h-2.5 rounded-sm bg-emerald-500/80 border border-emerald-600/30 shadow-sm" />
+              <span className="text-muted-foreground font-medium">Sales</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="inline-block w-2.5 h-2.5 rounded-sm bg-orange-400 border border-orange-500/30 shadow-sm flex items-center justify-center text-[8px]">🔧</span>
+              <span className="text-muted-foreground font-medium">Alteration</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="inline-block w-2.5 h-2.5 rounded-sm bg-red-100 border border-red-200" />
+              <span className="text-muted-foreground font-medium">Locked</span>
+            </div>
+          </div>
         </div>
       </CardHeader>
-      <CardContent className={`w-full ${compact ? 'p-3' : 'p-6'}`}>
-        <div className={`mx-auto w-full ${compact ? (mini ? 'max-w-[420px] md:max-w-[680px]' : 'max-w-sm md:max-w-[800px]') : 'md:w-[70%]'}`}>
-          <Calendar
-            mode="single"
-            selected={selectedDate}
-            onSelect={(date) => {
-              console.log("[v0] Calendar onSelect triggered with date:", date)
-              if (date) {
-                handleDateClick(date)
-              }
-            }}
-            modifiers={dayModifiers}
-            modifiersClassNames={dayClassNames}
-            renderDayBadge={(date) => {
-              const count = getBookingsForDate(date).length
-              const modifications = getModificationsForDate(date).length
-              const dateStr = format(date, "yyyy-MM-dd")
-              const isLocked = lockedDates.includes(dateStr)
-
-              if (count > 0 || modifications > 0 || isLocked) {
-                return (
-                  <div className="flex items-center gap-0.5 flex-wrap justify-center">
-                    {count > 0 && <span>{count}</span>}
-                    {modifications > 0 && (
-                      <span className="inline-flex items-center justify-center w-3 h-3 rounded-full bg-orange-400 text-[8px] font-bold text-white">🔧</span>
-                    )}
-                    {isLocked && (
-                      <span className="inline-flex items-center justify-center w-3 h-3 rounded-full bg-red-500 text-[8px] text-white">🔒</span>
-                    )}
-                  </div>
-                )
-              }
-              return null
-            }}
-            squareCells={false}
-            className={`rounded-lg border-2 border-border/50 w-full bg-background/50 ${compact ? (mini ? '[--cell-size:1.5rem]' : '[--cell-size:2rem]') : '[--cell-size:3.5rem] md:[--cell-size:4rem]'}`}
-          />
+      <CardContent className="w-full p-6">
+        <div className="grid grid-cols-7 gap-px bg-slate-200 dark:bg-slate-800 border dark:border-slate-800 rounded-xl overflow-hidden shadow-sm">
+          {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map(day => (
+            <div key={day} className="bg-slate-50 dark:bg-slate-900/60 p-2.5 text-center text-xs font-bold text-slate-500 uppercase tracking-wider border-b dark:border-slate-800">
+              {day}
+            </div>
+          ))}
+          {getCalendarDays().map((day, idx) => {
+            if (!day) {
+              return (
+                <div key={`empty-${idx}`} className="bg-slate-50/40 dark:bg-slate-950/20 min-h-[110px]" />
+              )
+            }
+            
+            const dateStr = format(day, "yyyy-MM-dd")
+            const isToday = format(new Date(), "yyyy-MM-dd") === dateStr
+            const dayBookings = getBookingsForDate(day)
+            const dayModifications = getModificationsForDate(day)
+            const isLocked = lockedDates.includes(dateStr)
+            const lockedDetails = lockedDateObjects.find(ld => ld.locked_date === dateStr)
+            
+            return (
+              <div 
+                key={dateStr} 
+                onClick={() => handleDateClick(day)}
+                className={`bg-white dark:bg-slate-900 min-h-[110px] p-2 flex flex-col justify-between border-slate-100 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-all cursor-pointer group ${
+                  isToday ? "ring-1 ring-inset ring-indigo-500 bg-indigo-50/5" : ""
+                }`}
+              >
+                <div className="flex justify-between items-center mb-1">
+                  <span className={`text-xs font-bold flex items-center justify-center h-5 w-5 rounded-full ${
+                    isToday ? "bg-indigo-600 text-white font-extrabold" : "text-slate-700 dark:text-slate-300"
+                  }`}>
+                    {day.getDate()}
+                  </span>
+                  
+                  {dayModifications.length > 0 && (
+                    <span className="text-[10px] text-amber-500 animate-pulse" title="Modifications Pending">🔧</span>
+                  )}
+                </div>
+                
+                <div className="flex-1 flex flex-col gap-1 overflow-y-auto max-h-[80px] scrollbar-none">
+                  {dayBookings.slice(0, 3).map(b => {
+                    const isRental = (b as any).type === "rental"
+                    const isPackage = (b as any).booking_kind === "package" || (b as any).type === "package"
+                    return (
+                      <div 
+                        key={b.id} 
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setSelectedCalendarBooking(b)
+                          setSelectedDate(day)
+                          setDateBookings(dayBookings)
+                          setModificationBookings(dayModifications)
+                          setShowDateDetails(true)
+                        }}
+                        className={`text-[9px] px-1.5 py-0.5 rounded font-semibold truncate transition-colors ${
+                          isRental 
+                            ? "bg-blue-50 text-blue-700 border border-blue-100 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-900/30"
+                            : isPackage
+                              ? "bg-purple-50 text-purple-700 border border-purple-100 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-900/30"
+                              : "bg-emerald-50 text-emerald-700 border border-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900/30"
+                        }`}
+                      >
+                        {isRental ? "👗" : isPackage ? "📦" : "🛍️"} {b.booking_number} ({b.customer_name})
+                      </div>
+                    )
+                  })}
+                  {dayBookings.length > 3 && (
+                    <div className="text-[8px] text-slate-400 font-bold pl-1">
+                      +{dayBookings.length - 3} more...
+                    </div>
+                  )}
+                  {isLocked && (
+                    <div className="text-[9px] bg-red-50 text-red-700 border border-red-100 dark:bg-red-950/40 dark:text-red-300 dark:border-red-900/30 px-1.5 py-0.5 rounded font-semibold truncate">
+                      🔒 Locked ({lockedDetails?.notes ? parseLockNote(lockedDetails.notes).personName : "Date Locked"})
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
+          })}
         </div>
       </CardContent>
 
@@ -572,176 +693,246 @@ export function BookingCalendar({ franchiseId, compact = false, mini = false }: 
             </TabsList>
 
             <TabsContent value="events" className="space-y-4">
-              {dateBookings.length > 0 && (
-                <div className="flex gap-2 flex-wrap">
-                  <Badge variant="secondary">{dateBookings.length} total</Badge>
-                  {dateBookings.filter(b => b.status === 'confirmed').length > 0 && (
-                    <Badge className="bg-green-500">{dateBookings.filter(b => b.status === 'confirmed').length} confirmed</Badge>
-                  )}
-                  {dateBookings.filter(b => b.status === 'delivered').length > 0 && (
-                    <Badge className="bg-blue-500">{dateBookings.filter(b => b.status === 'delivered').length} delivered</Badge>
-                  )}
-                  {dateBookings.filter(b => b.status === 'pending_payment').length > 0 && (
-                    <Badge className="bg-orange-500">{dateBookings.filter(b => b.status === 'pending_payment').length} pending</Badge>
-                  )}
-                  {dateBookings.filter(b => b.status === 'quote').length > 0 && (
-                    <Badge className="bg-purple-500">{dateBookings.filter(b => b.status === 'quote').length} quotes</Badge>
-                  )}
-                </div>
-              )}
-
-              <div className={`flex items-center gap-2 ${compact ? 'hidden' : ''}`}>
-                <Search className="w-4 h-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search by customer name, booking number, venue, or city..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="flex-1"
-                />
-              </div>
-
               {dateBookings.length === 0 ? (
-                <div className="text-center py-8 space-y-4">
-                  <div className="text-muted-foreground">No bookings for this date</div>
-                  <div className="flex items-center justify-center gap-3">
-                    <a href="/create-invoice" className="inline-flex items-center px-3 py-2 rounded-md border bg-background hover:bg-muted text-sm font-medium">
-                      + Create Booking
-                    </a>
+                <div className="text-center py-12 bg-white dark:bg-slate-900 border rounded-xl shadow-sm">
+                  <CalendarIcon className="w-12 h-12 mx-auto mb-3 text-slate-300 dark:text-slate-700" />
+                  <div className="text-slate-500 font-medium">No events scheduled for this date</div>
+                  <div className="mt-4">
+                    <Button size="sm" asChild>
+                      <a href="/create-invoice">+ Create Booking</a>
+                    </Button>
                   </div>
                 </div>
-            ) : filteredDateBookings.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">No bookings match your search</div>
-            ) : (
-              <div className="overflow-x-auto border rounded-lg">
-                <table className="w-full border-collapse bg-white">
-                  <thead>
-                    <tr className="bg-muted/40 border-b">
-                      <th className="border-r border-muted px-4 py-3 text-left text-sm font-semibold text-foreground min-w-[150px]">
-                        Customer Name
-                      </th>
-                      <th className="border-r border-muted px-4 py-3 text-left text-sm font-semibold text-foreground min-w-[120px]">
-                        Phone Number
-                      </th>
-                      <th className="border-r border-muted px-4 py-3 text-left text-sm font-semibold text-foreground min-w-[160px]">
-                        Event Date & Time
-                      </th>
-                      <th className="border-r border-muted px-4 py-3 text-left text-sm font-semibold text-foreground min-w-[200px]">
-                        Total Safas
-                      </th>
-                      <th className="border-r border-muted px-4 py-3 text-left text-sm font-semibold text-foreground min-w-[140px]">
-                        Payment Status
-                      </th>
-                      <th className="border-r border-muted px-4 py-3 text-left text-sm font-semibold text-foreground min-w-[150px]">
-                        Venue Name
-                      </th>
-                      <th className="border-r border-muted px-4 py-3 text-left text-sm font-semibold text-foreground min-w-[120px]">
-                        Area
-                      </th>
-                      <th className="border-muted px-4 py-3 text-left text-sm font-semibold text-foreground min-w-[100px]">
-                        City
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredDateBookings.map((booking, index) => (
-                      <tr
-                        key={booking.id}
-                        className={`border-b hover:bg-muted/40 ${index % 2 === 0 ? "bg-background" : "bg-muted/20"}`}
-                      >
-                        <td className="border-r border-muted px-4 py-3 text-sm font-medium text-foreground">
-                          {booking.customer_name}
-                        </td>
-                        <td className="border-r border-muted px-4 py-3 text-sm text-foreground">
-                          {booking.customer_phone || "N/A"}
-                        </td>
-                        <td className="border-r border-muted px-4 py-3 text-sm text-foreground">
-                          <div>
-                            <div className="font-medium">
-                              {format(new Date(booking.event_date), "dd-MMM-yyyy HH:mm a")}
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 min-h-[480px]">
+                  {/* Left Pane: Bookings list on this date */}
+                  <div className="md:col-span-1 border-r pr-4 border-slate-100 dark:border-slate-800 max-h-[500px] overflow-y-auto flex flex-col gap-2">
+                    <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Bookings ({filteredDateBookings.length})</div>
+                    <div className="mb-2 relative">
+                      <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-muted-foreground" />
+                      <Input
+                        placeholder="Search name, venue..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="pl-8 h-8 text-xs bg-slate-50 dark:bg-slate-900/50"
+                      />
+                    </div>
+                    {filteredDateBookings.map((b) => {
+                      const isSelected = selectedCalendarBooking?.id === b.id
+                      const isRental = (b as any).type === "rental"
+                      const isPackage = (b as any).booking_kind === "package" || (b as any).type === "package"
+                      
+                      return (
+                        <div
+                          key={b.id}
+                          onClick={() => setSelectedCalendarBooking(b)}
+                          className={`p-3 rounded-xl border text-left cursor-pointer transition-all ${
+                            isSelected 
+                              ? "border-indigo-600 bg-indigo-50/40 dark:bg-indigo-950/20 shadow-sm"
+                              : "border-slate-150 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/40"
+                          }`}
+                        >
+                          <div className="flex justify-between items-center mb-1">
+                            <span className="text-xs font-extrabold text-indigo-600 dark:text-indigo-400">{b.booking_number}</span>
+                            <Badge variant={isRental ? "info" : isPackage ? "secondary" : "success"} className="text-[9px] px-1 py-0.5">
+                              {isRental ? "Rental" : isPackage ? "Package" : "Sale"}
+                            </Badge>
+                          </div>
+                          <div className="text-xs font-bold text-slate-700 dark:text-slate-300 truncate">{b.customer_name}</div>
+                          <div className="text-[10px] text-slate-400 mt-0.5">{b.event_type}</div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                  
+                  {/* Right Pane: Selected Booking Details & Premium Action Bar */}
+                  <div className="md:col-span-2 flex flex-col justify-between">
+                    {selectedCalendarBooking ? (
+                      <div className="flex-1 flex flex-col justify-between gap-4 h-full">
+                        <div>
+                          {/* Top Action Buttons Group */}
+                          <div className="flex flex-wrap items-center gap-1.5 border-b pb-3.5 mb-4 border-slate-100 dark:border-slate-800">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                window.open(`/create-invoice?mode=edit&id=${selectedCalendarBooking.id}`, '_blank')
+                              }}
+                              className="h-8 text-xs font-semibold gap-1.5"
+                            >
+                              ✏️ Edit Order
+                            </Button>
+                            
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={async () => {
+                                if (confirm("Are you sure you want to archive this booking?")) {
+                                  try {
+                                    const apiType = getApiType(selectedCalendarBooking.source)
+                                    const res = await fetch(`/api/bookings/${selectedCalendarBooking.id}?type=${apiType}`, {
+                                      method: "PATCH",
+                                      headers: { "Content-Type": "application/json" },
+                                      body: JSON.stringify({ is_archived: true }),
+                                    })
+                                    if (res.ok) {
+                                      toast({ title: "Archived", description: "Booking archived successfully" })
+                                      setShowDateDetails(false)
+                                      fetchBookings()
+                                    }
+                                  } catch (e) {
+                                    toast({ title: "Error", description: "Failed to archive", variant: "destructive" })
+                                  }
+                                }
+                              }}
+                              className="h-8 text-xs font-semibold gap-1.5 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20"
+                            >
+                              📦 Archive
+                            </Button>
+
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                if (onViewDetails) {
+                                  setShowDateDetails(false)
+                                  onViewDetails(selectedCalendarBooking)
+                                }
+                              }}
+                              className="h-8 text-xs font-semibold gap-1.5"
+                            >
+                              👁️ View Details
+                            </Button>
+
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                window.open(`/create-invoice?mode=edit&id=${selectedCalendarBooking.id}&print=true`, '_blank')
+                              }}
+                              className="h-8 text-xs font-semibold gap-1.5"
+                            >
+                              🖨️ Print Invoice
+                            </Button>
+
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => {
+                                const printWindow = window.open("", "_blank")
+                                if (printWindow) {
+                                  const itemsHtml = selectedCalendarBooking.booking_items?.map((item: any) => `
+                                    <tr>
+                                      <td style="border: 1px solid #ddd; padding: 8px;">${item.product_name || 'Item'}</td>
+                                      <td style="border: 1px solid #ddd; padding: 8px; text-align: center;">${item.quantity || 1}</td>
+                                    </tr>
+                                  `).join('') || `<tr><td colspan="2" style="border: 1px solid #ddd; padding: 8px; text-align: center;">No items listed.</td></tr>`
+                                  
+                                  printWindow.document.write(`
+                                    <html>
+                                      <head>
+                                        <title>Delivery Challan - #${selectedCalendarBooking.booking_number}</title>
+                                        <style>
+                                          body { font-family: sans-serif; padding: 20px; line-height: 1.6; }
+                                          table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+                                          th { background-color: #f2f2f2; font-weight: bold; padding: 8px; }
+                                        </style>
+                                      </head>
+                                      <body>
+                                        <h2>DELIVERY CHALLAN / PACKING LIST</h2>
+                                        <hr />
+                                        <p><strong>Booking #:</strong> ${selectedCalendarBooking.booking_number}</p>
+                                        <p><strong>Customer Name:</strong> ${selectedCalendarBooking.customer_name}</p>
+                                        <p><strong>Phone:</strong> ${selectedCalendarBooking.customer_phone}</p>
+                                        <p><strong>Event Date:</strong> ${selectedCalendarBooking.event_date}</p>
+                                        <p><strong>Venue:</strong> ${selectedCalendarBooking.venue_name} - ${selectedCalendarBooking.venue_address}</p>
+                                        
+                                        <h3>Items List</h3>
+                                        <table>
+                                          <thead>
+                                            <tr>
+                                              <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Product Details</th>
+                                              <th style="border: 1px solid #ddd; padding: 8px; text-align: center; width: 100px;">Qty</th>
+                                            </tr>
+                                          </thead>
+                                          <tbody>
+                                            ${itemsHtml}
+                                          </tbody>
+                                        </table>
+                                        <div style="margin-top: 50px; display: flex; justify-content: space-between;">
+                                          <div>_________________<br/>Receiver Signature</div>
+                                          <div>_________________<br/>Authorized Signatory</div>
+                                        </div>
+                                        <script>window.onload = function() { window.print(); window.close(); }</script>
+                                      </body>
+                                    </html>
+                                  `)
+                                  printWindow.document.close()
+                                }
+                              }}
+                              className="h-8 text-xs font-semibold gap-1.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-900/30"
+                            >
+                              🚚 Print Delivery Sheet
+                            </Button>
+                          </div>
+                          
+                          {/* Full Booking Summary Details */}
+                          <div className="space-y-4 text-sm bg-slate-50/50 dark:bg-slate-900/20 p-4 border border-slate-100 dark:border-slate-800 rounded-xl">
+                            <div>
+                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Customer Details</span>
+                              <div className="font-bold text-slate-800 dark:text-slate-100 text-base">{selectedCalendarBooking.customer_name}</div>
+                              <div className="text-slate-500 text-xs font-medium mt-0.5">{selectedCalendarBooking.customer_phone}</div>
                             </div>
-                            <div className="text-xs text-muted-foreground mt-1">{booking.event_type}</div>
-                          </div>
-                        </td>
-                        <td className="border-r border-muted px-4 py-3 text-sm text-foreground">
-                          <div className="text-center min-w-[100px]">
-                            {(() => {
-                              const bookingType = (booking as any).type
-                              const safaCount = Number(booking.total_safas) || 0
-                              const items = booking.booking_items || []
-                              const totalQty = items.reduce((s: number, i: any) => s + (i.quantity || 0), 0)
-
-                              // Package: show package name + variant + safa count
-                              if (bookingType === 'package') {
-                                const packageDetails = (booking as any).package_details
-                                const variantName = (booking as any).variant_name
-                                const categoryName = packageDetails?.name || 'Package'
+                            
+                            <div className="grid grid-cols-2 gap-4">
+                              <div>
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Event Info</span>
+                                <div className="font-semibold text-slate-700 dark:text-slate-200 text-xs">{selectedCalendarBooking.event_type}</div>
+                                <div className="text-[11px] text-slate-500 mt-0.5">{selectedCalendarBooking.event_date}</div>
+                              </div>
+                              <div>
+                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Venue</span>
+                                <div className="font-semibold text-slate-700 dark:text-slate-200 text-xs truncate" title={selectedCalendarBooking.venue_address}>
+                                  {selectedCalendarBooking.venue_name}
+                                </div>
+                                <div className="text-[11px] text-slate-500 mt-0.5 truncate">{selectedCalendarBooking.venue_address}</div>
+                              </div>
+                            </div>
+                            
+                            <div>
+                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Payment Summary</span>
+                              {(() => {
+                                const payment = getPaymentStatus(selectedCalendarBooking)
                                 return (
-                                  <div className="text-left">
-                                    <div className="text-xs font-bold text-indigo-700 leading-tight">{categoryName}</div>
-                                    {variantName && <div className="text-[10px] text-slate-500 leading-tight">{variantName}</div>}
-                                    <div className="text-xs font-semibold text-slate-700 mt-0.5">👑 {safaCount} Safas</div>
+                                  <div className="flex items-center gap-3 mt-1">
+                                    <Badge variant={payment.isFullyPaid ? "success" : "warning"} className="font-bold">
+                                      {payment.isFullyPaid ? "Paid" : `Due: ₹${payment.pendingAmount.toLocaleString()}`}
+                                    </Badge>
+                                    <span className="text-xs text-muted-foreground font-medium">
+                                      Paid: ₹{payment.paidAmount.toLocaleString()} / Total: ₹{selectedCalendarBooking.total_amount.toLocaleString()}
+                                    </span>
                                   </div>
                                 )
-                              }
+                              })()}
+                            </div>
 
-                              // Individual product rental: show items if loaded, else total qty
-                              if (items.length > 0) {
-                                return (
-                                  <div className="text-left space-y-0.5">
-                                    {items.slice(0, 3).map((item: any, i: number) => (
-                                      <div key={i} className="text-[10px] text-slate-700 leading-tight">
-                                        <span className="font-medium">{item.product_name || item.name || 'Item'}</span>
-                                        <span className="text-slate-500"> ×{item.quantity}</span>
-                                      </div>
-                                    ))}
-                                    {items.length > 3 && (
-                                      <div className="text-[10px] text-slate-400">+{items.length - 3} more</div>
-                                    )}
-                                  </div>
-                                )
-                              }
-
-                              // Fallback: show safa count or total qty
-                              const display = safaCount > 0 ? safaCount : totalQty
-                              return (
-                                <div>
-                                  <div className="text-xl font-bold text-primary">{display > 0 ? display : '—'}</div>
-                                  <div className="text-[10px] text-gray-500">{safaCount > 0 ? 'Safas' : display > 0 ? 'Items' : 'No items'}</div>
-                                </div>
-                              )
-                            })()}
+                            {selectedCalendarBooking.has_modifications && (
+                              <div className="p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/30 rounded-lg text-xs">
+                                <div className="font-bold text-amber-800 dark:text-amber-400 uppercase tracking-wider mb-1">Alterations Instructions</div>
+                                <p className="text-slate-700 dark:text-slate-300 font-medium whitespace-pre-wrap">{selectedCalendarBooking.modifications_details || "No details provided"}</p>
+                              </div>
+                            )}
                           </div>
-                        </td>
-                        <td className="border-r border-muted px-4 py-3 text-sm text-foreground">
-                          {(() => {
-                            const payment = getPaymentStatus(booking)
-                            if (payment.isFullyPaid) {
-                              return <span className="text-green-600 font-semibold">✅ Confirmed</span>
-                            } else {
-                              return (
-                                <div className="text-amber-700 font-semibold">
-                                  <div>⏳ Pending Payment</div>
-                                  <div className="text-xs text-amber-600">₹{payment.pendingAmount.toLocaleString()}</div>
-                                </div>
-                              )
-                            }
-                          })()}
-                        </td>
-                        <td className="border-r border-muted px-4 py-3 text-sm text-foreground">
-                          <div className="font-medium">{booking.venue_name}</div>
-                        </td>
-                        <td className="border-r border-muted px-4 py-3 text-sm text-foreground">
-                          {booking.area_name || 'Not Specified'}
-                        </td>
-                        <td className="border-muted px-4 py-3 text-sm text-foreground">
-                          {booking.customer.city}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col items-center justify-center py-20 text-muted-foreground text-sm">
+                        Select a booking from the left to view details and action controls.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </TabsContent>
 
             <TabsContent value="modifications" className="space-y-4">

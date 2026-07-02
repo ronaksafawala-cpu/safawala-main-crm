@@ -40,6 +40,7 @@ import {
   ShoppingCart,
   TrendingUp,
   CheckCircle,
+  Printer,
 } from "lucide-react"
 import jsPDF from 'jspdf'
 import autoTable from 'jspdf-autotable'
@@ -1323,6 +1324,15 @@ export default function BookingsPage() {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          <Button 
+            size="sm" 
+            variant="outline" 
+            onClick={() => exportBookings('pdf')} 
+            className="border-indigo-200 text-indigo-700 hover:bg-indigo-50 dark:border-indigo-900/30"
+          >
+            <Printer className="h-4 w-4 mr-1.5" />
+            Print List
+          </Button>
           <Link href="/create-invoice">
             <Button size="sm">
               <Plus className="h-4 w-4 mr-1" />
@@ -1634,7 +1644,13 @@ export default function BookingsPage() {
                 <PageLoader />
               </div>
             ) : (
-              <BookingCalendar franchiseId={currentUser?.role !== 'super_admin' ? currentUser?.franchise_id : undefined} />
+              <BookingCalendar 
+                franchiseId={currentUser?.role !== 'super_admin' ? currentUser?.franchise_id : undefined} 
+                onViewDetails={(booking) => {
+                  setSelectedBooking(booking)
+                  setShowViewDialog(true)
+                }}
+              />
             )}
           </div>
         </TabsContent>
