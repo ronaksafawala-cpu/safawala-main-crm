@@ -225,6 +225,13 @@ const navigationItems = {
       description: "Manage department-wise work orders, task checklists for warehouse, packing and dispatch",
     },
     {
+      title: "Modifications",
+      url: "/modifications",
+      icon: Shirt,
+      permission: "bookings",
+      description: "Manage tailoring, stitching notes, and custom alterations for customer orders",
+    },
+    {
       title: "Product Archive",
       url: "/product-archive",
       icon: Archive,
