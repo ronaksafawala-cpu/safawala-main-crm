@@ -23,16 +23,16 @@ async function getCRMContext(supabase: any, franchiseId: string, isSuperAdmin: b
   ] = await Promise.allSettled([
     baseFilter(
       supabase
-        .from("product_orders")
-        .select("id, order_number, event_date, total_amount, status, customer:customers(name, phone)")
+        .from("bookings")
+        .select("id, booking_number, event_date, total_amount, status, customer:customers(name, phone)")
         .eq("event_date", today)
         .limit(10)
     ),
     baseFilter(
       supabase
-        .from("product_orders")
-        .select("id, order_number, total_amount, amount_paid, customer:customers(name, phone)")
-        .in("status", ["pending", "partial"])
+        .from("bookings")
+        .select("id, booking_number, total_amount, paid_amount, amount_paid, customer:customers(name, phone)")
+        .in("payment_status", ["pending", "partial"])
         .order("created_at", { ascending: false })
         .limit(10)
     ),
@@ -56,8 +56,8 @@ async function getCRMContext(supabase: any, franchiseId: string, isSuperAdmin: b
       .limit(10),
     baseFilter(
       supabase
-        .from("product_orders")
-        .select("id, order_number, event_date, total_amount, status, customer:customers(name, phone)")
+        .from("bookings")
+        .select("id, booking_number, event_date, total_amount, status, customer:customers(name, phone)")
         .order("created_at", { ascending: false })
         .limit(5)
     ),
@@ -728,56 +728,15 @@ async function executeTool(
         }
         const { search } = args
 
-        // Query product_orders
-        let qOrders = supabase.from("product_orders").select("id, order_number, total_amount, event_date, status, created_at, customer:customers(name, phone)")
-        if (!isSuperAdmin) qOrders = qOrders.eq("franchise_id", franchiseId)
-        if (search) qOrders = qOrders.or(`order_number.ilike.%${search}%`)
-        
-        // Query bookings
         let qBookings = supabase.from("bookings").select("id, booking_number, total_amount, event_date, status, created_at, customer:customers(name, phone)")
         if (!isSuperAdmin) qBookings = qBookings.eq("franchise_id", franchiseId)
         if (search) qBookings = qBookings.or(`booking_number.ilike.%${search}%`)
 
-        const [ordersRes, bookingsRes] = await Promise.all([
-          qOrders.order("created_at", { ascending: false }).limit(10),
-          qBookings.order("created_at", { ascending: false }).limit(10)
-        ])
-
-        const unifiedBookings: any[] = []
-
-        if (bookingsRes.data) {
-          bookingsRes.data.forEach((b: any) => {
-            unifiedBookings.push({
-              id: b.id,
-              booking_number: b.booking_number,
-              total_amount: b.total_amount,
-              event_date: b.event_date,
-              status: b.status,
-              created_at: b.created_at,
-              customer: b.customer,
-              type: "booking"
-            })
-          })
+        const { data, error } = await qBookings.order("created_at", { ascending: false }).limit(10)
+        if (error) {
+          console.error("[AI Assistant] query_bookings error:", error)
+          return { success: false, error: error.message }
         }
-
-        if (ordersRes.data) {
-          ordersRes.data.forEach((o: any) => {
-            unifiedBookings.push({
-              id: o.id,
-              booking_number: o.order_number,
-              total_amount: o.total_amount,
-              event_date: o.event_date,
-              status: o.status,
-              created_at: o.created_at,
-              customer: o.customer,
-              type: "product_order"
-            })
-          })
-        }
-
-        // Sort combined list by created_at descending and limit to 10
-        unifiedBookings.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-        const data = unifiedBookings.slice(0, 10)
 
         return { success: true, data }
       }
@@ -860,12 +819,16 @@ Today's date: ${ctx.today}
 
 ### Today's Bookings (${ctx.bookingsToday.length}):
 ${ctx.bookingsToday.length > 0
-  ? ctx.bookingsToday.map((b: any) => `- ${b.order_number}: ${b.customer?.name} | Event: ${b.event_date} | ₹${b.total_amount} | ${b.status}`).join("\n")
+  ? ctx.bookingsToday.map((b: any) => `- ${b.booking_number || b.order_number}: ${b.customer?.name} | Event: ${b.event_date} | ₹${b.total_amount} | ${b.status}`).join("\n")
   : "No bookings today"}
 
 ### Pending Payments (${ctx.pendingPayments.length}):
 ${ctx.pendingPayments.length > 0
-  ? ctx.pendingPayments.map((b: any) => `- ${b.order_number}: ${b.customer?.name} | Total: ₹${b.total_amount} | Paid: ₹${b.amount_paid || 0} | Due: ₹${(b.total_amount || 0) - (b.amount_paid || 0)}`).join("\n")
+  ? ctx.pendingPayments.map((b: any) => {
+      const paid = b.paid_amount ?? b.amount_paid ?? 0;
+      const due = (b.total_amount || 0) - paid;
+      return `- ${b.booking_number || b.order_number}: ${b.customer?.name} | Total: ₹${b.total_amount} | Paid: ₹${paid} | Due: ₹${due}`;
+    }).join("\n")
   : "No pending payments"}
 
 ### Low Stock Items (${ctx.lowStock.length}):
@@ -885,7 +848,7 @@ ${ctx.recentLeads.length > 0
 
 ### Recent Bookings:
 ${ctx.recentBookings.length > 0
-  ? ctx.recentBookings.map((b: any) => `- ${b.order_number}: ${b.customer?.name} | ₹${b.total_amount} | ${b.status}`).join("\n")
+  ? ctx.recentBookings.map((b: any) => `- ${b.booking_number || b.order_number}: ${b.customer?.name} | ₹${b.total_amount} | ${b.status}`).join("\n")
   : "No recent bookings"}
 
 ## YOUR CAPABILITIES:
