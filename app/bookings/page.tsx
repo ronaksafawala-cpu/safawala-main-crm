@@ -1487,41 +1487,6 @@ export default function BookingsPage() {
             )
           })()}
         </DialogContent>
-      </Dialog>
-
-      {/* OLD CODE - TO BE REMOVED */}
-      {false && (
-                <div className="space-y-4">
-                  {/* Customer Information */}
-                  <Card>
-                <CardHeader className="bg-blue-50 dark:bg-blue-950">
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <User className="h-5 w-5" />
-                    👤 Customer Information
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="pt-4">
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-sm text-muted-foreground">Name</p>
-                      <p className="font-medium">{selectedBooking.customer?.name || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Phone</p>
-                      <p className="font-medium">{selectedBooking.customer?.phone || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">WhatsApp</p>
-                      <p className="font-medium">{(selectedBooking.customer as any)?.whatsapp_number || selectedBooking.customer?.phone || 'N/A'}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground">Email</p>
-                      <p className="font-medium">{selectedBooking.customer?.email || 'N/A'}</p>
-                    </div>
-                    <div className="col-span-2">
-                      <p className="text-sm text-muted-foreground">Address</p>
-                      <p className="font-medium">
-                        {[
                           selectedBooking.customer?.address,
                           selectedBooking.customer?.city,
                           selectedBooking.customer?.state,

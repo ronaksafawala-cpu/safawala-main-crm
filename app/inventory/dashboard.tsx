@@ -1,23 +1,27 @@
-"use client"
+'use client'
 
-import { useState, useEffect, useMemo } from "react"
-import { Card } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Badge } from "@/components/ui/badge"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { useState, useEffect, useMemo } from 'react'
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Badge } from '@/components/ui/badge'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+  Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle
+} from '@/components/ui/dialog'
 import {
   Package, Plus, Search, RefreshCw, AlertTriangle, CheckCircle,
-  BarChart3, IndianRupee, ArrowUpDown, TrendingUp, Boxes, Download, Upload, BookOpen
-} from "lucide-react"
-import { DashboardLayout } from "@/components/layout/dashboard-layout"
-import { ProductCard } from "@/components/inventory/product-card"
-import { ProductEditorModal } from "@/components/inventory/product-editor-modal"
-import { BarcodePrintDialog } from "@/components/inventory/barcode-print-dialog"
-import { supabase } from "@/lib/supabase"
-import { toast } from "sonner"
-import { useConfirmationDialog } from "@/components/ui/confirmation-dialog"
-import Link from "next/link"
+  BarChart3, IndianRupee, ArrowUpDown, Boxes, Download, Upload,
+  BookOpen, Trash2, Edit2, Check, X, ShieldAlert
+} from 'lucide-react'
+import { DashboardLayout } from '@/components/layout/dashboard-layout'
+import { ProductCard } from '@/components/inventory/product-card'
+import { ProductEditorModal } from '@/components/inventory/product-editor-modal'
+import { BarcodePrintDialog } from '@/components/inventory/barcode-print-dialog'
+import { supabase } from '@/lib/supabase'
+import { toast } from 'sonner'
+import { useConfirmationDialog } from '@/components/ui/confirmation-dialog'
+import Link from 'next/link'
 
 interface User {
   id: string
@@ -30,7 +34,6 @@ interface Product {
   id: string
   name: string
   description?: string
-  brand?: string
   size?: string
   color?: string
   material?: string
@@ -52,9 +55,9 @@ interface Product {
   is_active: boolean
   _variation_count?: number
   created_at?: string
+  product_code?: string
 }
 
-// Animated counter hook
 function useAnimatedCount(target: number, duration: number = 600) {
   const [count, setCount] = useState(0)
   useEffect(() => {
@@ -75,7 +78,6 @@ function useAnimatedCount(target: number, duration: number = 600) {
   return count
 }
 
-// Skeleton loading card
 function SkeletonCard() {
   return (
     <div className="card-heritage rounded-xl overflow-hidden animate-pulse">
@@ -87,22 +89,11 @@ function SkeletonCard() {
           <div className="h-5 bg-[#f6e1c3]/50 rounded-full w-16" />
           <div className="h-5 bg-[#f6e1c3]/50 rounded-full w-12" />
         </div>
-        <div className="border-t border-[#102516]/5 pt-3 space-y-2">
-          <div className="flex justify-between">
-            <div className="h-3 bg-[#f6e1c3]/40 rounded w-12" />
-            <div className="h-3 bg-[#f6e1c3]/60 rounded w-16" />
-          </div>
-          <div className="flex justify-between">
-            <div className="h-3 bg-[#f6e1c3]/40 rounded w-10" />
-            <div className="h-3 bg-[#f6e1c3]/60 rounded w-14" />
-          </div>
-        </div>
       </div>
     </div>
   )
 }
 
-// Stat card component
 function StatCard({
   title, value, icon: Icon, color, subtext, prefix = ""
 }: {
@@ -149,26 +140,17 @@ function StatCard({
   const c = colorMap[color] || colorMap.default
 
   return (
-    <Card
-      className={`relative overflow-hidden border border-[#102516]/8 bg-gradient-to-br ${c.bg} ${c.glow}
-        hover:translate-y-[-2px] hover:shadow-lg transition-all duration-300 group`}
-    >
-      {/* Heritage top accent line */}
+    <Card className={`relative overflow-hidden border border-[#102516]/8 bg-gradient-to-br ${c.bg} ${c.glow} hover:translate-y-[-2px] hover:shadow-lg transition-all duration-300 group`}>
       <div className="absolute top-0 left-0 right-0 h-[3px] bg-gradient-to-r from-transparent via-[#102516]/30 to-transparent" />
       <div className="p-4 flex items-center justify-between">
         <div className="space-y-1">
-          <p className="text-xs font-medium text-[#102516]/60 uppercase tracking-wider" style={{ fontFamily: "var(--font-crimson), serif" }}>
-            {title}
-          </p>
+          <p className="text-xs font-medium text-[#102516]/60 uppercase tracking-wider">{title}</p>
           <p className={`text-2xl font-bold ${c.text} tracking-tight`}>
             {prefix}{animatedValue.toLocaleString()}
           </p>
-          <p className="text-[10px] text-[#102516]/50" style={{ fontFamily: "var(--font-crimson), serif" }}>
-            {subtext}
-          </p>
+          <p className="text-[10px] text-[#102516]/50">{subtext}</p>
         </div>
-        <div className={`w-11 h-11 rounded-xl ${c.icon} flex items-center justify-center
-          group-hover:scale-110 transition-transform duration-300`}>
+        <div className={`w-11 h-11 rounded-xl ${c.icon} flex items-center justify-center group-hover:scale-110 transition-transform duration-300`}>
           <Icon className="w-5 h-5" />
         </div>
       </div>
@@ -181,69 +163,65 @@ export default function InventoryDashboard() {
   const [categories, setCategories] = useState<Array<{ id: string; name: string }>>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  
+  // Standard in-memory filters (sessionStorage removed for consistency and stability)
   const [searchTerm, setSearchTerm] = useState("")
-  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState("")
   const [stockFilter, setStockFilter] = useState<"all" | "in_stock" | "low_stock" | "out_of_stock">("all")
   const [categoryFilter, setCategoryFilter] = useState("all")
   const [sortBy, setSortBy] = useState<"created_desc" | "stock_desc" | "stock_asc" | "name_asc" | "name_desc" | "price_asc" | "price_desc">("created_desc")
+  
   const [user, setUser] = useState<User | null>(null)
   const [resolvedFranchiseId, setResolvedFranchiseId] = useState<string | undefined>(undefined)
 
-
-  // Load filters from sessionStorage on mount
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const savedSearch = sessionStorage.getItem("inventory_searchTerm")
-      const savedStock = sessionStorage.getItem("inventory_stockFilter")
-      const savedCategory = sessionStorage.getItem("inventory_categoryFilter")
-      const savedSort = sessionStorage.getItem("inventory_sortBy")
-
-      if (savedSearch !== null) {
-        setSearchTerm(savedSearch)
-        setDebouncedSearchTerm(savedSearch)
-      }
-      if (savedStock !== null) setStockFilter(savedStock as any)
-      if (savedCategory !== null) setCategoryFilter(savedCategory)
-      if (savedSort !== null) setSortBy(savedSort as any)
-    }
-  }, [])
-
-  // Clear filters from sessionStorage on client-side navigation away
-  useEffect(() => {
-    const handleBeforeUnload = () => {
-      ;(window as any).isUnloading = true
-    }
-    window.addEventListener("beforeunload", handleBeforeUnload)
-    return () => {
-      window.removeEventListener("beforeunload", handleBeforeUnload)
-      if (!(window as any).isUnloading) {
-        sessionStorage.removeItem("inventory_searchTerm")
-        sessionStorage.removeItem("inventory_stockFilter")
-        sessionStorage.removeItem("inventory_categoryFilter")
-        sessionStorage.removeItem("inventory_sortBy")
-      }
-    }
-  }, [])
   const [editorOpen, setEditorOpen] = useState(false)
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null)
   const [barcodeDialogOpen, setBarcodeDialogOpen] = useState(false)
   const [selectedProductForBarcode, setSelectedProductForBarcode] = useState<Product | null>(null)
 
+  // ── Modals & Drawer States ──
+  const [categoryDrawerOpen, setCategoryDrawerOpen] = useState(false)
+  const [bulkEditorOpen, setBulkEditorOpen] = useState(false)
+  const [newCatName, setNewCatName] = useState("")
+  const [catEditingId, setCatEditingId] = useState<string | null>(null)
+  const [catEditingName, setCatEditingName] = useState("")
+  
+  // Editable spreadsheet state for bulk updates
+  const [bulkProducts, setBulkProducts] = useState<Product[]>([])
+  const [bulkSaving, setBulkSaving] = useState(false)
+
   const { showConfirmation, ConfirmationDialog } = useConfirmationDialog()
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      setDebouncedSearchTerm(searchTerm)
-    }, 300)
-    return () => clearTimeout(timer)
-  }, [searchTerm])
+  const normalizeProduct = (p: any): Product => ({
+    id: p.id,
+    name: p.name || "Unnamed Product",
+    description: p.description || "",
+    size: p.size || "",
+    color: p.color || "",
+    material: p.material || "",
+    price: typeof p.price === "number" ? p.price : typeof p.sale_price === "number" ? p.sale_price : 0,
+    regular_price: typeof p.regular_price === "number" ? p.regular_price : typeof p.price === "number" ? p.price : 0,
+    rental_price: typeof p.rental_price === "number" ? p.rental_price : 0,
+    cost_price: typeof p.cost_price === "number" ? p.cost_price : 0,
+    security_deposit: typeof p.security_deposit === "number" ? p.security_deposit : 0,
+    stock_total: typeof p.stock_total === "number" ? p.stock_total : typeof p.stock_available === "number" ? p.stock_available : 0,
+    stock_available: typeof p.stock_available === "number" ? p.stock_available : 0,
+    stock_booked: typeof p.stock_booked === "number" ? p.stock_booked : 0,
+    stock_damaged: typeof p.stock_damaged === "number" ? p.stock_damaged : 0,
+    stock_in_laundry: typeof p.stock_in_laundry === "number" ? p.stock_in_laundry : 0,
+    reorder_level: typeof p.reorder_level === "number" ? p.reorder_level : 0,
+    barcode: p.barcode || p.barcode_number || undefined,
+    image_url: p.image_url || undefined,
+    category_id: p.category_id || undefined,
+    category_name: p.category_name || undefined,
+    is_active: p.is_active !== false,
+    product_code: p.product_code || p.id?.slice(0, 8) || "CUST",
+    created_at: p.created_at || "",
+  })
 
   useEffect(() => {
     fetchProducts()
   }, [])
 
-  // When category filter changes, re-fetch products with server-side category filter
-  // This ensures correct results even if RLS strips category_id from returned rows
   useEffect(() => {
     if (categoryFilter === "all") {
       fetchProducts()
@@ -258,34 +236,7 @@ export default function InventoryDashboard() {
       const res = await fetch(`/api/products?category_id=${catId}&active_only=true&limit=3000`, { cache: "no-store" })
       const json = res.ok ? await res.json() : { data: [] }
       const data = (json.data || []).filter((p: any) => p.is_active !== false)
-      const normalized: Product[] = data.map((p: any) => ({
-        id: p.id,
-        name: p.name || "Unnamed Product",
-        description: p.description || "",
-        brand: p.brand || "",
-        size: p.size || "",
-        color: p.color || "",
-        material: p.material || "",
-        price: typeof p.price === "number" ? p.price : typeof p.sale_price === "number" ? p.sale_price : 0,
-        regular_price: typeof p.regular_price === "number" ? p.regular_price : typeof p.price === "number" ? p.price : 0,
-        rental_price: typeof p.rental_price === "number" ? p.rental_price : 0,
-        cost_price: typeof p.cost_price === "number" ? p.cost_price : 0,
-        security_deposit: typeof p.security_deposit === "number" ? p.security_deposit : 0,
-        stock_total: typeof p.stock_total === "number" ? p.stock_total : typeof p.stock_available === "number" ? p.stock_available : 0,
-        stock_available: typeof p.stock_available === "number" ? p.stock_available : 0,
-        stock_booked: typeof p.stock_booked === "number" ? p.stock_booked : 0,
-        stock_damaged: typeof p.stock_damaged === "number" ? p.stock_damaged : 0,
-        stock_in_laundry: typeof p.stock_in_laundry === "number" ? p.stock_in_laundry : 0,
-        reorder_level: typeof p.reorder_level === "number" ? p.reorder_level : 0,
-        barcode: p.barcode || p.barcode_number || undefined,
-        image_url: p.image_url || undefined,
-        category_id: catId, // we know it matches since we filtered server-side
-        category_name: p.category_name || undefined,
-        is_active: p.is_active !== false,
-        product_code: p.product_code || p.id?.slice(0, 8) || "CUST",
-        created_at: p.created_at || "",
-      }))
-      setProducts(normalized)
+      setProducts(data.map(normalizeProduct))
     } catch (err) {
       console.error("Category fetch error:", err)
     } finally {
@@ -315,66 +266,13 @@ export default function InventoryDashboard() {
         }
       }
 
-      // Fetch categories from product_categories table
-      try {
-        let catQuery = supabase
-          .from("product_categories")
-          .select("id, name")
-          .eq("is_active", true)
-          .is("parent_id", null) // Only main categories, not subcategories
-          .order("name", { ascending: true })
+      await fetchCategoriesList()
 
-        // Categories are global — no franchise filter needed (products are already franchise-isolated)
-        const { data: catData, error: catError } = await catQuery
-
-        if (!catError && catData && catData.length > 0) {
-          setCategories(catData)
-        } else {
-          console.log("No categories found in product_categories table")
-          setCategories([])
-        }
-      } catch (catErr) {
-        console.error("Categories fetch error:", catErr)
-        setCategories([])
-      }
-
-      // Load products via API (server-side auth + category filter) so RLS can't strip category_id
       const prodRes = await fetch("/api/products?limit=3000&active_only=true", { cache: "no-store" })
       const prodJson = prodRes.ok ? await prodRes.json() : { data: [] }
-      const data = prodJson.data || []
-      const error = null
+      const activeData = (prodJson.data || []).filter((p: any) => p.is_active !== false)
+      const normalized = activeData.map(normalizeProduct)
 
-      const activeData = (data || []).filter((p: any) => p.is_active !== false)
-
-      const normalized: Product[] = activeData.map((p: any) => ({
-        id: p.id,
-        name: p.name || "Unnamed Product",
-        description: p.description || "",
-        brand: p.brand || "",
-        size: p.size || "",
-        color: p.color || "",
-        material: p.material || "",
-        price: typeof p.price === "number" ? p.price : typeof p.sale_price === "number" ? p.sale_price : 0,
-        regular_price: typeof p.regular_price === "number" ? p.regular_price : typeof p.price === "number" ? p.price : 0,
-        rental_price: typeof p.rental_price === "number" ? p.rental_price : 0,
-        cost_price: typeof p.cost_price === "number" ? p.cost_price : 0,
-        security_deposit: typeof p.security_deposit === "number" ? p.security_deposit : 0,
-        stock_total: typeof p.stock_total === "number" ? p.stock_total : typeof p.stock_available === "number" ? p.stock_available : 0,
-        stock_available: typeof p.stock_available === "number" ? p.stock_available : 0,
-        stock_booked: typeof p.stock_booked === "number" ? p.stock_booked : 0,
-        stock_damaged: typeof p.stock_damaged === "number" ? p.stock_damaged : 0,
-        stock_in_laundry: typeof p.stock_in_laundry === "number" ? p.stock_in_laundry : 0,
-        reorder_level: typeof p.reorder_level === "number" ? p.reorder_level : 0,
-        barcode: p.barcode || p.barcode_number || undefined,
-        image_url: p.image_url || undefined,
-        category_id: p.category_id || undefined,
-        category_name: p.category_name || undefined,
-        is_active: p.is_active !== false,
-        product_code: p.product_code || p.id?.slice(0, 8) || "CUST",
-        created_at: p.created_at || "",
-      }))
-
-      // Fetch variation counts
       try {
         const productIds = normalized.map((p) => p.id)
         if (productIds.length > 0) {
@@ -407,7 +305,23 @@ export default function InventoryDashboard() {
     }
   }
 
-  // Build a category name lookup map for product cards
+  const fetchCategoriesList = async () => {
+    try {
+      const { data: catData, error: catError } = await supabase
+        .from("product_categories")
+        .select("id, name")
+        .eq("is_active", true)
+        .is("parent_id", null)
+        .order("name", { ascending: true })
+
+      if (!catError && catData) {
+        setCategories(catData)
+      }
+    } catch (err) {
+      console.error("Categories fetch error:", err)
+    }
+  }
+
   const categoryNameMap = useMemo(() => {
     const map: Record<string, string> = {}
     for (const cat of categories) {
@@ -445,7 +359,6 @@ export default function InventoryDashboard() {
 
     const headers = lines[0].split(",").map(h => h.replace(/^"|"$/g, "").trim())
     const rows = lines.slice(1).map(line => {
-      // Handle quoted fields with commas
       const values: string[] = []
       let cur = "", inQ = false
       for (const ch of line) {
@@ -468,7 +381,7 @@ export default function InventoryDashboard() {
       })
       const result = await res.json()
       if (!res.ok) throw new Error(result.error)
-      toast.success(`Done! Created: ${result.created}, Updated: ${result.updated}${result.errors ? `, Errors: ${result.errors}` : ""}`, { id: "import", duration: 6000 })
+      toast.success(`Done! Created: ${result.created}, Updated: ${result.updated}`, { id: "import" })
       fetchProducts()
     } catch (err: any) {
       toast.error(err.message || "Import failed", { id: "import" })
@@ -502,15 +415,11 @@ export default function InventoryDashboard() {
   }
 
   const handleSaveProduct = async (data: any) => {
-    // Strip frontend-only fields that are not columns in the products table
     const { images, variants, _variation_count, category_name, product_code, ...productData } = data
     let productId = selectedProduct?.id
-
-    // Resolve franchise ID (super admin has null franchise_id from mock user)
     const activeFranchiseId = resolvedFranchiseId || user?.franchise_id || null
 
     if (productId) {
-      // ── UPDATE existing product via server API (service role key) ──
       const res = await fetch(`/api/products/${productId}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
@@ -521,7 +430,6 @@ export default function InventoryDashboard() {
         throw new Error(err.error || `Update failed (${res.status})`)
       }
     } else {
-      // ── CREATE new product via server API (service role key) ──
       const res = await fetch("/api/products/save", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -535,39 +443,26 @@ export default function InventoryDashboard() {
       productId = result.id
     }
 
-    // ── Handle variants (new ones only) ──
     if (variants && variants.length > 0 && productId) {
       for (const variant of variants) {
-        if (variant.id) continue // skip existing variants
-
+        if (variant.id) continue
         let imageUrl = variant.image_url
 
         if (imageUrl && imageUrl.startsWith("data:")) {
           try {
             const base64Data = imageUrl.split(",")[1]
             const buffer = Buffer.from(base64Data, "base64")
-            const timestamp = Date.now()
-            const variantName = variant.variation_name.replace(/\s+/g, "_").toLowerCase()
-            const storagePath = `variants/${activeFranchiseId || "global"}/${productId}/${timestamp}-${variantName}.png`
+            const storagePath = `variants/${activeFranchiseId || "global"}/${productId}/${Date.now()}-${variant.variation_name.replace(/\s+/g, "_")}.png`
 
-            const { error: uploadError } = await supabase.storage
-              .from("product-images")
-              .upload(storagePath, buffer, { upsert: false, contentType: "image/png" })
-
-            if (uploadError) throw new Error(`Failed to upload variant image: ${uploadError.message}`)
-
-            const { data: urlData } = supabase.storage
-              .from("product-images")
-              .getPublicUrl(storagePath)
-
+            await supabase.storage.from("product-images").upload(storagePath, buffer, { upsert: false, contentType: "image/png" })
+            const { data: urlData } = supabase.storage.from("product-images").getPublicUrl(storagePath)
             imageUrl = urlData.publicUrl
           } catch (imgError) {
-            console.warn("Variant image upload failed, saving without image:", imgError)
             imageUrl = null
           }
         }
 
-        const response = await fetch(`/api/products/${productId}/variations`, {
+        await fetch(`/api/products/${productId}/variations`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -584,27 +479,146 @@ export default function InventoryDashboard() {
             image_url: imageUrl,
           }),
         })
-
-        if (!response.ok) {
-          const errData = await response.json()
-          throw new Error(`Variant "${variant.variation_name}": ${errData.error}`)
-        }
       }
     }
 
     fetchProducts()
   }
 
+  // ── Category Actions ──
+  const handleAddCategory = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!newCatName.trim()) return
+    try {
+      const { error } = await supabase
+        .from("product_categories")
+        .insert([{ name: newCatName.trim(), is_active: true }])
+
+      if (error) throw error
+      toast.success("Category added successfully")
+      setNewCatName("")
+      fetchCategoriesList()
+      fetchProducts()
+    } catch (err: any) {
+      toast.error(err.message || "Failed to add category")
+    }
+  }
+
+  const handleUpdateCategory = async (id: string) => {
+    if (!catEditingName.trim()) return
+    try {
+      const { error } = await supabase
+        .from("product_categories")
+        .update({ name: catEditingName.trim() })
+        .eq("id", id)
+
+      if (error) throw error
+      toast.success("Category updated")
+      setCatEditingId(null)
+      fetchCategoriesList()
+      fetchProducts()
+    } catch (err: any) {
+      toast.error(err.message || "Failed to update category")
+    }
+  }
+
+  const handleDeleteCategory = async (id: string, name: string) => {
+    showConfirmation({
+      title: "Delete Category",
+      description: `Delete category "${name}"? Products in this category will become uncategorized.`,
+      confirmText: "Delete",
+      cancelText: "Cancel",
+      variant: "destructive",
+      onConfirm: async () => {
+        try {
+          const { error } = await supabase
+            .from("product_categories")
+            .update({ is_active: false })
+            .eq("id", id)
+
+          if (error) throw error
+          toast.success("Category deleted")
+          fetchCategoriesList()
+          fetchProducts()
+        } catch (err: any) {
+          toast.error(err.message || "Failed to delete category")
+        }
+      }
+    })
+  }
+
+  // ── Bulk Editor Actions ──
+  const handleOpenBulkEditor = () => {
+    // Clone visible products for batch editing
+    setBulkProducts(JSON.parse(JSON.stringify(filteredProducts)))
+    setBulkEditorOpen(true)
+  }
+
+  const handleBulkCellChange = (productId: string, field: keyof Product, val: any) => {
+    setBulkProducts(prev => prev.map(p => {
+      if (p.id !== productId) return p
+      const updated = { ...p, [field]: val }
+      // Keep stock_available in sync with stock_total if available exceeds total
+      if (field === 'stock_total' && updated.stock_available > val) {
+        updated.stock_available = val
+      }
+      return updated
+    }))
+  }
+
+  const handleSaveBulkChanges = async () => {
+    setBulkSaving(true)
+    toast.loading("Saving bulk updates...", { id: "bulk-save" })
+    try {
+      // Find modified products by comparing against current local products
+      const updates = bulkProducts.filter(bp => {
+        const orig = products.find(p => p.id === bp.id)
+        if (!orig) return false
+        return bp.price !== orig.price ||
+               bp.rental_price !== orig.rental_price ||
+               bp.stock_total !== orig.stock_total ||
+               bp.stock_available !== orig.stock_available ||
+               bp.reorder_level !== orig.reorder_level
+      })
+
+      if (updates.length === 0) {
+        toast.dismiss("bulk-save")
+        setBulkEditorOpen(false)
+        return
+      }
+
+      await Promise.all(updates.map(p => 
+        fetch(`/api/products/${p.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            price: Number(p.price) || 0,
+            regular_price: Number(p.price) || 0,
+            rental_price: Number(p.rental_price) || 0,
+            stock_total: Number(p.stock_total) || 0,
+            stock_available: Number(p.stock_available) || 0,
+            reorder_level: Number(p.reorder_level) || 0,
+          })
+        })
+      ))
+
+      toast.success(`Successfully updated ${updates.length} products!`, { id: "bulk-save" })
+      setBulkEditorOpen(false)
+      fetchProducts()
+    } catch (err: any) {
+      toast.error(err.message || "Failed to save bulk changes", { id: "bulk-save" })
+    } finally {
+      setBulkSaving(false)
+    }
+  }
+
   const filteredProducts = useMemo(() => {
     let filtered = products.filter((product) => {
       const matchesSearch =
-        product.name.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
-        product.brand?.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
-        (product.barcode && product.barcode.toLowerCase().includes(debouncedSearchTerm.toLowerCase()))
+        product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        (product.barcode && product.barcode.toLowerCase().includes(searchTerm.toLowerCase()))
 
       if (!matchesSearch) return false
-
-      // category_id filter is handled server-side via fetchProductsByCategory; skip client-side check
 
       if (stockFilter !== "all") {
         if (stockFilter === "in_stock" && product.stock_available <= product.reorder_level) return false
@@ -616,7 +630,6 @@ export default function InventoryDashboard() {
       return true
     })
 
-    // Apply sorting
     return filtered.sort((a, b) => {
       switch (sortBy) {
         case "created_desc":
@@ -630,21 +643,24 @@ export default function InventoryDashboard() {
         default: return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
       }
     })
-  }, [products, debouncedSearchTerm, stockFilter, categoryFilter, sortBy])
+  }, [products, searchTerm, stockFilter, categoryFilter, sortBy])
 
-  const stats = {
+  const stats = useMemo(() => ({
     total: products.length,
     inStock: products.filter((p) => p.stock_available > p.reorder_level).length,
     lowStock: products.filter((p) => p.stock_available <= p.reorder_level && p.stock_available > 0).length,
     outOfStock: products.filter((p) => p.stock_available <= 0).length,
     inventoryValue: products.reduce((sum, p) => sum + (p.price * p.stock_available), 0),
-  }
+  }), [products])
+
+  const criticalLowStockProducts = useMemo(() => {
+    return products.filter(p => p.stock_available <= p.reorder_level && p.is_active)
+  }, [products])
 
   if (loading) {
     return (
       <DashboardLayout>
         <div className="space-y-6">
-          {/* Skeleton Header */}
           <div className="flex items-center justify-between">
             <div className="space-y-2">
               <div className="h-8 w-48 bg-[#f6e1c3]/60 rounded animate-pulse" />
@@ -652,36 +668,21 @@ export default function InventoryDashboard() {
             </div>
             <div className="flex gap-2">
               <div className="h-9 w-24 bg-[#f6e1c3]/50 rounded-lg animate-pulse" />
-              <div className="h-9 w-32 bg-[#102516]/20 rounded-lg animate-pulse" />
             </div>
           </div>
-
-          {/* Skeleton Stats */}
           <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
             {[...Array(5)].map((_, i) => (
               <Card key={i} className="p-4 card-heritage animate-pulse">
                 <div className="flex items-center justify-between">
                   <div className="space-y-2">
-                    <div className="h-3 w-16 bg-[#f6e1c3]/50 rounded" />
                     <div className="h-7 w-12 bg-[#f6e1c3]/70 rounded" />
-                    <div className="h-2 w-20 bg-[#f6e1c3]/30 rounded" />
                   </div>
-                  <div className="w-11 h-11 bg-[#f6e1c3]/40 rounded-xl" />
                 </div>
               </Card>
             ))}
           </div>
-
-          {/* Skeleton Search Bar */}
-          <div className="flex gap-3 items-end flex-wrap">
-            <div className="flex-1 min-w-48 max-w-md h-10 bg-[#f6e1c3]/40 rounded-lg animate-pulse" />
-            <div className="h-10 w-36 bg-[#f6e1c3]/40 rounded-lg animate-pulse" />
-            <div className="h-10 w-36 bg-[#f6e1c3]/40 rounded-lg animate-pulse" />
-          </div>
-
-          {/* Skeleton Product Grid */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {[...Array(8)].map((_, i) => (
+            {[...Array(4)].map((_, i) => (
               <SkeletonCard key={i} />
             ))}
           </div>
@@ -693,28 +694,53 @@ export default function InventoryDashboard() {
   return (
     <DashboardLayout>
       <div className="space-y-6">
-        {/* Heritage Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1
-              className="text-3xl font-bold tracking-tight text-[#102516]"
-              style={{ fontFamily: "var(--font-playfair), serif" }}
+        
+        {/* ── Critical Low Stock Warning Banner ── */}
+        {criticalLowStockProducts.length > 0 && (
+          <div className="flex gap-3 p-4 bg-amber-50 border border-amber-200 rounded-xl text-sm text-amber-800 shadow-sm items-start">
+            <ShieldAlert className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <p className="font-bold text-amber-900">Critical Stock Warning ({criticalLowStockProducts.length} items low)</p>
+              <p className="text-xs text-amber-700 mt-1 max-w-4xl">
+                The following products are at or below reorder levels: {' '}
+                <span className="font-semibold text-amber-900">
+                  {criticalLowStockProducts.slice(0, 8).map(p => `${p.name} (${p.stock_available} left)`).join(', ')}
+                  {criticalLowStockProducts.length > 8 && `, and ${criticalLowStockProducts.length - 8} more...`}
+                </span>
+              </p>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                setStockFilter("low_stock")
+              }}
+              className="h-7 text-xs border-amber-200 text-amber-800 bg-white hover:bg-amber-100/50 shrink-0 rounded-lg font-medium"
             >
+              Filter Low Items
+            </Button>
+          </div>
+        )}
+
+        {/* Heritage Header */}
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div>
+            <h1 className="text-3xl font-bold tracking-tight text-[#102516]" style={{ fontFamily: "var(--font-playfair), serif" }}>
               Inventory
             </h1>
-            <p className="text-[#102516]/60 text-sm" style={{ fontFamily: "var(--font-crimson), serif" }}>
-              Manage products, variants, pricing & barcodes
+            <p className="text-[#102516]/60 text-sm">
+              Manage products, variations, pricing & barcodes
             </p>
           </div>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button
               variant="outline"
               size="sm"
               onClick={handleRefresh}
               disabled={refreshing}
-              className="gap-2 border-[#102516]/15 text-[#102516] hover:bg-[#f9f2e8] hover:border-[#102516]/30 transition-all duration-300"
+              className="gap-1.5 border-[#102516]/15 text-[#102516] hover:bg-[#f9f2e8] transition-all"
             >
-              <RefreshCw className={`w-4 h-4 ${refreshing ? "animate-spin" : ""}`} />
+              <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? "animate-spin" : ""}`} />
               Refresh
             </Button>
             {categoryFilter !== "all" && (
@@ -722,26 +748,26 @@ export default function InventoryDashboard() {
                 variant="outline"
                 size="sm"
                 onClick={handleCreateCatalog}
-                className="gap-2 border-purple-300 text-purple-700 hover:bg-purple-50 hover:border-purple-400 transition-all duration-300"
+                className="gap-1.5 border-purple-300 text-purple-700 hover:bg-purple-50 transition-all"
               >
-                <BookOpen className="w-4 h-4" />
-                Create Catalog
+                <BookOpen className="w-3.5 h-3.5" />
+                Catalog
               </Button>
             )}
             <Button
               variant="outline"
               size="sm"
               onClick={handleExportCSV}
-              className="gap-2 border-[#102516]/15 text-[#102516] hover:bg-[#f9f2e8] hover:border-[#102516]/30 transition-all duration-300"
+              className="gap-1.5 border-[#102516]/15 text-[#102516] hover:bg-[#f9f2e8] transition-all"
             >
-              <Download className="w-4 h-4" />
-              Export CSV
+              <Download className="w-3.5 h-3.5" />
+              Export
             </Button>
             <label className="cursor-pointer">
               <input type="file" accept=".csv" className="hidden" onChange={handleImportCSV} />
-              <span className="inline-flex items-center gap-2 px-3 py-1.5 text-sm rounded-md border border-[#102516]/15 text-[#102516] hover:bg-[#f9f2e8] hover:border-[#102516]/30 transition-all duration-300 bg-white">
-                <Upload className="w-4 h-4" />
-                Import CSV
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1.5 text-xs rounded-md border border-[#102516]/15 text-[#102516] hover:bg-[#f9f2e8] transition-all bg-white font-medium">
+                <Upload className="w-3.5 h-3.5" />
+                Import
               </span>
             </label>
             <Button
@@ -749,10 +775,10 @@ export default function InventoryDashboard() {
                 setSelectedProduct(null)
                 setEditorOpen(true)
               }}
-              className="gap-2 bg-gradient-to-r from-[#102516] to-[#1a3a26] text-[#fefaf6] hover:shadow-lg hover:translate-y-[-1px] transition-all duration-300"
-              style={{ fontFamily: "var(--font-cinzel), serif", letterSpacing: "0.5px" }}
+              size="sm"
+              className="gap-1.5 bg-gradient-to-r from-[#102516] to-[#1a3a26] text-[#fefaf6] hover:shadow-lg transition-all rounded-lg font-semibold"
             >
-              <Plus className="w-4 h-4" />
+              <Plus className="w-3.5 h-3.5" />
               Add Product
             </Button>
           </div>
@@ -763,42 +789,11 @@ export default function InventoryDashboard() {
 
         {/* Stats Row */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          <StatCard
-            title="Total Products"
-            value={stats.total}
-            icon={Boxes}
-            color="default"
-            subtext="Active in inventory"
-          />
-          <StatCard
-            title="In Stock"
-            value={stats.inStock}
-            icon={CheckCircle}
-            color="green"
-            subtext="Above reorder level"
-          />
-          <StatCard
-            title="Low Stock"
-            value={stats.lowStock}
-            icon={AlertTriangle}
-            color="amber"
-            subtext="Below reorder level"
-          />
-          <StatCard
-            title="Out of Stock"
-            value={stats.outOfStock}
-            icon={AlertTriangle}
-            color="red"
-            subtext="Needs restocking"
-          />
-          <StatCard
-            title="Inventory Value"
-            value={stats.inventoryValue}
-            icon={IndianRupee}
-            color="royal"
-            subtext="Total stock value"
-            prefix="₹"
-          />
+          <StatCard title="Total Products" value={stats.total} icon={Boxes} color="default" subtext="Active in inventory" />
+          <StatCard title="In Stock" value={stats.inStock} icon={CheckCircle} color="green" subtext="Above reorder level" />
+          <StatCard title="Low Stock" value={stats.lowStock} icon={AlertTriangle} color="amber" subtext="Below reorder level" />
+          <StatCard title="Out of Stock" value={stats.outOfStock} icon={AlertTriangle} color="red" subtext="Needs restocking" />
+          <StatCard title="Inventory Value" value={stats.inventoryValue} icon={IndianRupee} color="royal" subtext="Total stock value" prefix="₹" />
         </div>
 
         {/* Search, Filters & Sort */}
@@ -807,22 +802,15 @@ export default function InventoryDashboard() {
             <div className="relative">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[#102516]/40" />
               <Input
-                placeholder="Search products, brand, barcode..."
+                placeholder="Search products, barcode..."
                 value={searchTerm}
-                onChange={(e) => {
-                  const val = e.target.value
-                  setSearchTerm(val)
-                  sessionStorage.setItem("inventory_searchTerm", val)
-                }}
-                className="pl-10 border-[#102516]/15 bg-[#fefaf6] focus:border-[#102516]/40 focus:ring-[#102516]/10 transition-all"
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="pl-10 border-[#102516]/15 bg-[#fefaf6] focus:border-[#102516]/40"
               />
             </div>
           </div>
 
-          <Select value={stockFilter} onValueChange={(value: any) => {
-            setStockFilter(value)
-            sessionStorage.setItem("inventory_stockFilter", value)
-          }}>
+          <Select value={stockFilter} onValueChange={(value: any) => setStockFilter(value)}>
             <SelectTrigger className="w-40 border-[#102516]/15 bg-[#fefaf6]">
               <SelectValue placeholder="Stock Status" />
             </SelectTrigger>
@@ -834,10 +822,7 @@ export default function InventoryDashboard() {
             </SelectContent>
           </Select>
 
-          <Select value={categoryFilter} onValueChange={(value: any) => {
-            setCategoryFilter(value)
-            sessionStorage.setItem("inventory_categoryFilter", value)
-          }}>
+          <Select value={categoryFilter} onValueChange={(value: any) => setCategoryFilter(value)}>
             <SelectTrigger className="w-40 border-[#102516]/15 bg-[#fefaf6]">
               <SelectValue placeholder="Category" />
             </SelectTrigger>
@@ -851,10 +836,7 @@ export default function InventoryDashboard() {
             </SelectContent>
           </Select>
 
-          <Select value={sortBy} onValueChange={(value: any) => {
-            setSortBy(value)
-            sessionStorage.setItem("inventory_sortBy", value)
-          }}>
+          <Select value={sortBy} onValueChange={(value: any) => setSortBy(value)}>
             <SelectTrigger className="w-44 border-[#102516]/15 bg-[#fefaf6]">
               <ArrowUpDown className="w-3.5 h-3.5 mr-1.5 text-[#102516]/50" />
               <SelectValue placeholder="Sort By" />
@@ -870,39 +852,42 @@ export default function InventoryDashboard() {
             </SelectContent>
           </Select>
 
-          <Link href="/inventory/categories">
+          <div className="flex gap-2">
             <Button
               variant="outline"
               size="sm"
-              className="gap-2 border-[#102516]/15 text-[#102516] hover:bg-[#f9f2e8] hover:border-[#102516]/30"
+              onClick={handleOpenBulkEditor}
+              disabled={filteredProducts.length === 0}
+              className="gap-1.5 border-blue-200 text-blue-700 hover:bg-blue-50"
+            >
+              <Edit2 className="w-4 h-4" />
+              Bulk Editor
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setCategoryDrawerOpen(true)}
+              className="gap-1.5 border-[#102516]/15 text-[#102516] hover:bg-[#f9f2e8]"
             >
               <BarChart3 className="w-4 h-4" />
-              Categories
+              Manage Categories
             </Button>
-          </Link>
+          </div>
         </div>
 
         {/* Results count */}
         <div className="flex items-center gap-2">
-          <Badge
-            variant="outline"
-            className="text-xs bg-[#fcf7f0] border-[#102516]/10 text-[#102516]/70"
-            style={{ fontFamily: "var(--font-crimson), serif" }}
-          >
+          <Badge variant="outline" className="text-xs bg-[#fcf7f0] border-[#102516]/10 text-[#102516]/70">
             {filteredProducts.length} of {products.length} products
           </Badge>
-          {(debouncedSearchTerm || stockFilter !== "all" || categoryFilter !== "all") && (
+          {(searchTerm || stockFilter !== "all" || categoryFilter !== "all") && (
             <button
               onClick={() => {
                 setSearchTerm("")
                 setStockFilter("all")
                 setCategoryFilter("all")
-                sessionStorage.removeItem("inventory_searchTerm")
-                sessionStorage.removeItem("inventory_stockFilter")
-                sessionStorage.removeItem("inventory_categoryFilter")
               }}
-              className="text-xs text-[#102516]/50 hover:text-[#102516] underline transition-colors"
-              style={{ fontFamily: "var(--font-crimson), serif" }}
+              className="text-xs text-[#102516]/50 hover:text-[#102516] underline"
             >
               Clear filters
             </button>
@@ -917,35 +902,10 @@ export default function InventoryDashboard() {
                 <Package className="w-8 h-8 text-[#102516]/30" />
               </div>
               <div>
-                <p
-                  className="text-[#102516]/70 font-medium"
-                  style={{ fontFamily: "var(--font-playfair), serif" }}
-                >
-                  {debouncedSearchTerm || stockFilter !== "all"
-                    ? "No products match your filters"
-                    : "Your inventory is empty"}
-                </p>
-                <p
-                  className="text-sm text-[#102516]/40 mt-1"
-                  style={{ fontFamily: "var(--font-crimson), serif" }}
-                >
-                  {debouncedSearchTerm || stockFilter !== "all"
-                    ? "Try adjusting your search or filters"
-                    : "Add your first product to get started"}
+                <p className="text-[#102516]/70 font-medium" style={{ fontFamily: "var(--font-playfair), serif" }}>
+                  No products match your filters
                 </p>
               </div>
-              <Button
-                onClick={() => {
-                  setSelectedProduct(null)
-                  setEditorOpen(true)
-                }}
-                size="sm"
-                className="bg-gradient-to-r from-[#102516] to-[#1a3a26] text-[#fefaf6] hover:shadow-lg transition-all"
-                style={{ fontFamily: "var(--font-cinzel), serif" }}
-              >
-                <Plus className="w-4 h-4 mr-2" />
-                Add Product
-              </Button>
             </div>
           </Card>
         ) : (
@@ -955,7 +915,6 @@ export default function InventoryDashboard() {
                 key={product.id}
                 product={{
                   ...product,
-                  // Resolve category name from the map if not already set
                   category_name: product.category_name || (product.category_id ? categoryNameMap[product.category_id] : undefined),
                 }}
                 onEdit={(p: any) => handleEditProduct(p)}
@@ -969,6 +928,181 @@ export default function InventoryDashboard() {
           </div>
         )}
       </div>
+
+      {/* ── Category Manager Drawer Modal ── */}
+      <Dialog open={categoryDrawerOpen} onOpenChange={setCategoryDrawerOpen}>
+        <DialogContent className="max-w-md max-h-[85vh] flex flex-col p-6 rounded-xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold flex items-center gap-2">
+              <BarChart3 className="h-5 w-5 text-[#d4a017]" />
+              Manage Categories
+            </DialogTitle>
+            <DialogDescription>Add, update, or delete inventory categories</DialogDescription>
+          </DialogHeader>
+
+          {/* Create category Form */}
+          <form onSubmit={handleAddCategory} className="flex gap-2 py-2">
+            <Input
+              placeholder="New Category Name..."
+              value={newCatName}
+              onChange={e => setNewCatName(e.target.value)}
+              className="flex-1 text-sm border-slate-200"
+            />
+            <Button type="submit" size="sm" className="bg-[#102516] hover:bg-[#1f4228] text-white">
+              Add Category
+            </Button>
+          </form>
+
+          {/* Categories List */}
+          <div className="flex-1 overflow-y-auto space-y-2 max-h-[400px] mt-4 pr-1">
+            {categories.length === 0 ? (
+              <p className="text-xs text-muted-foreground text-center py-6">No categories defined.</p>
+            ) : (
+              categories.map(cat => (
+                <div key={cat.id} className="flex items-center justify-between p-3 rounded-lg border border-slate-100 bg-slate-50/50">
+                  {catEditingId === cat.id ? (
+                    <div className="flex items-center gap-1.5 flex-1 mr-2">
+                      <Input
+                        value={catEditingName}
+                        onChange={e => setCatEditingName(e.target.value)}
+                        className="h-8 text-sm flex-1 bg-white border-slate-300"
+                        autoFocus
+                      />
+                      <Button size="icon" className="h-8 w-8 bg-green-600 hover:bg-green-700" onClick={() => handleUpdateCategory(cat.id)}>
+                        <Check className="h-4 w-4 text-white" />
+                      </Button>
+                      <Button size="icon" variant="outline" className="h-8 w-8 text-slate-400" onClick={() => setCatEditingId(null)}>
+                        <X className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <>
+                      <span className="text-sm font-semibold text-[#0f1117]">{cat.name}</span>
+                      <div className="flex gap-1.5">
+                        <Button
+                          size="icon" variant="ghost" className="h-7 w-7 text-slate-500 hover:text-slate-900"
+                          onClick={() => {
+                            setCatEditingId(cat.id)
+                            setCatEditingName(cat.name)
+                          }}
+                        >
+                          <Edit2 className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button
+                          size="icon" variant="ghost" className="h-7 w-7 text-red-500 hover:text-red-700 hover:bg-red-50"
+                          onClick={() => handleDeleteCategory(cat.id, cat.name)}
+                        >
+                          <Trash2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              ))
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Bulk Editor Dialog Modal ── */}
+      <Dialog open={bulkEditorOpen} onOpenChange={setBulkEditorOpen}>
+        <DialogContent className="max-w-5xl max-h-[90vh] flex flex-col p-6 rounded-xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold flex items-center gap-2">
+              <Edit2 className="h-5 w-5 text-blue-600" />
+              Batch Products Editor
+            </DialogTitle>
+            <DialogDescription>
+              Spreadsheet editing mode for {bulkProducts.length} filtered products. Price changes apply directly.
+            </DialogDescription>
+          </DialogHeader>
+
+          {/* Spreadsheet-like Table wrapper */}
+          <div className="flex-1 overflow-auto border rounded-xl my-4">
+            <table className="w-full text-sm border-collapse text-left">
+              <thead>
+                <tr className="bg-[#f8f9fc] border-b text-[10px] font-semibold text-[#9ca3af] uppercase tracking-wider sticky top-0">
+                  <th className="px-4 py-3 min-w-[200px]">Product Name</th>
+                  <th className="px-3 py-3 w-[130px]">Sale Price (₹)</th>
+                  <th className="px-3 py-3 w-[130px]">Rental Price (₹)</th>
+                  <th className="px-3 py-3 w-[110px]">Total Stock</th>
+                  <th className="px-3 py-3 w-[110px]">Available</th>
+                  <th className="px-3 py-3 w-[110px]">Reorder Lvl</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y">
+                {bulkProducts.map(p => (
+                  <tr key={p.id} className="hover:bg-slate-50/50">
+                    <td className="px-4 py-2 font-medium text-slate-800 max-w-[240px] truncate">
+                      {p.name}
+                    </td>
+                    <td className="px-2 py-1">
+                      <Input
+                        type="number"
+                        min="0"
+                        value={p.price}
+                        onChange={e => handleBulkCellChange(p.id, 'price', parseInt(e.target.value) || 0)}
+                        className="h-8 text-xs border-slate-200 text-slate-800"
+                      />
+                    </td>
+                    <td className="px-2 py-1">
+                      <Input
+                        type="number"
+                        min="0"
+                        value={p.rental_price}
+                        onChange={e => handleBulkCellChange(p.id, 'rental_price', parseInt(e.target.value) || 0)}
+                        className="h-8 text-xs border-slate-200 text-slate-800"
+                      />
+                    </td>
+                    <td className="px-2 py-1">
+                      <Input
+                        type="number"
+                        min="0"
+                        value={p.stock_total}
+                        onChange={e => handleBulkCellChange(p.id, 'stock_total', parseInt(e.target.value) || 0)}
+                        className="h-8 text-xs border-slate-200 text-slate-800"
+                      />
+                    </td>
+                    <td className="px-2 py-1">
+                      <Input
+                        type="number"
+                        min="0"
+                        value={p.stock_available}
+                        onChange={e => handleBulkCellChange(p.id, 'stock_available', parseInt(e.target.value) || 0)}
+                        className="h-8 text-xs border-slate-200 text-slate-800"
+                      />
+                    </td>
+                    <td className="px-2 py-1">
+                      <Input
+                        type="number"
+                        min="0"
+                        value={p.reorder_level}
+                        onChange={e => handleBulkCellChange(p.id, 'reorder_level', parseInt(e.target.value) || 0)}
+                        className="h-8 text-xs border-slate-200 text-slate-800"
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Action Footer */}
+          <div className="flex gap-2 pt-2 justify-end">
+            <Button variant="outline" size="sm" onClick={() => setBulkEditorOpen(false)} disabled={bulkSaving}>
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={handleSaveBulkChanges}
+              disabled={bulkSaving}
+              className="bg-blue-600 hover:bg-blue-700 text-white"
+            >
+              {bulkSaving ? "Saving..." : "Save Bulk Changes"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Editor Modal */}
       <ProductEditorModal

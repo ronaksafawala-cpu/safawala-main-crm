@@ -194,7 +194,7 @@ export default function CustomersPage() {
     })
 
     try {
-      // Use unified delete endpoint for permanent deletion
+      // intentional Raw fetch
       const response = await fetch(`/api/delete`, {
         method: "POST",
         headers: {
