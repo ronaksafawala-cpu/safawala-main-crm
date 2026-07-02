@@ -410,9 +410,9 @@ export function TeamChat() {
   }, [input, currentUser, userStatus])
 
   const getRightPosition = () => {
-    if (!aiState.open) return 100
-    if (aiState.minimized) return 320
-    return 382
+    if (!aiState.open) return 124
+    if (aiState.minimized) return 316
+    return 378
   }
 
   // Draggable logic for floating button
@@ -901,7 +901,7 @@ export function TeamChat() {
           onMouseDown={onBtnMouseDown}
           onClick={handleBtnClick}
           style={{
-            position: "fixed", bottom: 24, right: getRightPosition(), zIndex: 9998,
+            position: "fixed", bottom: 14, right: getRightPosition(), zIndex: 9998,
             width: 52, height: 52, borderRadius: "50%",
             background: "linear-gradient(135deg, #22c55e, #16a34a)",
             border: "none", cursor: btnDragging ? "grabbing" : "grab",
@@ -929,7 +929,7 @@ export function TeamChat() {
       {/* Chat window */}
       {open && (
         <div style={{
-          position: "fixed", bottom: 24, right: getRightPosition(), zIndex: 9999,
+          position: "fixed", bottom: 14, right: getRightPosition(), zIndex: 9999,
           width: 340, borderRadius: 20,
           background: "#ffffff", boxShadow: "0 8px 40px rgba(0,0,0,0.18)",
           border: "1px solid #e4e4e7",
