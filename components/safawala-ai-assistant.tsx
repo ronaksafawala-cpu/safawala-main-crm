@@ -601,10 +601,10 @@ export function SafawalaAIAssistant() {
             userSelect: "none",
             transition: btnDragging ? "none" : undefined,
           }}
-          title="Safawala AI Assistant (Drag to move)"
+          title="AI Assistant (Drag to move)"
         >
           <Crown className="w-5 h-5 fill-black/20" />
-          <span className="text-sm">Safawala AI</span>
+          <span className="text-sm">AI</span>
           <span className="flex h-2 w-2 relative">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-black opacity-40"></span>
             <span className="relative inline-flex rounded-full h-2 w-2 bg-black/50"></span>
@@ -636,7 +636,7 @@ export function SafawalaAIAssistant() {
               <Crown className="w-4 h-4 text-black fill-black/20" />
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold text-white leading-none">Safawala AI</p>
+              <p className="text-sm font-bold text-white leading-none">AI</p>
               {!minimized && (
                 <p className="text-[10px] text-white/40 mt-0.5">Your CRM assistant</p>
               )}
