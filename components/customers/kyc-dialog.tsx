@@ -541,14 +541,13 @@ export function KYCDialog({
             console.log("[OCR Aadhaar Candidates]:", { pass1: parsed1, pass2: parsed2, pass3: parsed3 })
 
             const votes: { [num: string]: { count: number; verified: boolean } } = {}
-            const addVote = (candidate: { number: string; isVerified: boolean } | null) => {
-              if (!candidate) return
-              const num = candidate.number
+            const addVote = (num: string | null) => {
+              if (!num) return
               if (votes[num]) {
                 votes[num].count++
-                if (candidate.isVerified) votes[num].verified = true
+                votes[num].verified = true
               } else {
-                votes[num] = { count: 1, verified: candidate.isVerified }
+                votes[num] = { count: 1, verified: true }
               }
             }
 
@@ -1147,7 +1146,7 @@ export function KYCDialog({
                   if (residentType === 'national') {
                     const result = extractAadhaarNumber(pasted)
                     if (result) {
-                      setAadharNumber(result.number)
+                      setAadharNumber(result)
                       toast.success(`Aadhaar number extracted from pasted text!`)
                     } else {
                       toast.error(`Could not find a 12-digit Aadhaar number in pasted text.`)

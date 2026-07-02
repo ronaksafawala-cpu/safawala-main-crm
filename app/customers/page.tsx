@@ -865,6 +865,63 @@ export default function CustomersPage() {
                   </div>
                 </div>
 
+                {/* Booking History Section */}
+                <div className="border-t pt-4 space-y-3">
+                  <h3 className="text-sm font-semibold flex items-center gap-2">
+                    <Calendar className="h-4 w-4 text-slate-700" />
+                    Booking History
+                  </h3>
+                  {(() => {
+                    const customerBookings = Array.isArray(bookings)
+                      ? bookings.filter((b: any) => b.customer_id === selectedCustomer.id)
+                      : []
+                    if (customerBookings.length === 0) {
+                      return (
+                        <p className="text-xs text-muted-foreground bg-slate-50/30 p-3 rounded-lg border border-dashed border-slate-200 text-center">
+                          No bookings found for this customer.
+                        </p>
+                      )
+                    }
+                    return (
+                      <div className="space-y-2 max-h-[220px] overflow-y-auto pr-1">
+                        {customerBookings.map((b: any) => {
+                          const paid = b.paid_amount ?? b.amount_paid ?? 0
+                          const bal = (b.total_amount || 0) - paid
+                          return (
+                            <div key={b.id} className="flex items-center justify-between p-3 rounded-xl border border-slate-100 bg-slate-50/50 hover:bg-slate-50 transition-colors">
+                              <div>
+                                <Link 
+                                  href={`/bookings/${b.id}`} 
+                                  className="text-xs font-semibold text-blue-600 hover:underline block"
+                                  onClick={() => setViewDialogOpen(false)}
+                                >
+                                  {b.booking_number || `Booking #${b.id.substring(0, 8)}`}
+                                </Link>
+                                <span className="text-[10px] text-muted-foreground">
+                                  Event: {b.event_date ? new Date(b.event_date).toLocaleDateString() : 'N/A'}
+                                </span>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <div className="text-right">
+                                  <p className="text-xs font-semibold text-slate-900">₹{(b.total_amount || 0).toLocaleString()}</p>
+                                  {bal > 0 ? (
+                                    <p className="text-[9px] text-red-600 font-semibold">Bal: ₹{bal.toLocaleString()}</p>
+                                  ) : (
+                                    <p className="text-[9px] text-green-600 font-semibold">Paid</p>
+                                  )}
+                                </div>
+                                <Badge variant="outline" className="text-[8px] uppercase tracking-wider scale-95 px-1.5 py-0.5">
+                                  {b.status || 'pending'}
+                                </Badge>
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )
+                  })()}
+                </div>
+
                 {/* Stats */}
                 <div className="grid grid-cols-2 gap-4 pt-4 border-t">
                   <div className="text-center">
