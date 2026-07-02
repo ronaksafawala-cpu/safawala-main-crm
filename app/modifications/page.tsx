@@ -2,8 +2,8 @@
 
 import { useState, useEffect } from "react"
 import { format, differenceInDays } from "date-fns"
-import { createClient } from "@/lib/supabase/client"
 import { useToast } from "@/hooks/use-toast"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -21,7 +21,7 @@ import {
   MessageSquare, 
   RefreshCw, 
   Clock,
-  ExternalLink
+  ArrowLeft
 } from "lucide-react"
 
 interface BookingItem {
@@ -60,7 +60,7 @@ export default function ModificationsPage() {
   const [activeTab, setActiveTab] = useState<"pending" | "completed">("pending")
   const [completedList, setCompletedList] = useState<Booking[]>([])
   const { toast } = useToast()
-  const supabase = createClient()
+  const router = useRouter()
 
   useEffect(() => {
     fetchModifications()
@@ -69,31 +69,45 @@ export default function ModificationsPage() {
   const fetchModifications = async () => {
     setLoading(true)
     try {
-      // Query all bookings that have modifications
-      const { data, error } = await supabase
-        .from("bookings")
-        .select(`
-          id,
-          booking_number,
-          status,
-          event_date,
-          has_modifications,
-          modifications_details,
-          modification_date,
-          created_at,
-          source,
-          customer:customers(id, name, phone),
-          items:booking_items(
-            id,
-            quantity,
-            product:products(id, name, product_code)
-          )
-        `)
-        .order("modification_date", { ascending: true })
+      // 1. Fetch bookings from unified bookings API endpoint
+      const res = await fetch("/api/bookings")
+      if (!res.ok) throw new Error("Failed to fetch bookings list")
+      const json = await res.json()
+      const allBookings = (json.bookings || []) as Booking[]
 
-      if (error) throw error
+      // 2. Filter to active modification bookings
+      const activeModBookings = allBookings.filter(b => b.has_modifications)
 
-      setBookings((data || []) as Booking[])
+      // 3. Concurrently fetch items for active modification bookings
+      const bookingsWithItems = await Promise.all(
+        activeModBookings.map(async (booking) => {
+          try {
+            const source = booking.source
+            const normalizedSource = source.endsWith('s') ? source.slice(0, -1) : source
+            const itemRes = await fetch(`/api/bookings-items?id=${booking.id}&source=${normalizedSource}`)
+            if (itemRes.ok) {
+              const itemJson = await itemRes.json()
+              return {
+                ...booking,
+                items: (itemJson.items || []).map((item: any) => ({
+                  id: item.id,
+                  quantity: item.quantity,
+                  product: {
+                    id: item.product_id || item.product?.id,
+                    name: item.product_name || item.product?.name || "Unknown Product",
+                    product_code: item.product_code || item.product?.product_code || "N/A"
+                  }
+                }))
+              }
+            }
+          } catch (e) {
+            console.error(`Error fetching items for booking ${booking.booking_number}:`, e)
+          }
+          return { ...booking, items: [] }
+        })
+      )
+
+      setBookings(bookingsWithItems)
     } catch (err: any) {
       console.error("[Modifications] Error fetching data:", err)
       toast({
@@ -192,16 +206,21 @@ export default function ModificationsPage() {
     <div className="flex flex-col gap-6 p-6 max-w-7xl mx-auto w-full">
       {/* Page Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b pb-5 border-slate-100 dark:border-slate-800">
-        <div>
-          <h1 className="text-2xl font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-3">
-            <span className="p-2 bg-indigo-50 dark:bg-indigo-950/40 rounded-xl text-indigo-600 dark:text-indigo-400">
-              <Shirt className="h-6 w-6" />
-            </span>
-            Modifications & Stitching
-          </h1>
-          <p className="text-sm text-slate-500 mt-1 dark:text-slate-400">
-            Track custom apparel alterations, tailor notes, and completion schedules.
-          </p>
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" onClick={() => router.back()} className="h-9 w-9 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800">
+            <ArrowLeft className="h-5 w-5" />
+          </Button>
+          <div>
+            <h1 className="text-2xl font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-3">
+              <span className="p-2 bg-indigo-50 dark:bg-indigo-950/40 rounded-xl text-indigo-600 dark:text-indigo-400">
+                <Shirt className="h-6 w-6" />
+              </span>
+              Modifications & Stitching
+            </h1>
+            <p className="text-sm text-slate-500 mt-1 dark:text-slate-400">
+              Track custom apparel alterations, tailor notes, and completion schedules.
+            </p>
+          </div>
         </div>
         <Button variant="outline" size="sm" onClick={fetchModifications} className="self-start md:self-auto gap-2">
           <RefreshCw className="h-4 w-4" />
