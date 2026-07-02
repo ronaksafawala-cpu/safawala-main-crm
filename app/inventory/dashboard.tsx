@@ -1035,18 +1035,18 @@ export default function InventoryDashboard() {
               <tbody className="divide-y">
                 {bulkProducts.map(p => (
                   <tr key={p.id} className="hover:bg-slate-50/50">
-                    <td className="px-4 py-2 font-medium text-slate-800 flex items-center gap-3 min-w-[320px]">
+                    <td className="px-4 py-2 font-medium text-slate-800 flex items-center gap-3 min-w-[340px]">
                       {/* Image Thumbnail with zoom effect on hover */}
-                      <div className="relative w-10 h-10 rounded-lg border border-slate-200 overflow-visible shrink-0 group bg-slate-50">
+                      <div className="relative w-12 h-12 rounded-lg border border-slate-200 overflow-visible shrink-0 group bg-slate-50">
                         {p.image_url ? (
                           <img
                             src={p.image_url}
                             alt={p.name}
-                            className="w-full h-full object-cover transition-all duration-200 group-hover:scale-[5] group-hover:translate-x-2 group-hover:shadow-2xl group-hover:z-50 rounded-lg origin-left bg-white border border-slate-200"
+                            className="w-full h-full object-cover transition-all duration-200 group-hover:scale-[6.5] group-hover:translate-x-6 group-hover:shadow-2xl group-hover:z-50 rounded-lg origin-left bg-white border border-slate-200"
                           />
                         ) : (
                           <div className="w-full h-full flex items-center justify-center rounded-lg">
-                            <Package className="h-5 w-5 text-slate-400" />
+                            <Package className="h-6 w-6 text-slate-400" />
                           </div>
                         )}
                       </div>
