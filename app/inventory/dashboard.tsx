@@ -55,6 +55,7 @@ interface Product {
   is_active: boolean
   _variation_count?: number
   created_at?: string
+  updated_at?: string
   product_code?: string
 }
 
@@ -164,11 +165,44 @@ export default function InventoryDashboard() {
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   
-  // Standard in-memory filters (sessionStorage removed for consistency and stability)
+  // Filters persist in localStorage across refreshes until the user resets them
+  const FILTERS_STORAGE_KEY = "inventory-filters"
   const [searchTerm, setSearchTerm] = useState("")
   const [stockFilter, setStockFilter] = useState<"all" | "in_stock" | "low_stock" | "out_of_stock">("all")
   const [categoryFilter, setCategoryFilter] = useState("all")
   const [sortBy, setSortBy] = useState<"created_desc" | "stock_desc" | "stock_asc" | "name_asc" | "name_desc" | "price_asc" | "price_desc">("created_desc")
+  const [filtersLoaded, setFiltersLoaded] = useState(false)
+
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(FILTERS_STORAGE_KEY) || "null")
+      if (saved) {
+        if (typeof saved.searchTerm === "string") setSearchTerm(saved.searchTerm)
+        if (saved.stockFilter) setStockFilter(saved.stockFilter)
+        if (saved.categoryFilter) setCategoryFilter(saved.categoryFilter)
+        if (saved.sortBy) setSortBy(saved.sortBy)
+      }
+    } catch {}
+    setFiltersLoaded(true)
+  }, [])
+
+  useEffect(() => {
+    if (!filtersLoaded) return
+    try {
+      localStorage.setItem(
+        FILTERS_STORAGE_KEY,
+        JSON.stringify({ searchTerm, stockFilter, categoryFilter, sortBy })
+      )
+    } catch {}
+  }, [filtersLoaded, searchTerm, stockFilter, categoryFilter, sortBy])
+
+  const handleResetFilters = () => {
+    setSearchTerm("")
+    setStockFilter("all")
+    setCategoryFilter("all")
+    setSortBy("created_desc")
+    try { localStorage.removeItem(FILTERS_STORAGE_KEY) } catch {}
+  }
   
   const [user, setUser] = useState<User | null>(null)
   const [resolvedFranchiseId, setResolvedFranchiseId] = useState<string | undefined>(undefined)
@@ -216,6 +250,7 @@ export default function InventoryDashboard() {
     is_active: p.is_active !== false,
     product_code: p.product_code || p.id?.slice(0, 8) || "CUST",
     created_at: p.created_at || "",
+    updated_at: p.updated_at || p.created_at || "",
   })
 
   useEffect(() => {
@@ -632,17 +667,21 @@ export default function InventoryDashboard() {
       return true
     })
 
+    // "Last Added First" uses the most recent of created/updated so edited products surface on top
+    const lastActivity = (p: Product) =>
+      Math.max(new Date(p.updated_at || 0).getTime(), new Date(p.created_at || 0).getTime())
+
     return filtered.sort((a, b) => {
       switch (sortBy) {
         case "created_desc":
-          return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+          return lastActivity(b) - lastActivity(a)
         case "stock_desc": return b.stock_available - a.stock_available
         case "stock_asc": return a.stock_available - b.stock_available
         case "name_asc": return a.name.localeCompare(b.name)
         case "name_desc": return b.name.localeCompare(a.name)
         case "price_asc": return a.rental_price - b.rental_price
         case "price_desc": return b.rental_price - a.rental_price
-        default: return new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+        default: return lastActivity(b) - lastActivity(a)
       }
     })
   }, [products, searchTerm, stockFilter, categoryFilter, sortBy])
@@ -844,7 +883,7 @@ export default function InventoryDashboard() {
               <SelectValue placeholder="Sort By" />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="created_desc">Last Added First</SelectItem>
+              <SelectItem value="created_desc">Last Added / Updated</SelectItem>
               <SelectItem value="stock_desc">Stock: High → Low</SelectItem>
               <SelectItem value="stock_asc">Stock: Low → High</SelectItem>
               <SelectItem value="name_asc">Name: A → Z</SelectItem>
@@ -882,16 +921,12 @@ export default function InventoryDashboard() {
           <Badge variant="outline" className="text-xs bg-[#fcf7f0] border-[#102516]/10 text-[#102516]/70">
             {filteredProducts.length} of {products.length} products
           </Badge>
-          {(searchTerm || stockFilter !== "all" || categoryFilter !== "all") && (
+          {(searchTerm || stockFilter !== "all" || categoryFilter !== "all" || sortBy !== "created_desc") && (
             <button
-              onClick={() => {
-                setSearchTerm("")
-                setStockFilter("all")
-                setCategoryFilter("all")
-              }}
+              onClick={handleResetFilters}
               className="text-xs text-[#102516]/50 hover:text-[#102516] underline"
             >
-              Clear filters
+              Reset filters
             </button>
           )}
         </div>

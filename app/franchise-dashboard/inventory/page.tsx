@@ -1,5 +1,5 @@
 'use client'
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import Link from 'next/link'
 import { useSafeData, useDebounce } from '@/lib/franchise/hooks'
 import { PageHeader } from '@/components/franchise/shared/page-header'
@@ -21,7 +21,22 @@ function StockBadge({ qty, booked }: { qty: number; booked?: number }) {
 export default function FranchiseInventoryPage() {
   const [searchRaw, setSearchRaw] = useState('')
   const [filter, setFilter] = useState('all')
+  const [filtersLoaded, setFiltersLoaded] = useState(false)
   const search = useDebounce(searchRaw, 350)
+
+  // Search persists across refreshes until cleared
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('franchise-inventory-search')
+      if (saved) setSearchRaw(saved)
+    } catch {}
+    setFiltersLoaded(true)
+  }, [])
+
+  useEffect(() => {
+    if (!filtersLoaded) return
+    try { localStorage.setItem('franchise-inventory-search', searchRaw) } catch {}
+  }, [filtersLoaded, searchRaw])
 
   const url = search.trim()
     ? `/api/products?search=${encodeURIComponent(search)}`
