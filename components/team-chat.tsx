@@ -1,9 +1,11 @@
 "use client"
 
 import { useState, useRef, useEffect, useCallback } from "react"
+import { createClient } from "@/lib/supabase"
 import {
   X, Send, Loader2, Users, Minimize2, Maximize2, Mic, MicOff,
-  Sparkles, RotateCcw, Trash2, ChevronDown, Radio, Volume2, PhoneOff
+  Sparkles, RotateCcw, Trash2, ChevronDown, Radio, Volume2, PhoneOff,
+  Phone, PhoneCall
 } from "lucide-react"
 
 interface ChatMessage {
@@ -167,16 +169,25 @@ export function TeamChat() {
   const [locationCoords, setLocationCoords] = useState<{ latitude: number; longitude: number } | null>(null)
 
   // Walkie-Talkie states
-  const [activeWalkieSession, setActiveWalkieSession] = useState<any>(null)
-  const [isInWalkie, setIsInWalkie] = useState(false)
-  const [walkieTransmissions, setWalkieTransmissions] = useState<any[]>([])
-  const [isWalkieRecording, setIsWalkieRecording] = useState(false)
-  const [currentlyPlayingUser, setCurrentlyPlayingUser] = useState<string | null>(null)
-  
-  const walkieRecorderRef = useRef<MediaRecorder | null>(null)
-  const walkieChunksRef = useRef<Blob[]>([])
-  const playedTransmissionsRef = useRef<Set<string>>(new Set())
-  const lastWalkiePollRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  // Live Voice Call state
+  const [activeGroupCall, setActiveGroupCall] = useState<{
+    callId: string;
+    initiatorId: string;
+    initiatorName: string;
+    joinedMembers: { id: string; name: string }[];
+    isMuted: boolean;
+    isCalling: boolean; // true if initiating or receiving ring
+    isJoined: boolean;  // true if fully connected to voice stream
+  } | null>(null);
+
+  const [speakingUsers, setSpeakingUsers] = useState<Record<string, boolean>>({})
+
+  const groupCallChannelRef = useRef<any>(null)
+  const mediaStreamRef = useRef<MediaStream | null>(null)
+  const callRecorderRef = useRef<MediaRecorder | null>(null)
+  const audioCtxRef = useRef<AudioContext | null>(null)
+  const playTimesRef = useRef<Record<string, number>>({})
+  const ringingAudioRef = useRef<HTMLAudioElement | null>(null)
 
   // Draggable offsets and flags
   const [btnOffset, setBtnOffset] = useState({ x: 0, y: 0 })
@@ -308,78 +319,165 @@ export function TeamChat() {
     fetchAllUsers()
   }, [open, currentUser])
 
-  // Poll active Walkie-Talkie session state
+  // Setup Supabase Realtime Channel for Voice Calls
   useEffect(() => {
-    if (!open || !currentUser) return
+    if (!open || !currentUser?.id) return
 
-    const pollActiveWalkie = async () => {
+    const supabase = createClient()
+    const channelName = `team-calls-${currentUser.franchise_id || 'global'}`
+    const channel = supabase.channel(channelName, {
+      config: { broadcast: { self: false } }
+    })
+
+    groupCallChannelRef.current = channel
+
+    const playSynthesizedRing = () => {
       try {
-        const res = await fetch("/api/team-chat/walkie-talkie")
-        const json = await res.json()
-        if (json.activeSession) {
-          setActiveWalkieSession(json.activeSession)
-        } else {
-          setActiveWalkieSession(null)
-          setIsInWalkie(false)
+        if (!audioCtxRef.current) {
+          audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)()
         }
-      } catch {}
-    }
-
-    pollActiveWalkie()
-    const interval = setInterval(pollActiveWalkie, 6000)
-    return () => clearInterval(interval)
-  }, [open, currentUser])
-
-  // Poll walkie talkie transmissions when inside room
-  useEffect(() => {
-    if (!isInWalkie || !activeWalkieSession?.id) {
-      if (lastWalkiePollRef.current) clearInterval(lastWalkiePollRef.current)
-      return
-    }
-
-    const pollTransmissions = async () => {
-      try {
-        const res = await fetch(`/api/team-chat/walkie-talkie?transmissions=true&session_id=${activeWalkieSession.id}`)
-        const json = await res.json()
-        if (json.data) {
-          setWalkieTransmissions(json.data)
+        const ctx = audioCtxRef.current
+        if (ctx.state === "suspended") {
+          ctx.resume()
+        }
+        
+        let ringInterval = setInterval(() => {
+          const now = ctx.currentTime
+          const osc = ctx.createOscillator()
+          const gain = ctx.createGain()
           
-          const newClips = json.data.filter((t: any) => 
-            t.sender_id !== currentUser?.id && !playedTransmissionsRef.current.has(t.id)
-          )
+          osc.type = "sine"
+          osc.frequency.setValueAtTime(440, now) // Standard dialing note
+          
+          gain.gain.setValueAtTime(0, now)
+          gain.gain.linearRampToValueAtTime(0.15, now + 0.1)
+          gain.gain.linearRampToValueAtTime(0, now + 1.2)
+          
+          osc.connect(gain)
+          gain.connect(ctx.destination)
+          
+          osc.start(now)
+          osc.stop(now + 1.3)
+        }, 2000)
 
-          if (newClips.length > 0) {
-            for (const clip of newClips) {
-              playedTransmissionsRef.current.add(clip.id)
-              setCurrentlyPlayingUser(clip.sender_name)
-              
-              const audio = new Audio(clip.audio_url)
-              await new Promise<void>((resolve) => {
-                audio.onended = () => {
-                  setCurrentlyPlayingUser(null)
-                  resolve()
-                }
-                audio.onerror = () => {
-                  setCurrentlyPlayingUser(null)
-                  resolve()
-                }
-                audio.play().catch(() => {
-                  setCurrentlyPlayingUser(null)
-                  resolve()
-                })
-              })
-            }
-          }
+        ;(window as any).__ringInterval = ringInterval
+      } catch (e) {
+        console.warn("Could not play ring synthesizer:", e)
+      }
+    }
+
+    const stopRingSound = () => {
+      if ((window as any).__ringInterval) {
+        clearInterval((window as any).__ringInterval)
+        delete (window as any).__ringInterval
+      }
+    }
+
+    const stopLocalAudioStream = () => {
+      stopRingSound()
+      if (callRecorderRef.current && callRecorderRef.current.state !== "inactive") {
+        callRecorderRef.current.stop()
+      }
+      if (mediaStreamRef.current) {
+        mediaStreamRef.current.getTracks().forEach(t => t.stop())
+        mediaStreamRef.current = null
+      }
+    }
+
+    const playAudioPacket = (payload: any) => {
+      if (payload.userId === currentUser.id) return
+      
+      try {
+        const binaryString = window.atob(payload.audio)
+        const bytes = new Uint8Array(binaryString.length)
+        for (let i = 0; i < binaryString.length; i++) {
+          bytes[i] = binaryString.charCodeAt(i)
         }
-      } catch {}
+        
+        if (!audioCtxRef.current) {
+          audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)()
+        }
+        const audioCtx = audioCtxRef.current
+        if (audioCtx.state === "suspended") {
+          audioCtx.resume()
+        }
+
+        audioCtx.decodeAudioData(bytes.buffer, (buffer) => {
+          const source = audioCtx.createBufferSource()
+          source.buffer = buffer
+          source.connect(audioCtx.destination)
+          
+          const now = audioCtx.currentTime
+          let nextPlayTime = playTimesRef.current[payload.userId] || 0
+          const startTime = Math.max(now, nextPlayTime)
+          source.start(startTime)
+
+          // Set speaking visual wave state
+          setSpeakingUsers(prev => ({ ...prev, [payload.userId]: true }))
+          setTimeout(() => {
+            setSpeakingUsers(prev => {
+              const next = { ...prev }
+              delete next[payload.userId]
+              return next
+            })
+          }, buffer.duration * 1000)
+
+          playTimesRef.current[payload.userId] = startTime + buffer.duration
+        }, (err) => {
+          console.error("Audio packet decode error:", err)
+        })
+      } catch (err) {
+        console.error("Audio playback error:", err)
+      }
     }
 
-    pollTransmissions()
-    lastWalkiePollRef.current = setInterval(pollTransmissions, 2000)
+    channel
+      .on("broadcast", { event: "group_call_invite" }, (payload: any) => {
+        const data = payload.payload
+        setActiveGroupCall({
+          callId: data.callId,
+          initiatorId: data.initiatorId,
+          initiatorName: data.initiatorName,
+          joinedMembers: [{ id: data.initiatorId, name: data.initiatorName }],
+          isMuted: false,
+          isCalling: true,
+          isJoined: false
+        })
+        playSynthesizedRing()
+      })
+      .on("broadcast", { event: "group_call_join" }, (payload: any) => {
+        const data = payload.payload
+        setActiveGroupCall(prev => {
+          if (!prev || prev.callId !== data.callId) return prev
+          const members = [...prev.joinedMembers]
+          if (!members.find(m => m.id === data.userId)) {
+            members.push({ id: data.userId, name: data.userName })
+          }
+          return { ...prev, joinedMembers: members }
+        })
+      })
+      .on("broadcast", { event: "group_call_leave" }, (payload: any) => {
+        const data = payload.payload
+        setActiveGroupCall(prev => {
+          if (!prev || prev.callId !== data.callId) return prev
+          const members = prev.joinedMembers.filter(m => m.id !== data.userId)
+          if (members.length <= 1) {
+            stopLocalAudioStream()
+            return null
+          }
+          return { ...prev, joinedMembers: members }
+        })
+      })
+      .on("broadcast", { event: "audio_packet" }, (payload: any) => {
+        playAudioPacket(payload.payload)
+      })
+      .subscribe()
+
     return () => {
-      if (lastWalkiePollRef.current) clearInterval(lastWalkiePollRef.current)
+      channel.unsubscribe()
+      stopLocalAudioStream()
     }
-  }, [isInWalkie, activeWalkieSession?.id, currentUser?.id])
+  }, [open, currentUser, activeGroupCall?.isJoined])
 
   // Trigger typing = true when input changes (throttled)
   useEffect(() => {
@@ -691,86 +789,131 @@ export function TeamChat() {
     }, 50)
   }
 
-  const startWalkieSession = async () => {
-    try {
-      const res = await fetch("/api/team-chat/walkie-talkie", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "start" })
+  const startGroupCall = async () => {
+    if (!currentUser) return
+    const callId = "call_" + Date.now()
+    setActiveGroupCall({
+      callId,
+      initiatorId: currentUser.id,
+      initiatorName: currentUser.name,
+      joinedMembers: [{ id: currentUser.id, name: currentUser.name }],
+      isMuted: false,
+      isCalling: true,
+      isJoined: true
+    })
+
+    if (groupCallChannelRef.current) {
+      groupCallChannelRef.current.send({
+        type: "broadcast",
+        event: "group_call_invite",
+        payload: { callId, initiatorId: currentUser.id, initiatorName: currentUser.name }
       })
-      const json = await res.json()
-      if (json.session) {
-        setActiveWalkieSession(json.session)
-        setIsInWalkie(true)
-        playedTransmissionsRef.current = new Set()
+    }
+
+    await startLocalAudioStream(callId)
+  }
+
+  const joinGroupCall = async () => {
+    if (!activeGroupCall || !currentUser) return
+    stopRingSound()
+
+    setActiveGroupCall(prev => prev ? { ...prev, isCalling: false, isJoined: true } : null)
+
+    if (groupCallChannelRef.current) {
+      groupCallChannelRef.current.send({
+        type: "broadcast",
+        event: "group_call_join",
+        payload: { callId: activeGroupCall.callId, userId: currentUser.id, userName: currentUser.name }
+      })
+    }
+
+    await startLocalAudioStream(activeGroupCall.callId)
+  }
+
+  const declineGroupCall = () => {
+    stopRingSound()
+    setActiveGroupCall(null)
+  }
+
+  const leaveGroupCall = () => {
+    if (activeGroupCall && currentUser) {
+      if (groupCallChannelRef.current) {
+        groupCallChannelRef.current.send({
+          type: "broadcast",
+          event: "group_call_leave",
+          payload: { callId: activeGroupCall.callId, userId: currentUser.id }
+        })
       }
-    } catch {
-      alert("Failed to start walkie-talkie session")
     }
+    stopLocalAudioStream()
+    setActiveGroupCall(null)
   }
 
-  const endWalkieSession = async () => {
-    if (!activeWalkieSession?.id) return
-    try {
-      await fetch("/api/team-chat/walkie-talkie", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "end", sessionId: activeWalkieSession.id })
+  const toggleMute = () => {
+    if (!activeGroupCall) return
+    const nextMuted = !activeGroupCall.isMuted
+    setActiveGroupCall(prev => prev ? { ...prev, isMuted: nextMuted } : null)
+    
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getAudioTracks().forEach(track => {
+        track.enabled = !nextMuted
       })
-      setActiveWalkieSession(null)
-      setIsInWalkie(false)
-      fetchMessages()
-    } catch {
-      alert("Failed to end session")
     }
   }
 
-  const startWalkieRecording = async () => {
+  const startLocalAudioStream = async (callId: string) => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-      walkieChunksRef.current = []
-      const mr = new MediaRecorder(stream)
-      walkieRecorderRef.current = mr
-      mr.ondataavailable = (e) => { if (e.data.size > 0) walkieChunksRef.current.push(e.data) }
-      mr.onstop = async () => {
-        stream.getTracks().forEach(t => t.stop())
-        const blob = new Blob(walkieChunksRef.current, { type: "audio/webm" })
+      mediaStreamRef.current = stream
+
+      const recorder = new MediaRecorder(stream, { mimeType: "audio/webm" })
+      callRecorderRef.current = recorder
+
+      recorder.ondataavailable = async (e) => {
+        if (e.data.size === 0 || !currentUser) return
         
-        try {
-          const fd = new FormData()
-          fd.append("file", blob, `walkie_${Date.now()}.webm`)
-          fd.append("bucket", "team-chat-voices")
-          const uploadRes = await fetch("/api/upload-simple", { method: "POST", body: fd })
-          const uploadJson = await uploadRes.json()
-          const audioUrl = uploadJson.url || uploadJson.publicUrl
-          if (audioUrl && activeWalkieSession?.id) {
-            await fetch("/api/team-chat/walkie-talkie", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                action: "transmit",
-                sessionId: activeWalkieSession.id,
-                audioUrl
-              })
+        const reader = new FileReader()
+        reader.readAsDataURL(e.data)
+        reader.onloadend = () => {
+          const base64data = (reader.result as string).split(",")[1]
+          if (base64data && groupCallChannelRef.current) {
+            groupCallChannelRef.current.send({
+              type: "broadcast",
+              event: "audio_packet",
+              payload: {
+                callId,
+                userId: currentUser.id,
+                userName: currentUser.name,
+                audio: base64data
+              }
             })
-            const res = await fetch(`/api/team-chat/walkie-talkie?transmissions=true&session_id=${activeWalkieSession.id}`)
-            const json = await res.json()
-            if (json.data) setWalkieTransmissions(json.data)
           }
-        } catch {}
+        }
       }
-      mr.start()
-      setIsWalkieRecording(true)
-    } catch {
-      alert("Microphone permission denied")
+
+      recorder.start(300) // stream audio chunks every 300ms
+    } catch (err) {
+      console.error("Microphone permission denied for call:", err)
+      alert("Microphone permission is required to join the call.")
     }
   }
 
-  const stopWalkieRecording = () => {
-    if (walkieRecorderRef.current && walkieRecorderRef.current.state !== "inactive") {
-      walkieRecorderRef.current.stop()
+  const stopRingSound = () => {
+    if ((window as any).__ringInterval) {
+      clearInterval((window as any).__ringInterval)
+      delete (window as any).__ringInterval
     }
-    setIsWalkieRecording(false)
+  }
+
+  const stopLocalAudioStream = () => {
+    stopRingSound()
+    if (callRecorderRef.current && callRecorderRef.current.state !== "inactive") {
+      callRecorderRef.current.stop()
+    }
+    if (mediaStreamRef.current) {
+      mediaStreamRef.current.getTracks().forEach(t => t.stop())
+      mediaStreamRef.current = null
+    }
   }
 
   const shareLocation = () => {
@@ -961,15 +1104,15 @@ export function TeamChat() {
                 {userStatus === "online" ? "🟢 Online" : "🔴 Offline"}
               </p>
             </div>
-            {!activeWalkieSession && (
-              <button 
-                onClick={startWalkieSession} 
-                title="Start Walkie-Talkie session" 
-                style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.5)", padding: 4 }}
-              >
-                <Radio size={14} />
-              </button>
-            )}
+            {!activeGroupCall && (
+               <button 
+                 onClick={startGroupCall} 
+                 title="Start Group Call" 
+                 style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.5)", padding: 4 }}
+               >
+                 <Phone size={14} />
+               </button>
+             )}
             <button onClick={() => setMinimized(m => !m)} style={{ background: "none", border: "none", cursor: "pointer", color: "rgba(255,255,255,0.5)", padding: 4 }}>
               {minimized ? <Maximize2 size={14} /> : <Minimize2 size={14} />}
             </button>
@@ -1007,43 +1150,54 @@ export function TeamChat() {
                   </button>
                 </div>
               )}
-              {activeWalkieSession && !isInWalkie && (
+              {activeGroupCall?.isCalling && !activeGroupCall?.isJoined && (
                 <div style={{
-                  background: "#dcfce7", borderBottom: "1px solid #bbf7d0",
-                  padding: "8px 12px", display: "flex", alignItems: "center", gap: 8,
+                  background: "#eff6ff", borderBottom: "1px solid #bfdbfe",
+                  padding: "10px 12px", display: "flex", alignItems: "center", gap: 10,
                   justifyContent: "space-between", flexShrink: 0
                 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                    <span style={{
-                      width: 6, height: 6, borderRadius: "50%",
-                      background: "#22c55e", animation: "pulse 1s infinite"
-                    }} />
-                    <span style={{ fontSize: 10, color: "#14532d", fontWeight: 700 }}>
-                      Walkie-Talkie live by {activeWalkieSession.host_name}
-                    </span>
+                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                    <PhoneCall size={18} style={{ color: "#2563eb", animation: "bounce 1s infinite" }} />
+                    <div style={{ display: "flex", flexDirection: "column" }}>
+                      <span style={{ fontSize: 11, color: "#1e40af", fontWeight: 700 }}>
+                        Incoming Group Call
+                      </span>
+                      <span style={{ fontSize: 9, color: "#1e40af" }}>
+                        from {activeGroupCall.initiatorName}
+                      </span>
+                    </div>
                   </div>
-                  <button 
-                    onClick={() => {
-                      setIsInWalkie(true)
-                      playedTransmissionsRef.current = new Set()
-                    }}
-                    style={{
-                      background: "#16a34a", color: "white", border: "none",
-                      borderRadius: 8, padding: "3px 10px", fontSize: 10,
-                      fontWeight: 700, cursor: "pointer"
-                    }}
-                  >
-                    Join Room
-                  </button>
+                  <div style={{ display: "flex", gap: 6 }}>
+                    <button 
+                      onClick={joinGroupCall}
+                      style={{
+                        background: "#22c55e", color: "white", border: "none",
+                        borderRadius: 8, padding: "4px 10px", fontSize: 10,
+                        fontWeight: 700, cursor: "pointer"
+                      }}
+                    >
+                      Accept
+                    </button>
+                    <button 
+                      onClick={declineGroupCall}
+                      style={{
+                        background: "#ef4444", color: "white", border: "none",
+                        borderRadius: 8, padding: "4px 10px", fontSize: 10,
+                        fontWeight: 700, cursor: "pointer"
+                      }}
+                    >
+                      Decline
+                    </button>
+                  </div>
                 </div>
               )}
 
-              {isInWalkie ? (
-                /* Walkie Room live View */
+              {activeGroupCall?.isJoined ? (
+                /* Group Call Live View */
                 <div style={{
                   flex: 1, display: "flex", flexDirection: "column",
                   alignItems: "center", justifyContent: "center",
-                  background: "#0f172a", color: "white", padding: 20, gap: 16,
+                  background: "#0f172a", color: "white", padding: 20, gap: 20,
                   minHeight: 300,
                 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -1052,95 +1206,87 @@ export function TeamChat() {
                       background: "#22c55e", animation: "pulse 1s infinite"
                     }} />
                     <span style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.05em" }}>
-                      Walkie-Talkie Room Live
+                      Live Group Voice Call
                     </span>
                   </div>
-                  
-                  {/* Speaker indicator */}
+                  {/* Joined Members Avatars & Speaking Indicators */}
                   <div style={{
-                    height: 60, display: "flex", flexDirection: "column",
-                    alignItems: "center", justifyContent: "center", gap: 6
+                    display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 16, maxWidth: "100%", margin: "10px 0"
                   }}>
-                    {currentlyPlayingUser ? (
-                      <>
-                        <Volume2 size={24} style={{ color: "#22c55e", animation: "bounce 1s infinite" }} />
-                        <span style={{ fontSize: 12, fontWeight: 700, color: "#22c55e" }}>
-                          🔊 Listening to {currentlyPlayingUser}...
-                        </span>
-                      </>
-                    ) : isWalkieRecording ? (
-                      <>
-                        <Mic size={24} style={{ color: "#ef4444", animation: "pulse 1s infinite" }} />
-                        <span style={{ fontSize: 12, fontWeight: 700, color: "#ef4444" }}>
-                          🎙️ You are Speaking...
-                        </span>
-                      </>
-                    ) : (
-                      <>
-                        <Radio size={24} style={{ color: "#64748b" }} />
-                        <span style={{ fontSize: 11, color: "#94a3b8" }}>
-                          Ready. Press & hold to speak.
-                        </span>
-                      </>
-                    )}
+                    {activeGroupCall.joinedMembers.map((member) => {
+                      const isSpeaking = speakingUsers[member.id] || false
+                      return (
+                        <div key={member.id} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 4 }}>
+                          <div style={{
+                            position: "relative",
+                            width: 50, height: 50, borderRadius: "50%",
+                            background: "linear-gradient(135deg, #1e293b, #334155)",
+                            display: "flex", alignItems: "center", justifyContent: "center",
+                            fontSize: 14, fontWeight: 800, color: "white",
+                            border: isSpeaking ? "3px solid #22c55e" : "2px solid #64748b",
+                            boxShadow: isSpeaking ? "0 0 15px rgba(34,197,94,0.6)" : "none",
+                            transition: "all 0.2s ease"
+                          }}>
+                            {getInitials(member.name)}
+                            {isSpeaking && (
+                              <span style={{
+                                position: "absolute", bottom: -2, right: -2,
+                                background: "#22c55e", borderRadius: "50%", padding: 2,
+                                display: "flex", alignItems: "center", justifyContent: "center"
+                              }}>
+                                <Volume2 size={10} color="white" />
+                              </span>
+                            )}
+                          </div>
+                          <span style={{ fontSize: 9, color: isSpeaking ? "#22c55e" : "#94a3b8", fontWeight: isSpeaking ? 700 : 500 }}>
+                            {member.name.split(" ")[0]}
+                          </span>
+                        </div>
+                      )
+                    })}
                   </div>
 
-                  {/* Push to talk button */}
-                  <button
-                    onMouseDown={startWalkieRecording}
-                    onMouseUp={stopWalkieRecording}
-                    onTouchStart={startWalkieRecording}
-                    onTouchEnd={stopWalkieRecording}
-                    style={{
-                      width: 84, height: 84, borderRadius: "50%",
-                      background: isWalkieRecording ? "#ef4444" : "linear-gradient(135deg, #22c55e, #16a34a)",
-                      color: "white", border: "none", cursor: "pointer",
-                      boxShadow: isWalkieRecording 
-                        ? "0 0 25px rgba(239,68,68,0.5)" 
-                        : "0 6px 20px rgba(34,197,94,0.35)",
-                      display: "flex", flexDirection: "column",
-                      alignItems: "center", justifyContent: "center", gap: 3,
-                      transition: "all 0.1s ease",
-                      userSelect: "none", outline: "none",
-                    }}
-                  >
-                    <Mic size={20} />
-                    <span style={{ fontSize: 8, fontWeight: 800, textTransform: "uppercase" }}>
-                      {isWalkieRecording ? "Speaking" : "Push To Talk"}
-                    </span>
-                  </button>
-
-                  {/* Action buttons (End Session / Leave Room) */}
-                  <div style={{ display: "flex", gap: 8, marginTop: 6 }}>
-                    {activeWalkieSession?.host_id === currentUser?.id ? (
-                      <button
-                        onClick={endWalkieSession}
-                        style={{
-                          background: "#b91c1c", color: "white", border: "none",
-                          borderRadius: 10, padding: "6px 12px", fontSize: 10,
-                          fontWeight: 700, cursor: "pointer", display: "flex",
-                          alignItems: "center", gap: 4
-                        }}
-                      >
-                        <PhoneOff size={10} /> End Session
-                      </button>
-                    ) : (
-                      <button
-                        onClick={() => setIsInWalkie(false)}
-                        style={{
-                          background: "#334155", color: "white", border: "none",
-                          borderRadius: 10, padding: "6px 12px", fontSize: 10,
-                          fontWeight: 700, cursor: "pointer"
-                        }}
-                      >
-                        Leave Room
-                      </button>
-                    )}
+                  {/* Speaker status text */}
+                  <div style={{ height: 20 }}>
+                    <p style={{ fontSize: 10, color: "#94a3b8", margin: 0 }}>
+                      {Object.keys(speakingUsers).length > 0 
+                        ? "🎙️ Someone is talking..." 
+                        : "Listening (All quiet)..."}
+                    </p>
                   </div>
-
-                  <span style={{ fontSize: 9, color: "#64748b" }}>
-                    Transmissions in session: {walkieTransmissions.length}
-                  </span>
+ 
+                  {/* Call Controls: Mute Toggle and End Call */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 16, marginTop: 10 }}>
+                    <button
+                      onClick={toggleMute}
+                      style={{
+                        width: 44, height: 44, borderRadius: "50%",
+                        background: activeGroupCall.isMuted ? "#ef4444" : "#334155",
+                        color: "white", border: "none", cursor: "pointer",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        boxShadow: "0 4px 12px rgba(0,0,0,0.15)",
+                        transition: "all 0.2s ease"
+                      }}
+                      title={activeGroupCall.isMuted ? "Unmute Microphone" : "Mute Microphone"}
+                    >
+                      {activeGroupCall.isMuted ? <MicOff size={18} /> : <Mic size={18} />}
+                    </button>
+                    
+                    <button
+                      onClick={leaveGroupCall}
+                      style={{
+                        width: 52, height: 52, borderRadius: "50%",
+                        background: "#ef4444",
+                        color: "white", border: "none", cursor: "pointer",
+                        display: "flex", alignItems: "center", justifyContent: "center",
+                        boxShadow: "0 4px 15px rgba(239,68,68,0.4)",
+                        transition: "all 0.2s ease"
+                      }}
+                      title="Leave Group Call"
+                    >
+                      <PhoneOff size={22} />
+                    </button>
+                  </div>
                 </div>
               ) : (
                 <>
