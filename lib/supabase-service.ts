@@ -130,15 +130,7 @@ export const customerService = {
 
     const { data, error } = await supabase
       .from("customers")
-      .insert([
-        {
-          ...customer,
-          credit_limit: customer.credit_limit || 100000,
-          outstanding_balance: customer.outstanding_balance || 0,
-          total_bookings: customer.total_bookings || 0,
-          total_spent: customer.total_spent || 0,
-        },
-      ])
+      .insert([customer])
       .select()
       .single()
 
