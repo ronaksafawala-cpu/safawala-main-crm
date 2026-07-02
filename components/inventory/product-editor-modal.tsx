@@ -202,9 +202,9 @@ export function ProductEditorModal({
         .eq("is_active", true)
         .not("parent_id", "is", null)
         .order("name")
-      const catsWithSubs = cats.map((c) => ({
+      const catsWithSubs = cats.map((c: any) => ({
         ...c,
-        subcategories: (subs || []).filter((s) => s.parent_id === c.id).map((s) => ({ id: s.id, name: s.name })),
+        subcategories: (subs || []).filter((s: any) => s.parent_id === c.id).map((s: any) => ({ id: s.id, name: s.name })),
       }))
       setCategories(catsWithSubs as any)
     }
@@ -235,7 +235,7 @@ export function ProductEditorModal({
         .eq("parent_id", product.category_id)
         .eq("is_active", true)
         .order("name")
-        .then(({ data }) => { if (data) setSubcategories(data) })
+        .then(({ data }: any) => { if (data) setSubcategories(data) })
     }
   }, [product?.category_id])
 
@@ -277,7 +277,7 @@ export function ProductEditorModal({
         .order("order", { ascending: true })
 
       if (error) throw error
-      setImages(data?.map((img) => ({
+      setImages(data?.map((img: any) => ({
         id: img.id,
         url: img.url,
         is_main: img.is_main,

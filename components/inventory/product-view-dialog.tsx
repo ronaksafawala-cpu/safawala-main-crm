@@ -127,15 +127,16 @@ export function ProductViewDialog({ product, open, onOpenChange }: ProductViewDi
   const handlePrintBarcode = async () => {
     setPrinting(true)
     try {
+      const p = product as any
       await doPrint(
-        product.barcode || "",
-        product.name,
+        p.barcode || "",
+        p.name,
         1,
-        product.regular_price || undefined,
-        product.price || undefined,
-        product.color,
-        product.size,
-        product.material
+        p.regular_price || undefined,
+        p.price || undefined,
+        p.color,
+        p.size,
+        p.material
       )
       toast({
         title: "Success",
