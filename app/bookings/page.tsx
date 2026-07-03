@@ -70,6 +70,7 @@ export default function BookingsPage() {
   const { toast } = useToast()
   const { showConfirmation, ConfirmationDialog } = useConfirmationDialog()
   const [searchTerm, setSearchTerm] = useState("")
+  const [manageOffersOpen, setManageOffersOpen] = useState(false)
   // Applied filters
   const [statusFilter, setStatusFilter] = useState<string>("all")
   const [typeFilter, setTypeFilter] = useState<string>("all")
@@ -1357,11 +1358,18 @@ export default function BookingsPage() {
                 <FileText className="mr-2 h-4 w-4" />
                 Export PDF
               </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <span><ManageOffersDialog /></span>
+              <DropdownMenuItem
+                onSelect={(e) => {
+                  e.preventDefault()
+                  setManageOffersOpen(true)
+                }}
+              >
+                <Tag className="mr-2 h-4 w-4" />
+                Manage Offers
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          <ManageOffersDialog open={manageOffersOpen} onOpenChange={setManageOffersOpen} />
           <Button 
             size="sm" 
             variant="outline" 

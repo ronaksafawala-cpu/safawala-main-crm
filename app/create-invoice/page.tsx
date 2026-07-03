@@ -62,7 +62,9 @@ import {
   FileCheck,
   Camera,
   ImageIcon,
+  Lock,
 } from "lucide-react"
+
 import { useToast } from "@/hooks/use-toast"
 import { createClient } from "@/lib/supabase/client"
 import { format } from "date-fns"
@@ -334,6 +336,18 @@ export default function CreateInvoicePage() {
     state: "",
     pincode: "",
   })
+
+  // Load the logged-in user so the invoice/quote can show a "Billed by" byline.
+  // Runs regardless of mode (new or edit) — loadNextInvoiceNumber only fires for new invoices.
+  useEffect(() => {
+    if (pdfToken) return // Skip when rendering via PDF token (Puppeteer)
+    fetch('/api/auth/user', { cache: 'no-store' })
+      .then(res => (res.ok ? res.json() : null))
+      .then(user => {
+        if (user) setCurrentUser((prev: any) => prev || user)
+      })
+      .catch(err => console.error('[CreateInvoice] Failed to load current user:', err))
+  }, [pdfToken])
 
   // Generate invoice number based on stored sequences
   useEffect(() => {
@@ -3392,10 +3406,13 @@ export default function CreateInvoicePage() {
                             </div>
                             <div className="text-[10px] text-gray-600 max-h-40 overflow-y-auto leading-relaxed">
                               {invoiceData.invoice_type === "sale" ? (
-                                <ul className="list-disc list-inside space-y-1">
-                                  <li>Products purchased under the sale category are non-returnable and non-exchangeable.</li>
-                                  <li>This agreement and any related matters shall be governed by the jurisdiction of Vadodara, Gujarat.</li>
-                                </ul>
+                                <ol className="list-decimal list-inside space-y-1">
+                                  <li>Sale items cannot be returned.</li>
+                                  <li>Exchange is available within <strong>2 days</strong> of the invoice date.</li>
+                                  <li>Please keep the original invoice for any exchange.</li>
+                                  <li>Final invoice &amp; product will be delivered after total amount is paid.</li>
+                                  <li>All disputes, if any, are subject to <strong>Vadodara, Gujarat</strong> jurisdiction only.</li>
+                                </ol>
                               ) : (
                                 <ol className="list-decimal list-inside space-y-0.5">
                                   <li>All product selections and order details are considered approved by the customer at the time of booking. Any changes requested after confirmation may not be possible, especially close to the event date.</li>
@@ -3669,6 +3686,9 @@ export default function CreateInvoicePage() {
               <div className="text-[10px] mt-0.5">
                 <div><span className="text-gray-500">Invoice #:</span> <strong>{invoiceData.invoice_number}</strong></div>
                 <div><span className="text-gray-500">Date:</span> <strong>{invoiceData.invoice_date ? format(new Date(invoiceData.invoice_date), "dd MMM yyyy") : format(new Date(), "dd MMM yyyy")}</strong></div>
+                {currentUser?.name && (
+                  <div className="text-[8px] text-gray-400 mt-0.5">Billed by {currentUser.name}</div>
+                )}
               </div>
             </div>
           </div>
@@ -3755,20 +3775,20 @@ export default function CreateInvoicePage() {
                 {companySettings?.company_name || "SAFAWALA"}
               </div>
             </div>
-            {/* Invoice # + Date + Type selector */}
+            {/* Invoice # + Date + Type (locked) */}
             <div className="flex items-center gap-2">
-              <Select
-                value={invoiceData.invoice_type}
-                onValueChange={(v) => setInvoiceData({ ...invoiceData, invoice_type: v as any })}
+              {/* Type — locked after gate selection */}
+              <div
+                title="Invoice type cannot be changed after selection"
+                className={`flex items-center gap-1.5 px-3 h-8 rounded-md border text-xs font-bold select-none ${
+                  invoiceData.invoice_type === 'sale'
+                    ? 'bg-blue-50 border-blue-200 text-blue-700'
+                    : 'bg-green-50 border-green-200 text-green-700'
+                }`}
               >
-                <SelectTrigger className="w-24 h-8 text-xs border-slate-200">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="rental">Rental</SelectItem>
-                  <SelectItem value="sale">Sale</SelectItem>
-                </SelectContent>
-              </Select>
+                <Lock className="h-3 w-3 opacity-60" />
+                {invoiceData.invoice_type === 'sale' ? 'Sale' : 'Rental'}
+              </div>
               <Input
                 value={invoiceData.invoice_number}
                 onChange={(e) => setInvoiceData({ ...invoiceData, invoice_number: e.target.value })}
@@ -3784,6 +3804,7 @@ export default function CreateInvoicePage() {
               />
             </div>
           </div>
+
 
           {/* ================= WEB-ONLY CONTENT START ================= */}
           <div className="p-4 md:p-6 print:hidden bg-white space-y-6">
@@ -4359,10 +4380,16 @@ export default function CreateInvoicePage() {
                   </div>
                 )}
                 {applyGst && (
-                  <div className="flex justify-between text-[9px] text-gray-500">
-                    <span>Inclusive GST ({invoiceData.gst_percentage}%)</span>
-                    <span>₹{Math.round(gstAmount).toLocaleString('en-IN')}</span>
-                  </div>
+                  <>
+                    <div className="flex justify-between text-[9px] text-gray-500">
+                      <span>Base Amount</span>
+                      <span>₹{Math.round(baseAmountBeforeGst).toLocaleString('en-IN')}</span>
+                    </div>
+                    <div className="flex justify-between text-[9px] text-gray-500">
+                      <span>GST ({invoiceData.gst_percentage}%, incl.)</span>
+                      <span>₹{Math.round(gstAmount).toLocaleString('en-IN')}</span>
+                    </div>
+                  </>
                 )}
                 {invoiceData.invoice_type === "rental" && securityDeposit > 0 && (
                   <div className="flex justify-between">
@@ -4438,10 +4465,13 @@ export default function CreateInvoicePage() {
             <div className="text-[9px] text-gray-700 font-bold mb-1 uppercase tracking-wide border-b border-gray-300 pb-0.5">Terms &amp; Conditions</div>
             <div className="text-[8px] text-gray-600 leading-tight">
               {invoiceData.invoice_type === "sale" ? (
-                <ul className="list-disc list-inside space-y-0.5">
-                  <li>Products purchased under the sale category are non-returnable and non-exchangeable.</li>
-                  <li>This agreement and any related matters shall be governed by the jurisdiction of Vadodara, Gujarat.</li>
-                </ul>
+                <ol className="list-decimal list-inside space-y-0.5">
+                  <li>Sale items cannot be returned.</li>
+                  <li>Exchange is available within 2 days of the invoice date.</li>
+                  <li>Please keep the original invoice for any exchange.</li>
+                  <li>Final invoice &amp; product will be delivered after total amount is paid.</li>
+                  <li>All disputes, if any, are subject to Vadodara, Gujarat jurisdiction only.</li>
+                </ol>
               ) : (
                 <ol className="list-decimal list-inside space-y-0.5">
                   <li>All product selections and order details are considered approved by the customer at the time of booking. Any changes after confirmation may not be possible, especially close to the event date.</li>
