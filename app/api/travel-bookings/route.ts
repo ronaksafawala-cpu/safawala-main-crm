@@ -44,6 +44,13 @@ export async function GET(request: NextRequest) {
       const start = `${month}-01`
       const end = `${month}-31`
       orderQ = orderQ.gte("event_date", start).lte("event_date", end)
+    } else {
+      // Without an explicit month filter, bound the window to the recent past
+      // through the future so a large backlog of old "confirmed" bookings
+      // can't push genuinely upcoming events past the row limit.
+      const windowStart = new Date()
+      windowStart.setDate(windowStart.getDate() - 30)
+      orderQ = orderQ.gte("event_date", windowStart.toISOString().slice(0, 10))
     }
 
     const { data: orders, error: ordersErr } = await orderQ
@@ -119,11 +126,14 @@ export async function POST(request: NextRequest) {
     if (booking_id) {
       const { data: existing } = await supabaseServer
         .from("travel_bookings")
-        .select("id")
+        .select("id, franchise_id")
         .eq("booking_id", booking_id)
         .maybeSingle()
 
       if (existing) {
+        if (auth.user!.role !== "super_admin" && existing.franchise_id !== franchiseId) {
+          return NextResponse.json({ error: "Unauthorized: Can only update travel bookings in your own franchise" }, { status: 403 })
+        }
         // Update instead
         const { data, error } = await supabaseServer
           .from("travel_bookings")
@@ -162,13 +172,24 @@ export async function PATCH(request: NextRequest) {
 
   try {
     const body = await request.json()
-    const { id, ...updates } = body
+    const { id, stylist_id, status, notes, documents } = body
 
     if (!id) return NextResponse.json({ success: false, error: "Missing id" }, { status: 400 })
 
+    const { data: existing } = await supabaseServer
+      .from("travel_bookings")
+      .select("id, franchise_id")
+      .eq("id", id)
+      .maybeSingle()
+
+    if (!existing) return NextResponse.json({ success: false, error: "Travel booking not found" }, { status: 404 })
+    if (auth.user!.role !== "super_admin" && existing.franchise_id !== auth.user!.franchise_id) {
+      return NextResponse.json({ error: "Unauthorized: Can only update travel bookings in your own franchise" }, { status: 403 })
+    }
+
     const { data, error } = await supabaseServer
       .from("travel_bookings")
-      .update(updates)
+      .update({ stylist_id, status, notes, documents })
       .eq("id", id)
       .select()
       .single()
