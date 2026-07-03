@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, useCallback } from "react"
+import { useEffect, useState, useCallback, useMemo } from "react"
 import { useRouter } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -14,7 +14,7 @@ import {
   Calendar, Users, Package, DollarSign, Plus, Eye, Crown, RefreshCw, Search,
   TrendingUp, TrendingDown, AlertCircle, Clock, CheckCircle2, XCircle,
   ArrowUpRight, ArrowDownRight, Minus, ShoppingCart, Box, Truck, RotateCcw,
-  MapPin, ClipboardList
+  MapPin, ClipboardList, Bell, User as UserIcon
 } from "lucide-react"
 import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
@@ -246,6 +246,67 @@ export default function DashboardPage() {
     }
   }, [])
 
+  // Department flow order used by the work-orders widget (Booking -> ... -> Accounts)
+  const DEPARTMENT_FLOW = [
+    { key: "warehouse", label: "Warehouse" },
+    { key: "packing", label: "Packing" },
+    { key: "dispatch", label: "Dispatch" },
+    { key: "event_team", label: "Event Team" },
+    { key: "returns", label: "Returns" },
+    { key: "accounts", label: "Accounts" },
+  ]
+
+  // Pending task count per department, across all active work orders — the "whole business" strip
+  const departmentCounts = useMemo(() => {
+    const counts: Record<string, number> = {}
+    DEPARTMENT_FLOW.forEach((d) => { counts[d.key] = 0 })
+    workOrders.forEach((wo) => {
+      (wo.work_order_tasks || []).forEach((t: any) => {
+        if (t && t.status !== "completed" && t.status !== "cancelled" && counts[t.department] !== undefined) {
+          counts[t.department]++
+        }
+      })
+    })
+    return counts
+  }, [workOrders])
+
+  const getSortedTasks = (wo: any) => {
+    const tasks = wo.work_order_tasks || []
+    const order = DEPARTMENT_FLOW.map((d) => d.key)
+    return [...tasks].sort((a: any, b: any) => order.indexOf(a.department) - order.indexOf(b.department))
+  }
+
+  const getActiveTask = (wo: any) => {
+    const sorted = getSortedTasks(wo)
+    return sorted.find((t: any) => t.status !== "completed" && t.status !== "cancelled") || sorted[sorted.length - 1]
+  }
+
+  const [remindingIds, setRemindingIds] = useState<Set<string>>(new Set())
+
+  const handleRemind = async (taskId: string) => {
+    if (!taskId || remindingIds.has(taskId)) return
+    setRemindingIds((prev) => new Set(prev).add(taskId))
+    try {
+      const res = await fetch(`/api/work-orders/tasks/${taskId}/remind`, { method: "POST" })
+      const data = await res.json()
+      if (res.ok) {
+        toast.success(`Reminded ${data.notified?.join(", ") || "the team"}`)
+      } else {
+        toast.error(data.error || "Failed to send reminder")
+      }
+    } catch (e) {
+      toast.error("Failed to send reminder")
+    } finally {
+      setTimeout(() => {
+        setRemindingIds((prev) => {
+          const next = new Set(prev)
+          next.delete(taskId)
+          return next
+        })
+      }, 10000)
+    }
+  }
+
   if (!user) return (
     <DashboardErrorBoundary>
       <DashboardLayout>
@@ -459,24 +520,31 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Work Orders Board - Displayed above Calendar */}
+        {/* Business Flow — every booking's journey from warehouse to accounts, displayed above the calendar */}
         {user?.permissions?.bookings && (
           <Card className="bg-white border-slate-100 shadow-sm">
-            <CardHeader className="pb-3 flex flex-row items-center justify-between">
-              <div>
-                <CardTitle className="text-base font-extrabold flex items-center gap-2">
-                  <ClipboardList className="h-5 w-5 text-indigo-600 animate-pulse" />
-                  Active Operations & Work Orders
-                </CardTitle>
-                <CardDescription className="text-xs">
-                  Packings, Dispatches, and Deliveries currently in progress
-                </CardDescription>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base font-extrabold flex items-center gap-2">
+                <ClipboardList className="h-5 w-5 text-indigo-600" />
+                Business Flow
+              </CardTitle>
+              <CardDescription className="text-xs">
+                Every active booking, which department it's in, and who's on it
+              </CardDescription>
+              {/* Department load strip — whole-business glance */}
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {DEPARTMENT_FLOW.map((d) => (
+                  <span
+                    key={d.key}
+                    className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full bg-slate-50 border border-slate-200 text-slate-600"
+                  >
+                    {d.label}
+                    <span className={`px-1.5 rounded-full ${departmentCounts[d.key] > 0 ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-500'}`}>
+                      {departmentCounts[d.key] || 0}
+                    </span>
+                  </span>
+                ))}
               </div>
-              <Link href="/work-orders">
-                <Button size="sm" variant="ghost" className="text-xs font-semibold text-indigo-600 hover:text-indigo-700 p-0 h-auto">
-                  View Board →
-                </Button>
-              </Link>
             </CardHeader>
             <CardContent>
               {loadingWorkOrders ? (
@@ -488,19 +556,9 @@ export default function DashboardPage() {
                   {workOrders
                     .filter(wo => wo && wo.status !== 'completed' && wo.status !== 'cancelled')
                     .map((wo) => {
-                      const totalTasks = wo.work_order_tasks?.length || 0
-                      const completedTasks = wo.work_order_tasks?.filter((t: any) => t && (t.status === 'completed' || t.status === 'picked')).length || 0
-                      const progressPct = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0
                       const isRental = wo.booking_source === 'product_orders' || wo.booking_source === 'package_bookings'
-
-                      const getPriorityColor = (dateStr: string | null) => {
-                        if (!dateStr) return "bg-slate-100 text-slate-700 border-slate-200"
-                        const diffDays = Math.ceil((new Date(dateStr).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
-                        if (diffDays <= 1) return "bg-red-100 text-red-800 border-red-200"
-                        if (diffDays <= 3) return "bg-orange-100 text-orange-800 border-orange-200"
-                        if (diffDays <= 7) return "bg-yellow-100 text-yellow-800 border-yellow-200"
-                        return "bg-green-100 text-green-800 border-green-200"
-                      }
+                      const sortedTasks = getSortedTasks(wo)
+                      const activeTask = getActiveTask(wo)
 
                       const getPriorityLabel = (dateStr: string | null) => {
                         if (!dateStr) return "Low"
@@ -522,6 +580,7 @@ export default function DashboardPage() {
                       }
 
                       const isUrgent = getPriorityLabel(wo.event_date).includes("Critical")
+                      const isReminding = activeTask?.id ? remindingIds.has(activeTask.id) : false
 
                       return (
                         <div
@@ -553,43 +612,64 @@ export default function DashboardPage() {
                               </div>
                               <p className="text-sm font-bold text-slate-800 line-clamp-1">{wo.customer_name || 'N/A'}</p>
                             </div>
-                            <Badge className={
-                              wo.status === 'new'
-                                ? 'bg-blue-50 text-blue-700 border-blue-100 shrink-0'
-                                : 'bg-amber-50 text-amber-700 border-amber-100 shrink-0'
-                            } variant="outline">
-                              {wo.status === 'new' ? 'New' : 'In Progress'}
-                            </Badge>
+                            <span className="flex items-center gap-1 text-[10px] text-slate-500 shrink-0">
+                              <Calendar className="h-3 w-3 text-slate-400" />
+                              {formattedDate || 'N/A'}
+                            </span>
+                          </div>
+
+                          <div className="px-4 pb-2">
+                            {/* Department stage tracker */}
+                            <div className="flex items-center gap-1">
+                              {DEPARTMENT_FLOW.map((d, idx) => {
+                                const task = sortedTasks.find((t: any) => t.department === d.key)
+                                const done = task && (task.status === 'completed' || task.status === 'picked')
+                                const active = task && task.id === activeTask?.id && !done
+                                return (
+                                  <div key={d.key} className="flex items-center flex-1">
+                                    <div
+                                      title={`${d.label}${task ? ` — ${task.status}` : ' — n/a'}`}
+                                      className={`h-2 w-2 rounded-full shrink-0 ${
+                                        done ? 'bg-emerald-500' : active ? 'bg-indigo-600 animate-pulse' : 'bg-slate-200'
+                                      }`}
+                                    />
+                                    {idx < DEPARTMENT_FLOW.length - 1 && (
+                                      <div className={`h-0.5 flex-1 ${done ? 'bg-emerald-300' : 'bg-slate-200'}`} />
+                                    )}
+                                  </div>
+                                )
+                              })}
+                            </div>
                           </div>
 
                           <div className="pb-3 px-4 space-y-2">
                             <div className="flex items-center justify-between gap-2 border-y py-2 text-[11px] text-slate-500">
                               <span className="flex items-center gap-1">
-                                <Calendar className="h-3 w-3 text-slate-400" />
-                                Event: {formattedDate || 'N/A'}
+                                <UserIcon className="h-3 w-3 text-slate-400" />
+                                {activeTask
+                                  ? `${DEPARTMENT_FLOW.find(d => d.key === activeTask.department)?.label || activeTask.department}: `
+                                  : ''}
+                                <span className="font-semibold text-slate-700">
+                                  {activeTask?.assignee_name || 'Unassigned'}
+                                </span>
                               </span>
-                              <Badge variant="outline" className={`text-[9px] border font-bold ${getPriorityColor(wo.event_date)}`}>
-                                {getPriorityLabel(wo.event_date)}
-                              </Badge>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={!activeTask?.id || isReminding}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  if (activeTask?.id) handleRemind(activeTask.id)
+                                }}
+                                className="h-6 px-2 text-[10px] font-bold text-indigo-600 border-indigo-200 hover:bg-indigo-50"
+                              >
+                                <Bell className="h-3 w-3 mr-1" />
+                                {isReminding ? 'Reminded' : 'Remind'}
+                              </Button>
                             </div>
 
-                            {totalTasks > 0 && (
-                              <div className="space-y-1">
-                                <div className="flex items-center justify-between text-[10px] font-bold text-slate-600">
-                                  <span>Operations Progress</span>
-                                  <span>{completedTasks}/{totalTasks} ({progressPct}%)</span>
-                                </div>
-                                <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
-                                  <div
-                                    className={`h-full transition-all duration-300 ${isRental ? 'bg-indigo-600' : 'bg-emerald-600'}`}
-                                    style={{ width: `${progressPct}%` }}
-                                  />
-                                </div>
-                              </div>
-                            )}
-
                             <div className="flex items-center justify-end text-[11px] text-indigo-600 font-bold pt-1 gap-0.5">
-                              View Work Order Details
+                              View Details
                               <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
                             </div>
                           </div>
