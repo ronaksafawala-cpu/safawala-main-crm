@@ -6,7 +6,7 @@ import {
   Users, Phone, MapPin, Calendar, Search, RefreshCw, Filter,
   CheckCircle, Clock, X, MessageSquare, ExternalLink,
   Copy, ChevronDown, Loader2, Plus, Edit2, Mail, Building2, Globe, Check,
-  Lock, Trash2, User, FileText, ArrowRight
+  Lock, Trash2, User, FileText, UserPlus
 } from "lucide-react"
 import { toast } from "sonner"
 import { validatePhoneWithCountry } from "@/lib/form-validation"
@@ -128,6 +128,104 @@ export default function LeadsPage() {
     }
   }
 
+  // Locked date PERSON/CITY/NOTE encoding (matches components/lock-date/lock-date-dialog.tsx)
+  const parseLockNote = (raw: string | null) => {
+    if (!raw) return { personName: "", city: "", note: "" }
+    const personMatch = raw.match(/^PERSON:\s*([^|]+)\|/)
+    const cityMatch = raw.match(/\|CITY:\s*([^|]+)(\||$)/)
+    const noteMatch = raw.match(/\|NOTE:\s*([\s\S]*)$/)
+    return {
+      personName: personMatch ? personMatch[1].trim() : "",
+      city: cityMatch ? cityMatch[1].trim() : "",
+      note: noteMatch ? noteMatch[1].trim() : (!personMatch ? raw : ""),
+    }
+  }
+
+  const handleStartEditLock = (ld: any) => {
+    const parsed = parseLockNote(ld.notes)
+    setEditLockForm({
+      personName: parsed.personName,
+      city: parsed.city && parsed.city !== "—" ? parsed.city : "",
+      whatsapp_number: ld.whatsapp_number || "",
+      note: parsed.note,
+    })
+    setEditingLockId(ld.id)
+  }
+
+  const handleSaveLockEdit = async (id: string) => {
+    if (!editLockForm.personName.trim()) {
+      toast.error("Person name is required")
+      return
+    }
+    setSavingLockId(id)
+    try {
+      const encodedNotes = `PERSON: ${editLockForm.personName.trim()}|CITY: ${editLockForm.city.trim() || "—"}|NOTE: ${editLockForm.note.trim()}`
+      const res = await fetch(`/api/locked-dates?id=${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ whatsapp_number: editLockForm.whatsapp_number || null, notes: encodedNotes }),
+      })
+      if (res.ok) {
+        const { data } = await res.json()
+        setLockedDates((prev) => prev.map((ld) => (ld.id === id ? { ...ld, ...data } : ld)))
+        setEditingLockId(null)
+        toast.success("Locked date updated")
+      } else {
+        toast.error("Failed to update locked date")
+      }
+    } catch {
+      toast.error("Failed to update locked date")
+    } finally {
+      setSavingLockId(null)
+    }
+  }
+
+  const handleConvertLockToCustomer = async (ld: any) => {
+    const parsed = parseLockNote(ld.notes)
+    if (!parsed.personName.trim()) {
+      toast.error("Add a person name before converting to a customer")
+      return
+    }
+    const phone = (ld.whatsapp_number || "").replace(/\D/g, "")
+    if (phone.length < 10) {
+      toast.error("Add a valid WhatsApp number before converting to a customer")
+      return
+    }
+    setConvertingLockId(ld.id)
+    try {
+      const existingRes = await fetch(`/api/customers?search=${encodeURIComponent(phone)}`)
+      const existing = existingRes.ok ? await existingRes.json() : null
+      if (existing?.success && existing.data?.length > 0) {
+        setConvertedLockIds((prev) => new Set(prev).add(ld.id))
+        toast.info(`${parsed.personName} is already a customer`)
+        return
+      }
+
+      const res = await fetch("/api/customers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: parsed.personName.trim(),
+          phone: ld.whatsapp_number,
+          whatsapp: ld.whatsapp_number,
+          city: parsed.city && parsed.city !== "—" ? parsed.city : undefined,
+          notes: parsed.note || undefined,
+        }),
+      })
+      if (res.ok) {
+        setConvertedLockIds((prev) => new Set(prev).add(ld.id))
+        toast.success(`${parsed.personName} added to Customers`)
+      } else {
+        const data = await res.json().catch(() => ({}))
+        toast.error(data.error || "Failed to convert to customer")
+      }
+    } catch {
+      toast.error("Failed to convert to customer")
+    } finally {
+      setConvertingLockId(null)
+    }
+  }
+
   // Master Data
   const [currentUser, setCurrentUser] = useState<any>(null)
   const [staffMembers, setStaffMembers] = useState<any[]>([])
@@ -153,6 +251,11 @@ export default function LeadsPage() {
   const [lockedDates, setLockedDates] = useState<any[]>([])
   const [loadingLocks, setLoadingLocks] = useState(false)
   const [deletingLockId, setDeletingLockId] = useState<string | null>(null)
+  const [editingLockId, setEditingLockId] = useState<string | null>(null)
+  const [editLockForm, setEditLockForm] = useState({ personName: "", city: "", whatsapp_number: "", note: "" })
+  const [savingLockId, setSavingLockId] = useState<string | null>(null)
+  const [convertingLockId, setConvertingLockId] = useState<string | null>(null)
+  const [convertedLockIds, setConvertedLockIds] = useState<Set<string>>(new Set())
 
   // Details Edit States
   const [isEditingDetails, setIsEditingDetails] = useState(false)
@@ -941,20 +1044,12 @@ export default function LeadsPage() {
 
         {/* ─── Locked Dates Section ─── */}
         <div>
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <Lock className="h-5 w-5 text-green-500" />
-              <h2 className="text-lg font-semibold text-gray-900">Locked Dates</h2>
-              {lockedDates.length > 0 && (
-                <Badge className="text-xs bg-green-100 text-green-800 border-green-200 hover:bg-green-100">{lockedDates.filter(ld => ld.locked_date >= format(new Date(), "yyyy-MM-dd")).length} upcoming</Badge>
-              )}
-            </div>
-            <a
-              href="/lock-dates"
-              className="text-sm text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-1"
-            >
-              Manage All <ArrowRight className="h-3.5 w-3.5" />
-            </a>
+          <div className="flex items-center gap-2 mb-4">
+            <Lock className="h-5 w-5 text-green-500" />
+            <h2 className="text-lg font-semibold text-gray-900">Locked Dates</h2>
+            {lockedDates.length > 0 && (
+              <Badge className="text-xs bg-green-100 text-green-800 border-green-200 hover:bg-green-100">{lockedDates.filter(ld => ld.locked_date >= format(new Date(), "yyyy-MM-dd")).length} upcoming</Badge>
+            )}
           </div>
 
           {loadingLocks ? (
@@ -966,23 +1061,19 @@ export default function LeadsPage() {
               <CardContent className="flex flex-col items-center justify-center py-10 text-gray-400">
                 <Lock className="h-10 w-10 mb-2 opacity-20" />
                 <p className="text-sm">No upcoming locked dates</p>
-                <a href="/lock-dates" className="mt-2 text-xs text-indigo-500 hover:underline">Lock a date →</a>
               </CardContent>
             </Card>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 max-h-[560px] overflow-y-auto pr-1">
               {lockedDates
                 .filter(ld => ld.locked_date >= format(new Date(), "yyyy-MM-dd"))
-                .slice(0, 6)
                 .map(ld => {
-                  const rawNotes = ld.notes || ""
-                  const personMatch = rawNotes.match(/^PERSON:\s*([^|]+)\|/)
-                  const cityMatch = rawNotes.match(/\|CITY:\s*([^|]+)(\||$)/)
-                  const noteMatch = rawNotes.match(/\|NOTE:\s*([\s\S]*)$/)
-                  const personName = personMatch ? personMatch[1].trim() : ""
-                  const city = cityMatch ? cityMatch[1].trim() : ""
-                  const note = noteMatch ? noteMatch[1].trim() : (!personMatch ? rawNotes : "")
+                  const parsed = parseLockNote(ld.notes)
+                  const { personName, city, note } = parsed
                   const isToday = ld.locked_date === format(new Date(), "yyyy-MM-dd")
+                  const canManage = currentUser?.role === "franchise_admin" || currentUser?.role === "franchise_owner" || currentUser?.role === "super_admin"
+                  const isEditing = editingLockId === ld.id
+                  const isConverted = convertedLockIds.has(ld.id)
                   return (
                     <Card key={ld.id} className={`shadow-sm border ${isToday ? "border-green-300 bg-green-50" : "border-green-100 bg-white"}`}>
                       <CardContent className="p-4">
@@ -998,58 +1089,128 @@ export default function LeadsPage() {
                               {isToday && <span className="text-[10px] font-bold text-green-600 uppercase tracking-wide">TODAY</span>}
                             </div>
                           </div>
-                          {(currentUser?.role === "franchise_admin" || currentUser?.role === "franchise_owner" || currentUser?.role === "super_admin") && (
-                            <button
-                              onClick={async () => {
-                                setDeletingLockId(ld.id)
-                                try {
-                                  const res = await fetch(`/api/locked-dates?id=${ld.id}`, { method: "DELETE" })
-                                  if (res.ok) setLockedDates(prev => prev.filter(d => d.id !== ld.id))
-                                  else toast.error("Failed to unlock")
-                                } catch { toast.error("Error") }
-                                finally { setDeletingLockId(null) }
-                              }}
-                              disabled={deletingLockId === ld.id}
-                              className="text-red-300 hover:text-red-500 ml-1"
-                            >
-                              {deletingLockId === ld.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
-                            </button>
+                          {canManage && !isEditing && (
+                            <div className="flex items-center gap-2 shrink-0">
+                              <button
+                                onClick={() => handleStartEditLock(ld)}
+                                className="text-gray-400 hover:text-indigo-600"
+                                title="Edit"
+                              >
+                                <Edit2 className="h-3.5 w-3.5" />
+                              </button>
+                              <button
+                                onClick={async () => {
+                                  setDeletingLockId(ld.id)
+                                  try {
+                                    const res = await fetch(`/api/locked-dates?id=${ld.id}`, { method: "DELETE" })
+                                    if (res.ok) setLockedDates(prev => prev.filter(d => d.id !== ld.id))
+                                    else toast.error("Failed to unlock")
+                                  } catch { toast.error("Error") }
+                                  finally { setDeletingLockId(null) }
+                                }}
+                                disabled={deletingLockId === ld.id}
+                                className="text-red-300 hover:text-red-500"
+                                title="Delete"
+                              >
+                                {deletingLockId === ld.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Trash2 className="h-3.5 w-3.5" />}
+                              </button>
+                            </div>
                           )}
                         </div>
 
-                        {personName && (
-                          <div className="flex items-center gap-2 mt-1">
-                            <span className="text-xs font-semibold text-gray-700 flex items-center gap-1">
-                              <User className="h-3 w-3 text-indigo-500" /> {personName}
-                            </span>
-                            {city && city !== "—" && (
-                              <span className="text-xs text-gray-500 flex items-center gap-1">
-                                <MapPin className="h-3 w-3" /> {city}
-                              </span>
-                            )}
+                        {isEditing ? (
+                          <div className="mt-2 pt-2 border-t border-green-100 space-y-2">
+                            <Input
+                              value={editLockForm.personName}
+                              onChange={(e) => setEditLockForm(f => ({ ...f, personName: e.target.value }))}
+                              placeholder="Person name"
+                              className="h-8 text-xs"
+                            />
+                            <Input
+                              value={editLockForm.city}
+                              onChange={(e) => setEditLockForm(f => ({ ...f, city: e.target.value }))}
+                              placeholder="City"
+                              className="h-8 text-xs"
+                            />
+                            <Input
+                              value={editLockForm.whatsapp_number}
+                              onChange={(e) => setEditLockForm(f => ({ ...f, whatsapp_number: e.target.value }))}
+                              placeholder="WhatsApp number"
+                              className="h-8 text-xs"
+                            />
+                            <Textarea
+                              value={editLockForm.note}
+                              onChange={(e) => setEditLockForm(f => ({ ...f, note: e.target.value }))}
+                              placeholder="Note"
+                              rows={2}
+                              className="text-xs resize-none"
+                            />
+                            <div className="flex gap-2">
+                              <Button
+                                size="sm"
+                                onClick={() => handleSaveLockEdit(ld.id)}
+                                disabled={savingLockId === ld.id}
+                                className="h-7 text-xs bg-indigo-600 hover:bg-indigo-700"
+                              >
+                                {savingLockId === ld.id ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : null}
+                                Save
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setEditingLockId(null)}
+                                className="h-7 text-xs"
+                              >
+                                Cancel
+                              </Button>
+                            </div>
                           </div>
-                        )}
-                        {ld.whatsapp_number && (
-                          <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
-                            <Phone className="h-3 w-3" /> {ld.whatsapp_number}
-                          </p>
-                        )}
-                        {note && (
-                          <p className="text-xs text-gray-500 mt-1 truncate flex items-start gap-1">
-                            <FileText className="h-3 w-3 mt-0.5 shrink-0" /> {note}
-                          </p>
+                        ) : (
+                          <>
+                            {personName && (
+                              <div className="flex items-center gap-2 mt-1">
+                                <span className="text-xs font-semibold text-gray-700 flex items-center gap-1">
+                                  <User className="h-3 w-3 text-indigo-500" /> {personName}
+                                </span>
+                                {city && city !== "—" && (
+                                  <span className="text-xs text-gray-500 flex items-center gap-1">
+                                    <MapPin className="h-3 w-3" /> {city}
+                                  </span>
+                                )}
+                              </div>
+                            )}
+                            {ld.whatsapp_number && (
+                              <p className="text-xs text-green-600 mt-1 flex items-center gap-1">
+                                <Phone className="h-3 w-3" /> {ld.whatsapp_number}
+                              </p>
+                            )}
+                            {note && (
+                              <p className="text-xs text-gray-500 mt-1 truncate flex items-start gap-1">
+                                <FileText className="h-3 w-3 mt-0.5 shrink-0" /> {note}
+                              </p>
+                            )}
+                            {canManage && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={isConverted || convertingLockId === ld.id}
+                                onClick={() => handleConvertLockToCustomer(ld)}
+                                className="mt-2 h-7 text-xs w-full text-indigo-600 border-indigo-200 hover:bg-indigo-50"
+                              >
+                                {convertingLockId === ld.id ? (
+                                  <Loader2 className="h-3 w-3 mr-1 animate-spin" />
+                                ) : (
+                                  <UserPlus className="h-3 w-3 mr-1" />
+                                )}
+                                {isConverted ? "Customer" : "Convert to Customer"}
+                              </Button>
+                            )}
+                          </>
                         )}
                       </CardContent>
                     </Card>
                   )
                 })}
-            </div>
-          )}
-          {lockedDates.filter(ld => ld.locked_date >= format(new Date(), "yyyy-MM-dd")).length > 6 && (
-            <div className="mt-3 text-center">
-              <a href="/lock-dates" className="text-sm text-indigo-600 hover:underline font-medium">
-                View all {lockedDates.filter(ld => ld.locked_date >= format(new Date(), "yyyy-MM-dd")).length} locked dates →
-              </a>
             </div>
           )}
         </div>

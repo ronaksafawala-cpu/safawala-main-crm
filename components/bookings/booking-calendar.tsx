@@ -1002,15 +1002,10 @@ export function BookingCalendar({ franchiseId, compact = false, mini = false, on
 
             {/* 3rd Tab: Locked Dates */}
             <TabsContent value="locked" className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Lock className="w-4 h-4 text-green-500" />
-                  <span className="font-semibold text-sm text-green-700">All Locked Dates</span>
-                  <Badge className="text-xs bg-green-100 text-green-800 border-green-200 hover:bg-green-100">{lockedDateObjects.length}</Badge>
-                </div>
-                <Button size="sm" variant="outline" asChild className="text-xs h-7">
-                  <a href="/lock-dates">Manage All →</a>
-                </Button>
+              <div className="flex items-center gap-2">
+                <Lock className="w-4 h-4 text-green-500" />
+                <span className="font-semibold text-sm text-green-700">All Locked Dates</span>
+                <Badge className="text-xs bg-green-100 text-green-800 border-green-200 hover:bg-green-100">{lockedDateObjects.length}</Badge>
               </div>
 
               {lockedDateObjects.length === 0 ? (
