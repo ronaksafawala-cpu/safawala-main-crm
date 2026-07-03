@@ -47,10 +47,15 @@ interface DashboardStats {
   activeBookings: number
   totalCustomers: number
   totalRevenue: number
+  monthRevenue: number
+  yearRevenue: number
   monthlyGrowth: number
   lowStockItems: number
   conversionRate: number
   avgBookingValue: number
+  rentalBookingsCount: number
+  saleBookingsCount: number
+  activeLeadsCount: number
   revenueByMonth: Array<{ month: string; revenue: number }>
   bookingsByType: {
     package: number
@@ -524,43 +529,52 @@ export default function DashboardPage() {
             </Link>
           </div>
         ) : (
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-            <Card className="hover:shadow-md transition-shadow">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-5">
+            <Card className="hover:shadow-md transition-shadow flex flex-col">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Total Revenue</CardTitle>
                 <DollarSign className="h-4 w-4 text-green-600" />
               </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">₹{stats?.totalRevenue?.toLocaleString() || 0}</div>
-                <div className="flex items-center mt-1">
-                  {(stats?.monthlyGrowth || 0) >= 0 ? (
-                    <TrendingUp className="h-3 w-3 text-green-600 mr-1" />
-                  ) : (
-                    <TrendingDown className="h-3 w-3 text-red-600 mr-1" />
-                  )}
-                  <p className={`text-xs ${(stats?.monthlyGrowth || 0) >= 0 ? 'text-green-600' : 'text-red-600'}`}>
-                    {(stats?.monthlyGrowth || 0) >= 0 ? '+' : ''}{stats?.monthlyGrowth || 0}% from last month
-                  </p>
+              <CardContent className="flex-1 flex flex-col">
+                <div className="space-y-1 flex-1">
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>This Month</span>
+                    <span className="font-semibold text-slate-700">₹{(stats?.monthRevenue || 0).toLocaleString()}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-xs text-muted-foreground">
+                    <span>This Year</span>
+                    <span className="font-semibold text-slate-700">₹{(stats?.yearRevenue || 0).toLocaleString()}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-sm pt-1 border-t">
+                    <span className="font-semibold">Till Now</span>
+                    <span className="font-bold text-green-600">₹{(stats?.totalRevenue || 0).toLocaleString()}</span>
+                  </div>
                 </div>
+                <Link href="/reports" className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-700 mt-2 inline-flex items-center gap-0.5">
+                  View →
+                </Link>
               </CardContent>
             </Card>
 
             {user?.permissions?.bookings && (
-              <Card className="hover:shadow-md transition-shadow">
+              <Card className="hover:shadow-md transition-shadow flex flex-col">
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                  <CardTitle className="text-sm font-medium">Total Bookings</CardTitle>
+                  <CardTitle className="text-sm font-medium">Bookings</CardTitle>
                   <Calendar className="h-4 w-4 text-blue-600" />
                 </CardHeader>
-                <CardContent>
-                  <div className="text-2xl font-bold">{stats?.totalBookings || 0}</div>
-                  <p className="text-xs text-muted-foreground">
-                    {stats?.activeBookings || 0} active • {stats?.conversionRate || 0}% conversion
+                <CardContent className="flex-1 flex flex-col">
+                  <div className="text-2xl font-bold flex-1">{stats?.totalBookings || 0}</div>
+                  <p className="text-xs text-muted-foreground mb-2">
+                    {stats?.rentalBookingsCount || 0} Rent • {stats?.saleBookingsCount || 0} Sales
                   </p>
+                  <Link href="/bookings" className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-700 inline-flex items-center gap-0.5">
+                    View →
+                  </Link>
                 </CardContent>
               </Card>
             )}
 
-            <Card className="hover:shadow-md transition-shadow">
+            <Card className="hover:shadow-md transition-shadow flex flex-col">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Avg Booking Value</CardTitle>
                 <ShoppingCart className="h-4 w-4 text-purple-600" />
@@ -571,14 +585,31 @@ export default function DashboardPage() {
               </CardContent>
             </Card>
 
-            <Card className="hover:shadow-md transition-shadow">
+            <Card className="hover:shadow-md transition-shadow flex flex-col">
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Low Stock Alert</CardTitle>
                 <Package className="h-4 w-4 text-orange-600" />
               </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-orange-600">{stats?.lowStockItems || 0}</div>
-                <p className="text-xs text-muted-foreground">Items need restocking</p>
+              <CardContent className="flex-1 flex flex-col">
+                <div className="text-2xl font-bold text-orange-600 flex-1">{stats?.lowStockItems || 0}</div>
+                <p className="text-xs text-muted-foreground mb-2">Items need restocking</p>
+                <Link href="/inventory" className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-700 inline-flex items-center gap-0.5">
+                  View →
+                </Link>
+              </CardContent>
+            </Card>
+
+            <Card className="hover:shadow-md transition-shadow flex flex-col">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Leads</CardTitle>
+                <Users className="h-4 w-4 text-indigo-600" />
+              </CardHeader>
+              <CardContent className="flex-1 flex flex-col">
+                <div className="text-2xl font-bold text-indigo-600 flex-1">{stats?.activeLeadsCount || 0}</div>
+                <p className="text-xs text-muted-foreground mb-2">Active, not yet converted</p>
+                <Link href="/leads" className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-700 inline-flex items-center gap-0.5">
+                  View →
+                </Link>
               </CardContent>
             </Card>
           </div>

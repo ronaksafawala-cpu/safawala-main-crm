@@ -15,6 +15,10 @@ export async function GET(request: NextRequest) {
     const franchiseId = authContext!.user.franchise_id
     const isSuperAdmin = authContext!.user.role === 'super_admin'
     const supabase = createClient()
+    const daysParam = Number(request.nextUrl.searchParams.get("days") || 0)
+    const rangeStart = daysParam > 0
+      ? new Date(Date.now() - daysParam * 24 * 60 * 60 * 1000).toISOString()
+      : null
 
     console.log(`[Dashboard Stats API] Fetching stats for franchise: ${franchiseId}, isSuperAdmin: ${isSuperAdmin}`)
 
@@ -26,14 +30,14 @@ export async function GET(request: NextRequest) {
     // Fetch from BOTH package_bookings and product_orders (the actual booking sources)
     let packageQuery = supabase
       .from("package_bookings")
-      .select("id, status, total_amount, amount_paid, created_at, event_date, delivery_date, package_number", { count: 'exact' })
+      .select("id, franchise_id, status, total_amount, amount_paid, created_at, event_date, delivery_date, package_number", { count: 'exact' })
       .eq('is_quote', false)
       .eq('is_archived', false)
       .order('created_at', { ascending: false })
 
     let productQuery = supabase
       .from("product_orders")
-      .select("id, status, total_amount, amount_paid, created_at, event_date, delivery_date, order_number, booking_type", { count: 'exact' })
+      .select("id, franchise_id, status, total_amount, amount_paid, created_at, event_date, delivery_date, order_number, booking_type", { count: 'exact' })
       .or('is_quote.is.null,is_quote.eq.false')
       .eq('is_archived', false)
       .order('created_at', { ascending: false })
@@ -45,6 +49,10 @@ export async function GET(request: NextRequest) {
       console.log(`[Dashboard Stats API] Applied franchise filter: ${franchiseId}`)
     } else {
       console.log(`[Dashboard Stats API] Super admin mode - showing all stats`)
+    }
+    if (rangeStart) {
+      packageQuery = packageQuery.gte("created_at", rangeStart)
+      productQuery = productQuery.gte("created_at", rangeStart)
     }
 
     // Fetch both in parallel
@@ -130,6 +138,17 @@ export async function GET(request: NextRequest) {
       package: packageBookings.length,
       product: productBookings.length
     }
+
+    // Rental vs Sale split — package bookings are always rental bundles;
+    // product orders carry an explicit booking_type ('rental' | 'sale', defaults to rental)
+    const saleBookingsCount = productBookings.filter((b: any) => b.booking_type === 'sale').length
+    const rentalBookingsCount = packageBookings.length + (productBookings.length - saleBookingsCount)
+
+    // Revenue for the current calendar year
+    const startOfYear = new Date(now.getFullYear(), 0, 1)
+    const yearRevenue = bookings
+      .filter((b: any) => new Date(b.created_at) >= startOfYear)
+      .reduce((sum: number, b: any) => sum + (Number(b.total_amount) || 0), 0)
 
     // Pending actions
     const pendingPayments = bookings.filter((b: any) => b.status === 'pending_payment').length
@@ -273,6 +292,20 @@ export async function GET(request: NextRequest) {
       console.warn("[Dashboard Stats] Failed to query owner KPIs:", err)
     }
 
+    // Active leads (leads table) not yet converted — separate from the quotes-based newLeads KPI
+    let activeLeadsCount = 0
+    try {
+      let leadsQuery = supabase
+        .from("leads")
+        .select("id", { count: "exact", head: true })
+        .neq("status", "converted")
+      if (!isSuperAdmin && franchiseId) leadsQuery = leadsQuery.eq("franchise_id", franchiseId)
+      const { count: leadsCountResult } = await leadsQuery
+      activeLeadsCount = leadsCountResult || 0
+    } catch (err) {
+      console.warn("[Dashboard Stats] Failed to query active leads:", err)
+    }
+
     const todayStr = new Date().toISOString().slice(0, 10)
     const eventsTodayCount = bookings.filter((b: any) => 
       b.status === 'confirmed' && b.event_date && b.event_date === todayStr
@@ -282,16 +315,85 @@ export async function GET(request: NextRequest) {
       .filter((b: any) => b.status !== 'cancelled')
       .reduce((sum: number, b: any) => sum + Math.max(0, (Number(b.total_amount) || 0) - (Number(b.amount_paid) || 0)), 0)
 
+    const pendingPaymentCount = bookings.filter((b: any) =>
+      b.status !== "cancelled" && (Number(b.total_amount) || 0) > (Number(b.amount_paid) || 0)
+    ).length
+    const completedBookings = bookings.filter((b: any) => ["completed", "order_complete", "returned"].includes(b.status)).length
+    const recentOrders = [...bookings]
+      .sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+      .slice(0, 8)
+
+    const franchiseIds = [...new Set(bookings.map((b: any) => b.franchise_id).filter(Boolean))]
+    const franchiseMap = new Map<string, any>()
+    if (franchiseIds.length > 0) {
+      const { data: franchiseRows } = await supabase
+        .from("franchises")
+        .select("id, name, code, commission_rate")
+        .in("id", franchiseIds)
+      franchiseRows?.forEach((row: any) => franchiseMap.set(row.id, row))
+    }
+    const performanceMap = new Map<string, { name: string; code: string; commissionRate: number; revenue: number; bookings: number; commission: number }>()
+    for (const booking of bookings) {
+      const id = booking.franchise_id || "unassigned"
+      const franchise = franchiseMap.get(id)
+      const current = performanceMap.get(id) || {
+        name: franchise?.name || "Unassigned",
+        code: franchise?.code || "—",
+        commissionRate: Number(franchise?.commission_rate) || 0,
+        revenue: 0,
+        bookings: 0,
+        commission: 0,
+      }
+      const revenue = Number(booking.total_amount) || 0
+      current.revenue += revenue
+      current.bookings += 1
+      current.commission += revenue * (current.commissionRate / 100)
+      performanceMap.set(id, current)
+    }
+    const franchisePerformance = [...performanceMap.values()].sort((a, b) => b.revenue - a.revenue)
+
+    let expenseBreakdown: Array<{ name: string; value: number }> = []
+    try {
+      let expenseQuery = supabase
+        .from("financial_transactions")
+        .select("amount, transaction_date, category:financial_categories(name)")
+        .eq("type", "expense")
+      if (rangeStart) expenseQuery = expenseQuery.gte("transaction_date", rangeStart.slice(0, 10))
+      if (!isSuperAdmin && franchiseId) expenseQuery = expenseQuery.eq("franchise_id", franchiseId)
+      const { data: expenseRows } = await expenseQuery
+      const expenseMap = new Map<string, number>()
+      for (const row of expenseRows || []) {
+        const category = Array.isArray(row.category) ? row.category[0] : row.category
+        const name = category?.name || "Uncategorized"
+        expenseMap.set(name, (expenseMap.get(name) || 0) + (Number(row.amount) || 0))
+      }
+      expenseBreakdown = [...expenseMap.entries()].map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value)
+    } catch (error) {
+      console.warn("[Dashboard Stats] Failed to load expense breakdown:", error)
+    }
+
     const stats = {
       totalBookings: bookingsCount,
       activeBookings,
       totalCustomers,
       totalRevenue,
+      monthRevenue: revenueByMonth[revenueByMonth.length - 1]?.revenue || 0,
+      yearRevenue,
+      rentalBookingsCount,
+      saleBookingsCount,
+      activeLeadsCount,
+      completedBookings,
+      todayBookings: bookings.filter((b: any) => String(b.created_at || "").startsWith(todayStr)).length,
+      pendingPaymentCount,
       monthlyGrowth: Math.round(monthlyGrowth),
       lowStockItems,
       conversionRate: Math.round(conversionRate),
       avgBookingValue: Math.round(avgBookingValue),
       revenueByMonth,
+      franchisePerformance,
+      expenseBreakdown,
+      recentOrders,
+      commissionEarned: Math.round(franchisePerformance.reduce((sum, row) => sum + row.commission, 0)),
       bookingsByType: bookingsByType,
       pendingActions: {
         payments: pendingPayments,
