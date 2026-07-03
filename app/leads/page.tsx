@@ -943,10 +943,10 @@ export default function LeadsPage() {
         <div>
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
-              <Lock className="h-5 w-5 text-red-500" />
+              <Lock className="h-5 w-5 text-green-500" />
               <h2 className="text-lg font-semibold text-gray-900">Locked Dates</h2>
               {lockedDates.length > 0 && (
-                <Badge variant="destructive" className="text-xs">{lockedDates.filter(ld => ld.locked_date >= format(new Date(), "yyyy-MM-dd")).length} upcoming</Badge>
+                <Badge className="text-xs bg-green-100 text-green-800 border-green-200 hover:bg-green-100">{lockedDates.filter(ld => ld.locked_date >= format(new Date(), "yyyy-MM-dd")).length} upcoming</Badge>
               )}
             </div>
             <a
@@ -984,18 +984,18 @@ export default function LeadsPage() {
                   const note = noteMatch ? noteMatch[1].trim() : (!personMatch ? rawNotes : "")
                   const isToday = ld.locked_date === format(new Date(), "yyyy-MM-dd")
                   return (
-                    <Card key={ld.id} className={`shadow-sm border ${isToday ? "border-red-300 bg-red-50" : "border-red-100 bg-white"}`}>
+                    <Card key={ld.id} className={`shadow-sm border ${isToday ? "border-green-300 bg-green-50" : "border-green-100 bg-white"}`}>
                       <CardContent className="p-4">
                         <div className="flex items-start justify-between">
                           <div className="flex items-center gap-2 mb-2">
-                            <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${isToday ? "bg-red-200" : "bg-red-100"}`}>
-                              <Lock className={`h-3.5 w-3.5 ${isToday ? "text-red-700" : "text-red-500"}`} />
+                            <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${isToday ? "bg-green-200" : "bg-green-100"}`}>
+                              <Lock className={`h-3.5 w-3.5 ${isToday ? "text-green-700" : "text-green-500"}`} />
                             </div>
                             <div>
-                              <div className={`text-sm font-bold ${isToday ? "text-red-700" : "text-gray-800"}`}>
+                              <div className={`text-sm font-bold ${isToday ? "text-green-700" : "text-gray-800"}`}>
                                 {format(new Date(ld.locked_date + "T00:00:00"), "EEE, dd MMM yyyy")}
                               </div>
-                              {isToday && <span className="text-[10px] font-bold text-red-600 uppercase tracking-wide">TODAY</span>}
+                              {isToday && <span className="text-[10px] font-bold text-green-600 uppercase tracking-wide">TODAY</span>}
                             </div>
                           </div>
                           {(currentUser?.role === "franchise_admin" || currentUser?.role === "franchise_owner" || currentUser?.role === "super_admin") && (

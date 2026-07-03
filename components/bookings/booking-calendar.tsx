@@ -63,6 +63,9 @@ export function BookingCalendar({ franchiseId, compact = false, mini = false, on
   const [lockedDates, setLockedDates] = React.useState<string[]>([])
   const [lockedDateObjects, setLockedDateObjects] = React.useState<any[]>([])
   const [deletingLockId, setDeletingLockId] = React.useState<string | null>(null)
+  const [editingLockId, setEditingLockId] = React.useState<string | null>(null)
+  const [editLockForm, setEditLockForm] = React.useState<{ whatsapp_number: string; notes: string }>({ whatsapp_number: '', notes: '' })
+  const [savingLockId, setSavingLockId] = React.useState<string | null>(null)
   const [userRole, setUserRole] = React.useState<string>("")
   const [modificationBookings, setModificationBookings] = React.useState<BookingData[]>([])
   const [activeTab, setActiveTab] = React.useState<'events' | 'modifications' | 'locked'>('events')
@@ -70,6 +73,7 @@ export function BookingCalendar({ franchiseId, compact = false, mini = false, on
   const [searchTerm, setSearchTerm] = React.useState("")
   const [currentMonth, setCurrentMonth] = React.useState<Date>(new Date())
   const [selectedCalendarBooking, setSelectedCalendarBooking] = React.useState<BookingData | null>(null)
+  const [convertTypeBooking, setConvertTypeBooking] = React.useState<BookingData | null>(null)
   
   // Items display dialog states - matching bookings page architecture
   const [showProductDialog, setShowProductDialog] = React.useState(false)
@@ -122,6 +126,29 @@ export function BookingCalendar({ franchiseId, compact = false, mini = false, on
       })
     } catch {} finally {
       setDeletingLockId(null)
+    }
+  }
+
+  const handleSaveLockEdit = async (id: string) => {
+    setSavingLockId(id)
+    try {
+      const res = await fetch(`/api/locked-dates?id=${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editLockForm)
+      })
+      if (res.ok) {
+        const { data } = await res.json()
+        setLockedDateObjects(prev => prev.map(ld => ld.id === id ? { ...ld, ...data } : ld))
+        setEditingLockId(null)
+        toast({ title: 'Updated', description: 'Locked date updated successfully' })
+      } else {
+        toast({ title: 'Error', description: 'Failed to update', variant: 'destructive' })
+      }
+    } catch {
+      toast({ title: 'Error', variant: 'destructive' })
+    } finally {
+      setSavingLockId(null)
     }
   }
 
@@ -685,11 +712,11 @@ export function BookingCalendar({ franchiseId, compact = false, mini = false, on
           setShowDateDetails(open)
         }}
       >
-        <DialogContent className={`${compact ? 'max-w-md' : 'max-w-7xl'} max-h-[90vh] overflow-y-auto`}>
+        <DialogContent className={`${compact ? 'max-w-md' : 'max-w-4xl'} max-h-[90vh] overflow-y-auto`}>
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 flex-wrap">
               <CalendarIcon className="w-5 h-5" />
-              Bookings & Modifications - {selectedDate && format(selectedDate, "MMMM dd, yyyy")}
+              Bookings — {selectedDate && format(selectedDate, "MMMM dd, yyyy")}
             </DialogTitle>
           </DialogHeader>
 
@@ -709,7 +736,7 @@ export function BookingCalendar({ franchiseId, compact = false, mini = false, on
               </TabsTrigger>
             </TabsList>
 
-            <TabsContent value="events" className="space-y-4">
+            <TabsContent value="events" className="space-y-3">
               {dateBookings.length === 0 ? (
                 <div className="text-center py-12 bg-white dark:bg-slate-900 border rounded-xl shadow-sm">
                   <CalendarIcon className="w-12 h-12 mx-auto mb-3 text-slate-300 dark:text-slate-700" />
@@ -721,232 +748,185 @@ export function BookingCalendar({ franchiseId, compact = false, mini = false, on
                   </div>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 min-h-[480px]">
-                  {/* Left Pane: Bookings list on this date */}
-                  <div className="md:col-span-1 border-r pr-4 border-slate-100 dark:border-slate-800 max-h-[500px] overflow-y-auto flex flex-col gap-2">
-                    <div className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-2">Bookings ({filteredDateBookings.length})</div>
-                    <div className="mb-2 relative">
+                <div className="space-y-3">
+                  {/* Print All button + search bar */}
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="relative flex-1 max-w-xs">
                       <Search className="w-3.5 h-3.5 absolute left-2.5 top-2.5 text-muted-foreground" />
                       <Input
-                        placeholder="Search name, venue..."
+                        placeholder="Search name, booking..."
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        className="pl-8 h-8 text-xs bg-slate-50 dark:bg-slate-900/50"
+                        className="pl-8 h-8 text-xs bg-slate-50"
                       />
                     </div>
-                    {filteredDateBookings.map((b) => {
-                      const isSelected = selectedCalendarBooking?.id === b.id
-                      const isRental = (b as any).type === "rental"
-                      const isPackage = (b as any).booking_kind === "package" || (b as any).type === "package"
-                      
-                      return (
-                        <div
-                          key={b.id}
-                          onClick={() => setSelectedCalendarBooking(b)}
-                          className={`p-3 rounded-xl border text-left cursor-pointer transition-all ${
-                            isSelected 
-                              ? "border-indigo-600 bg-indigo-50/40 dark:bg-indigo-950/20 shadow-sm"
-                              : "border-slate-150 dark:border-slate-800 hover:bg-slate-50 dark:hover:bg-slate-800/40"
-                          }`}
-                        >
-                          <div className="flex justify-between items-center mb-1">
-                            <span className="text-xs font-extrabold text-indigo-600 dark:text-indigo-400">{b.booking_number}</span>
-                            <Badge variant={isRental ? "info" : isPackage ? "secondary" : "success"} className="text-[9px] px-1 py-0.5">
-                              {isRental ? "Rental" : isPackage ? "Package" : "Sale"}
-                            </Badge>
-                          </div>
-                          <div className="text-xs font-bold text-slate-700 dark:text-slate-300 truncate">{b.customer_name}</div>
-                          <div className="text-[10px] text-slate-400 mt-0.5">{b.event_type}</div>
-                        </div>
-                      )
-                    })}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      className="h-8 text-xs font-semibold gap-1.5 border-indigo-200 text-indigo-700 hover:bg-indigo-50"
+                      onClick={() => {
+                        const printWindow = window.open("", "_blank")
+                        if (!printWindow) return
+                        const rows = filteredDateBookings.map((b: any, i: number) => {
+                          const safaInfo = b.package_details
+                            ? `${b.package_details.name}${b.variant_name ? ' / ' + b.variant_name : ''} (${b.total_safas || 0} safas${b.extra_safas ? '+' + b.extra_safas : ''})`
+                            : b.total_safas ? `${b.total_safas} safas` : 'No items'
+                          return `<tr style="background:${i%2===0?'#fff':'#f9fafb'}">
+                            <td style="border:1px solid #e5e7eb;padding:8px;font-weight:600;color:#4f46e5">${b.booking_number}</td>
+                            <td style="border:1px solid #e5e7eb;padding:8px">${b.customer_name}<br/><span style="color:#6b7280;font-size:11px">${b.customer_phone||''}</span></td>
+                            <td style="border:1px solid #e5e7eb;padding:8px">${b.event_type||'-'}<br/><span style="color:#6b7280;font-size:11px">${b.event_date||''}</span></td>
+                            <td style="border:1px solid #e5e7eb;padding:8px">${safaInfo}</td>
+                            <td style="border:1px solid #e5e7eb;padding:8px">${b.venue_name||'-'}</td>
+                            <td style="border:1px solid #e5e7eb;padding:8px;text-align:right">&#8377;${(b.total_amount||0).toLocaleString()}</td>
+                            <td style="border:1px solid #e5e7eb;padding:8px">${b.status||'-'}</td>
+                          </tr>`
+                        }).join('')
+                        printWindow.document.write(`<html><head><title>Bookings \u2013 ${selectedDate ? format(selectedDate,'dd MMM yyyy') : ''}</title>
+                          <style>body{font-family:sans-serif;padding:20px}table{width:100%;border-collapse:collapse;font-size:13px}th{background:#4f46e5;color:#fff;padding:8px;text-align:left}h2{color:#1e1b4b}</style></head>
+                          <body><h2>Bookings \u2014 ${selectedDate ? format(selectedDate,'MMMM dd, yyyy') : ''}</h2>
+                          <p style="color:#6b7280;font-size:12px">Printed: ${new Date().toLocaleString('en-IN')}</p>
+                          <table><thead><tr><th>Booking #</th><th>Customer</th><th>Event</th><th>Safas / Items</th><th>Venue</th><th style="text-align:right">Amount</th><th>Status</th></tr></thead>
+                          <tbody>${rows}</tbody></table>
+                          <script>window.onload=function(){window.print();window.close()}</script></body></html>`)
+                        printWindow.document.close()
+                      }}
+                    >
+                      🖨️ Print Date List ({filteredDateBookings.length})
+                    </Button>
                   </div>
-                  
-                  {/* Right Pane: Selected Booking Details & Premium Action Bar */}
-                  <div className="md:col-span-2 flex flex-col justify-between">
-                    {selectedCalendarBooking ? (
-                      <div className="flex-1 flex flex-col justify-between gap-4 h-full">
-                        <div>
-                          {/* Top Action Buttons Group */}
-                          <div className="flex flex-wrap items-center gap-1.5 border-b pb-3.5 mb-4 border-slate-100 dark:border-slate-800">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                window.open(`/create-invoice?mode=edit&id=${selectedCalendarBooking.id}`, '_blank')
-                              }}
-                              className="h-8 text-xs font-semibold gap-1.5"
-                            >
-                              ✏️ Edit Order
-                            </Button>
-                            
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={async () => {
-                                if (confirm("Are you sure you want to archive this booking?")) {
-                                  try {
-                                    const apiType = getApiType(selectedCalendarBooking.source)
-                                    const res = await fetch(`/api/bookings/${selectedCalendarBooking.id}?type=${apiType}`, {
-                                      method: "PATCH",
-                                      headers: { "Content-Type": "application/json" },
-                                      body: JSON.stringify({ is_archived: true }),
-                                    })
-                                    if (res.ok) {
-                                      toast({ title: "Archived", description: "Booking archived successfully" })
-                                      setShowDateDetails(false)
-                                      fetchBookings()
-                                    }
-                                  } catch (e) {
-                                    toast({ title: "Error", description: "Failed to archive", variant: "destructive" })
-                                  }
-                                }
-                              }}
-                              className="h-8 text-xs font-semibold gap-1.5 text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/20"
-                            >
-                              📦 Archive
-                            </Button>
 
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                if (onViewDetails) {
-                                  setShowDateDetails(false)
-                                  onViewDetails(selectedCalendarBooking)
-                                }
-                              }}
-                              className="h-8 text-xs font-semibold gap-1.5"
-                            >
-                              👁️ View Details
-                            </Button>
+                  {/* Bookings Row Table */}
+                  <div className="border rounded-xl overflow-hidden bg-white">
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs border-collapse">
+                        <thead>
+                          <tr className="bg-slate-50 border-b">
+                            <th className="px-3 py-2.5 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">Customer</th>
+                            <th className="px-3 py-2.5 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">Phone</th>
+                            <th className="px-3 py-2.5 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">Event Date & Time</th>
+                            <th className="px-3 py-2.5 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">Total Safas / Package</th>
+                            <th className="px-3 py-2.5 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">Payment</th>
+                            <th className="px-3 py-2.5 text-left text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">Venue</th>
+                            <th className="px-3 py-2.5 text-center text-[10px] font-bold text-slate-500 uppercase tracking-wider whitespace-nowrap">Actions</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                          {filteredDateBookings.map((b: any) => {
+                            const isRental = b.type === "rental"
+                            const isPackage = b.booking_kind === "package" || b.type === "package"
+                            const paidAmt = b.paid_amount || 0
+                            const totalAmt = b.total_amount || 0
+                            const isPaid = paidAmt >= totalAmt && totalAmt > 0
+                            const due = totalAmt - paidAmt
 
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                window.open(`/create-invoice?mode=edit&id=${selectedCalendarBooking.id}&print=true`, '_blank')
-                              }}
-                              className="h-8 text-xs font-semibold gap-1.5"
-                            >
-                              🖨️ Print Invoice
-                            </Button>
+                            // Safa / Package info
+                            const totalSafas = b.total_safas || 0
+                            const extraSafas = b.extra_safas || 0
+                            const pkgName = b.package_details?.name || null
+                            const variantName = b.variant_name || null
 
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                const printWindow = window.open("", "_blank")
-                                if (printWindow) {
-                                  const itemsHtml = selectedCalendarBooking.booking_items?.map((item: any) => `
-                                    <tr>
-                                      <td style="border: 1px solid #ddd; padding: 8px;">${item.product_name || 'Item'}</td>
-                                      <td style="border: 1px solid #ddd; padding: 8px; text-align: center;">${item.quantity || 1}</td>
-                                    </tr>
-                                  `).join('') || `<tr><td colspan="2" style="border: 1px solid #ddd; padding: 8px; text-align: center;">No items listed.</td></tr>`
-                                  
-                                  printWindow.document.write(`
-                                    <html>
-                                      <head>
-                                        <title>Delivery Challan - #${selectedCalendarBooking.booking_number}</title>
-                                        <style>
-                                          body { font-family: sans-serif; padding: 20px; line-height: 1.6; }
-                                          table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-                                          th { background-color: #f2f2f2; font-weight: bold; padding: 8px; }
-                                        </style>
-                                      </head>
-                                      <body>
-                                        <h2>DELIVERY CHALLAN / PACKING LIST</h2>
-                                        <hr />
-                                        <p><strong>Booking #:</strong> ${selectedCalendarBooking.booking_number}</p>
-                                        <p><strong>Customer Name:</strong> ${selectedCalendarBooking.customer_name}</p>
-                                        <p><strong>Phone:</strong> ${selectedCalendarBooking.customer_phone}</p>
-                                        <p><strong>Event Date:</strong> ${selectedCalendarBooking.event_date}</p>
-                                        <p><strong>Venue:</strong> ${selectedCalendarBooking.venue_name} - ${selectedCalendarBooking.venue_address}</p>
-                                        
-                                        <h3>Items List</h3>
-                                        <table>
-                                          <thead>
-                                            <tr>
-                                              <th style="border: 1px solid #ddd; padding: 8px; text-align: left;">Product Details</th>
-                                              <th style="border: 1px solid #ddd; padding: 8px; text-align: center; width: 100px;">Qty</th>
-                                            </tr>
-                                          </thead>
-                                          <tbody>
-                                            ${itemsHtml}
-                                          </tbody>
-                                        </table>
-                                        <div style="margin-top: 50px; display: flex; justify-content: space-between;">
-                                          <div>_________________<br/>Receiver Signature</div>
-                                          <div>_________________<br/>Authorized Signatory</div>
-                                        </div>
-                                        <script>window.onload = function() { window.print(); window.close(); }</script>
-                                      </body>
-                                    </html>
-                                  `)
-                                  printWindow.document.close()
-                                }
-                              }}
-                              className="h-8 text-xs font-semibold gap-1.5 bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border-indigo-200 dark:bg-indigo-950/40 dark:text-indigo-300 dark:border-indigo-900/30"
-                            >
-                              🚚 Print Delivery Sheet
-                            </Button>
-                          </div>
-                          
-                          {/* Full Booking Summary Details */}
-                          <div className="space-y-4 text-sm bg-slate-50/50 dark:bg-slate-900/20 p-4 border border-slate-100 dark:border-slate-800 rounded-xl">
-                            <div>
-                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Customer Details</span>
-                              <div className="font-bold text-slate-800 dark:text-slate-100 text-base">{selectedCalendarBooking.customer_name}</div>
-                              <div className="text-slate-500 text-xs font-medium mt-0.5">{selectedCalendarBooking.customer_phone}</div>
-                            </div>
-                            
-                            <div className="grid grid-cols-2 gap-4">
-                              <div>
-                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Event Info</span>
-                                <div className="font-semibold text-slate-700 dark:text-slate-200 text-xs">{selectedCalendarBooking.event_type}</div>
-                                <div className="text-[11px] text-slate-500 mt-0.5">{selectedCalendarBooking.event_date}</div>
-                              </div>
-                              <div>
-                                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Venue</span>
-                                <div className="font-semibold text-slate-700 dark:text-slate-200 text-xs truncate" title={selectedCalendarBooking.venue_address}>
-                                  {selectedCalendarBooking.venue_name}
-                                </div>
-                                <div className="text-[11px] text-slate-500 mt-0.5 truncate">{selectedCalendarBooking.venue_address}</div>
-                              </div>
-                            </div>
-                            
-                            <div>
-                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">Payment Summary</span>
-                              {(() => {
-                                const payment = getPaymentStatus(selectedCalendarBooking)
-                                return (
-                                  <div className="flex items-center gap-3 mt-1">
-                                    <Badge variant={payment.isFullyPaid ? "success" : "warning"} className="font-bold">
-                                      {payment.isFullyPaid ? "Paid" : `Due: ₹${payment.pendingAmount.toLocaleString()}`}
+                            return (
+                              <tr key={b.id} className="hover:bg-slate-50 transition-colors">
+                                {/* Customer */}
+                                <td className="px-3 py-2.5">
+                                  <div className="font-semibold text-slate-800">{b.customer_name}</div>
+                                  <div className="mt-0.5">
+                                    <Badge variant={isRental ? "info" : isPackage ? "secondary" : "success"} className="text-[9px] px-1 py-0">
+                                      {isRental ? "Rental" : isPackage ? "Package" : "Sale"}
                                     </Badge>
-                                    <span className="text-xs text-muted-foreground font-medium">
-                                      Paid: ₹{payment.paidAmount.toLocaleString()} / Total: ₹{selectedCalendarBooking.total_amount.toLocaleString()}
-                                    </span>
                                   </div>
-                                )
-                              })()}
-                            </div>
-
-                            {selectedCalendarBooking.has_modifications && (
-                              <div className="p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/30 rounded-lg text-xs">
-                                <div className="font-bold text-amber-800 dark:text-amber-400 uppercase tracking-wider mb-1">Alterations Instructions</div>
-                                <p className="text-slate-700 dark:text-slate-300 font-medium whitespace-pre-wrap">{selectedCalendarBooking.modifications_details || "No details provided"}</p>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    ) : (
-                      <div className="flex flex-col items-center justify-center py-20 text-muted-foreground text-sm">
-                        Select a booking from the left to view details and action controls.
-                      </div>
-                    )}
+                                </td>
+                                {/* Phone */}
+                                <td className="px-3 py-2.5 text-slate-500 whitespace-nowrap">{b.customer_phone || '—'}</td>
+                                {/* Event Date */}
+                                <td className="px-3 py-2.5 whitespace-nowrap">
+                                  <div className="font-medium text-slate-700">{b.event_date}</div>
+                                  <div className="text-[10px] text-slate-400">{b.event_type || '—'}</div>
+                                </td>
+                                {/* Safas / Package */}
+                                <td className="px-3 py-2.5">
+                                  {isPackage ? (
+                                    pkgName ? (
+                                      <div>
+                                        <div className="font-semibold text-indigo-700 text-[11px]">{pkgName}</div>
+                                        {variantName && <div className="text-[10px] text-slate-500">{variantName}</div>}
+                                        <div className="text-[10px] text-slate-600 font-medium mt-0.5">
+                                          👤 {totalSafas} Safas{extraSafas > 0 ? ` +${extraSafas} extra` : ''}
+                                        </div>
+                                      </div>
+                                    ) : totalSafas > 0 ? (
+                                      <div className="text-[11px] text-slate-600">👤 {totalSafas} Safas</div>
+                                    ) : (
+                                      <span className="text-[10px] text-slate-400 italic">Pending selection</span>
+                                    )
+                                  ) : totalSafas > 0 ? (
+                                    <div>
+                                      <div className="font-semibold text-slate-700 text-[11px]">👤 {totalSafas} Safas</div>
+                                      <div className="text-[10px] text-slate-400">Barati Safa</div>
+                                    </div>
+                                  ) : (
+                                    <span className="text-[10px] text-slate-400 italic">No items</span>
+                                  )}
+                                </td>
+                                {/* Payment */}
+                                <td className="px-3 py-2.5 whitespace-nowrap">
+                                  <div className="font-bold text-slate-800">₹{totalAmt.toLocaleString()}</div>
+                                  <div className={`text-[10px] font-medium ${isPaid ? 'text-green-600' : 'text-amber-600'}`}>
+                                    {isPaid ? 'Paid ✓' : `Due ₹${due.toLocaleString()}`}
+                                  </div>
+                                </td>
+                                {/* Venue */}
+                                <td className="px-3 py-2.5 max-w-[140px]">
+                                  <div className="text-slate-700 truncate" title={b.venue_name}>{b.venue_name || '—'}</div>
+                                  <div className="text-[10px] text-slate-400 truncate">{b.area_name && b.area_name !== 'Not Specified' ? b.area_name : ''}</div>
+                                </td>
+                                {/* Actions */}
+                                <td className="px-3 py-2.5">
+                                  <div className="flex items-center justify-center gap-1">
+                                    <Button size="icon" variant="ghost" className="h-7 w-7 hover:bg-blue-50 hover:text-blue-700"
+                                      title="View Details"
+                                      onClick={() => { if (onViewDetails) { setShowDateDetails(false); onViewDetails(b) } }}>
+                                      <Eye className="h-3.5 w-3.5" />
+                                    </Button>
+                                    <Button size="icon" variant="ghost" className="h-7 w-7 hover:bg-slate-100"
+                                      title="Edit Booking"
+                                      onClick={() => window.open(`/create-invoice?mode=edit&id=${b.id}`, '_blank')}>
+                                      <span className="text-xs">✏️</span>
+                                    </Button>
+                                    <Button size="icon" variant="ghost" className="h-7 w-7 hover:bg-green-50 hover:text-green-700"
+                                      title="Print Invoice"
+                                      onClick={() => window.open(`/create-invoice?mode=edit&id=${b.id}&print=true`, '_blank')}>
+                                      <span className="text-xs">🖨️</span>
+                                    </Button>
+                                    <Button size="icon" variant="ghost"
+                                      className="h-7 w-7 bg-green-50 hover:bg-green-100 text-green-700 border border-green-200 rounded"
+                                      title="Convert to New Invoice"
+                                      onClick={() => setConvertTypeBooking(b)}>
+                                      <span className="text-xs">🔄</span>
+                                    </Button>
+                                    <Button size="icon" variant="ghost" className="h-7 w-7 hover:bg-red-50 hover:text-red-600"
+                                      title="Archive"
+                                      onClick={async () => {
+                                        if (!confirm('Archive this booking?')) return
+                                        try {
+                                          const apiType = getApiType(b.source)
+                                          const res = await fetch(`/api/bookings/${b.id}?type=${apiType}`, {
+                                            method: 'PATCH', headers: {'Content-Type':'application/json'},
+                                            body: JSON.stringify({ is_archived: true })
+                                          })
+                                          if (res.ok) { toast({ title: 'Archived' }); fetchBookings(); setShowDateDetails(false) }
+                                        } catch { toast({ title: 'Error', variant: 'destructive' }) }
+                                      }}>
+                                      <span className="text-xs">📦</span>
+                                    </Button>
+                                  </div>
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 </div>
               )}
@@ -1024,9 +1004,9 @@ export function BookingCalendar({ franchiseId, compact = false, mini = false, on
             <TabsContent value="locked" className="space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <Lock className="w-4 h-4 text-red-500" />
-                  <span className="font-semibold text-sm text-red-700">All Locked Dates</span>
-                  <Badge variant="destructive" className="text-xs">{lockedDateObjects.length}</Badge>
+                  <Lock className="w-4 h-4 text-green-500" />
+                  <span className="font-semibold text-sm text-green-700">All Locked Dates</span>
+                  <Badge className="text-xs bg-green-100 text-green-800 border-green-200 hover:bg-green-100">{lockedDateObjects.length}</Badge>
                 </div>
                 <Button size="sm" variant="outline" asChild className="text-xs h-7">
                   <a href="/lock-dates">Manage All →</a>
@@ -1052,48 +1032,103 @@ export function BookingCalendar({ franchiseId, compact = false, mini = false, on
                       const note = noteMatch ? noteMatch[1].trim() : (!personMatch ? rawNotes : "")
                       const isToday = ld.locked_date === format(new Date(), "yyyy-MM-dd")
                       const isPast = ld.locked_date < format(new Date(), "yyyy-MM-dd")
-                      return (
-                        <div key={ld.id} className={`flex items-start justify-between rounded-lg px-3 py-2.5 border ${isToday ? "bg-red-100 border-red-300" : isPast ? "bg-gray-50 border-gray-200 opacity-60" : "bg-red-50 border-red-200"}`}>
-                          <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <Lock className={`h-3.5 w-3.5 shrink-0 ${isToday ? "text-red-600" : "text-red-400"}`} />
-                              <span className={`text-sm font-bold ${isToday ? "text-red-700" : "text-red-600"}`}>
-                                {format(new Date(ld.locked_date + "T00:00:00"), "EEE, dd MMM yyyy")}
-                              </span>
-                              {isToday && <Badge className="text-[9px] bg-red-600 text-white px-1 py-0">TODAY</Badge>}
-                              {isPast && <Badge variant="secondary" className="text-[9px] px-1 py-0">Past</Badge>}
-                            </div>
-                            {personName && (
-                              <div className="flex items-center gap-3 mt-1 pl-5">
-                                <span className="text-xs font-semibold text-slate-700 flex items-center gap-1">
-                                  <User className="h-3 w-3" /> {personName}
-                                </span>
-                                {city && city !== "—" && (
-                                  <span className="text-xs text-slate-500 flex items-center gap-1">
-                                    <MapPin className="h-3 w-3" /> {city}
-                                  </span>
-                                )}
-                              </div>
-                            )}
-                            {ld.whatsapp_number && (
-                              <p className="text-[11px] text-slate-500 mt-0.5 pl-5">📞 {ld.whatsapp_number}</p>
-                            )}
-                            {note && <p className="text-[11px] text-slate-600 mt-0.5 pl-5 truncate max-w-xs">{note}</p>}
-                          </div>
-                          {(userRole === "franchise_admin" || userRole === "franchise_owner" || userRole === "super_admin") && (
-                            <button
-                              onClick={() => handleUnlockDate(ld.id)}
-                              disabled={deletingLockId === ld.id}
-                              className="text-red-400 hover:text-red-600 ml-2 mt-0.5 shrink-0"
-                              title="Unlock this date"
-                            >
-                              {deletingLockId === ld.id
-                                ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                                : <Trash2 className="h-3.5 w-3.5" />}
-                            </button>
-                          )}
-                        </div>
-                      )
+                       return (
+                         <div key={ld.id} className={`rounded-lg px-3 py-2.5 border ${isToday ? "bg-green-100 border-green-300" : isPast ? "bg-gray-50 border-gray-200 opacity-60" : "bg-green-50 border-green-200"}`}>
+                           <div className="flex items-start justify-between">
+                             <div className="min-w-0 flex-1">
+                               <div className="flex items-center gap-2 flex-wrap">
+                                 <Lock className={`h-3.5 w-3.5 shrink-0 ${isToday ? "text-green-600" : "text-green-400"}`} />
+                                 <span className={`text-sm font-bold ${isToday ? "text-green-700" : "text-green-600"}`}>
+                                   {format(new Date(ld.locked_date + "T00:00:00"), "EEE, dd MMM yyyy")}
+                                 </span>
+                                 {isToday && <Badge className="text-[9px] bg-green-600 text-white px-1 py-0">TODAY</Badge>}
+                                 {isPast && <Badge variant="secondary" className="text-[9px] px-1 py-0">Past</Badge>}
+                               </div>
+                               {personName && (
+                                 <div className="flex items-center gap-3 mt-1 pl-5">
+                                   <span className="text-xs font-semibold text-slate-700 flex items-center gap-1">
+                                     <User className="h-3 w-3" /> {personName}
+                                   </span>
+                                   {city && city !== "—" && (
+                                     <span className="text-xs text-slate-500 flex items-center gap-1">
+                                       <MapPin className="h-3 w-3" /> {city}
+                                     </span>
+                                   )}
+                                 </div>
+                               )}
+                               {ld.whatsapp_number && (
+                                 <p className="text-[11px] text-slate-500 mt-0.5 pl-5">📞 {ld.whatsapp_number}</p>
+                               )}
+                               {note && <p className="text-[11px] text-slate-600 mt-0.5 pl-5 truncate max-w-xs">{note}</p>}
+                             </div>
+                             {(userRole === "franchise_admin" || userRole === "franchise_owner" || userRole === "super_admin") && (
+                               <div className="flex items-center gap-1 ml-2 shrink-0">
+                                 <button
+                                   onClick={() => {
+                                     setEditingLockId(editingLockId === ld.id ? null : ld.id)
+                                     setEditLockForm({ whatsapp_number: ld.whatsapp_number || '', notes: ld.notes || '' })
+                                   }}
+                                   className="text-slate-400 hover:text-blue-600 p-1 rounded"
+                                   title="Edit locked date"
+                                 >
+                                   <span className="text-xs">✏️</span>
+                                 </button>
+                                 <button
+                                   onClick={() => { if (confirm('Remove this locked date?')) handleUnlockDate(ld.id) }}
+                                   disabled={deletingLockId === ld.id}
+                                   className="text-red-400 hover:text-red-600 p-1 rounded"
+                                   title="Delete locked date"
+                                 >
+                                   {deletingLockId === ld.id
+                                     ? <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                     : <Trash2 className="h-3.5 w-3.5" />}
+                                 </button>
+                               </div>
+                             )}
+                           </div>
+                           {/* Inline edit form */}
+                           {editingLockId === ld.id && (
+                             <div className="mt-2 pt-2 border-t border-slate-200 space-y-2">
+                               <div>
+                                 <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">WhatsApp Number</label>
+                                 <input
+                                   type="text"
+                                   value={editLockForm.whatsapp_number}
+                                   onChange={(e) => setEditLockForm(f => ({ ...f, whatsapp_number: e.target.value }))}
+                                   className="w-full border border-slate-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400"
+                                   placeholder="e.g. 9876543210"
+                                 />
+                               </div>
+                               <div>
+                                 <label className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block mb-1">Notes</label>
+                                 <textarea
+                                   value={editLockForm.notes}
+                                   onChange={(e) => setEditLockForm(f => ({ ...f, notes: e.target.value }))}
+                                   className="w-full border border-slate-200 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 resize-none"
+                                   rows={2}
+                                   placeholder="Notes..."
+                                 />
+                               </div>
+                               <div className="flex gap-2">
+                                 <button
+                                   onClick={() => handleSaveLockEdit(ld.id)}
+                                   disabled={savingLockId === ld.id}
+                                   className="flex items-center gap-1 px-3 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 disabled:opacity-60"
+                                 >
+                                   {savingLockId === ld.id ? <Loader2 className="h-3 w-3 animate-spin" /> : null}
+                                   Save
+                                 </button>
+                                 <button
+                                   onClick={() => setEditingLockId(null)}
+                                   className="px-3 py-1 bg-slate-100 text-slate-600 text-xs rounded hover:bg-slate-200"
+                                 >
+                                   Cancel
+                                 </button>
+                               </div>
+                             </div>
+                           )}
+                         </div>
+                       )
                     })}
                 </div>
               )}
@@ -1101,8 +1136,65 @@ export function BookingCalendar({ franchiseId, compact = false, mini = false, on
           </Tabs>
         </DialogContent>
       </Dialog>
-      
-      {/* Compact Items Display Dialog - Matching Bookings Page */}
+
+      {/* Convert to Invoice Modal */}
+      {convertTypeBooking && (
+        <Dialog open={!!convertTypeBooking} onOpenChange={(o) => { if (!o) setConvertTypeBooking(null) }}>
+          <DialogContent className="max-w-sm">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                🔄 Convert to New Invoice
+              </DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3 py-2">
+              <p className="text-sm text-slate-600">
+                Converting booking <span className="font-bold text-indigo-700">{convertTypeBooking.booking_number}</span> for <span className="font-bold">{convertTypeBooking.customer_name}</span>.
+              </p>
+              <p className="text-xs text-slate-500">Select type of new invoice to create:</p>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  className="flex flex-col items-center gap-2 p-4 border-2 border-green-200 bg-green-50 hover:bg-green-100 rounded-xl text-green-800 font-semibold text-sm transition-colors"
+                  onClick={() => {
+                    const b = convertTypeBooking
+                    const params = new URLSearchParams({
+                      mode: 'create',
+                      type: 'sale',
+                      customer_name: b.customer_name || '',
+                      customer_phone: b.customer_phone || '',
+                      prefill: '1'
+                    })
+                    window.open(`/create-invoice?${params.toString()}`, '_blank')
+                    setConvertTypeBooking(null)
+                  }}
+                >
+                  <span className="text-2xl">🛍️</span>
+                  Sales Invoice
+                </button>
+                <button
+                  className="flex flex-col items-center gap-2 p-4 border-2 border-blue-200 bg-blue-50 hover:bg-blue-100 rounded-xl text-blue-800 font-semibold text-sm transition-colors"
+                  onClick={() => {
+                    const b = convertTypeBooking
+                    const params = new URLSearchParams({
+                      mode: 'create',
+                      type: 'rental',
+                      customer_name: b.customer_name || '',
+                      customer_phone: b.customer_phone || '',
+                      prefill: '1'
+                    })
+                    window.open(`/create-invoice?${params.toString()}`, '_blank')
+                    setConvertTypeBooking(null)
+                  }}
+                >
+                  <span className="text-2xl">🎩</span>
+                  Rental Invoice
+                </button>
+              </div>
+              <p className="text-[10px] text-slate-400 text-center">Customer details will be pre-filled automatically</p>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
+
       {productDialogBooking && productDialogType === 'items' && !itemsLoading[productDialogBooking.id] && !itemsError[productDialogBooking.id] && bookingItems[productDialogBooking.id] && (
         <CompactItemsDisplayDialog
           open={showProductDialog}
