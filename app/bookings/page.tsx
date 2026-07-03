@@ -748,9 +748,15 @@ export default function BookingsPage() {
     const matchesStatus = statusFilter === "all" || 
       (statusFilter === "pending_payment" 
         ? (booking.status === "pending_payment" || hasOutstandingBalance)
-        : statusFilter === "pending_modification" 
-          ? (booking.has_modifications === true && booking.status !== "cancelled" && booking.status !== "order_complete")
-          : booking.status === statusFilter)
+        : statusFilter === "pending_selection"
+          ? (!(booking as any).has_items && booking.status !== "cancelled" && booking.status !== "returned")
+          : statusFilter === "pending_modification" 
+            ? (booking.has_modifications === true && booking.status !== "cancelled" && booking.status !== "order_complete")
+            : statusFilter === "ready_for_dispatch"
+              ? (booking.status === "confirmed" && booking.status !== "cancelled")
+              : statusFilter === "in_use"
+                ? (booking.status === "delivered" && booking.status !== "cancelled")
+                : booking.status === statusFilter)
 
     // booking.type: 'rental' | 'sale' for product orders, 'package' for packages
     const matchesType = typeFilter === "all" || (booking as any).type === typeFilter
@@ -820,7 +826,7 @@ export default function BookingsPage() {
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1)
-  }, [searchTerm, statusFilter, typeFilter])
+  }, [searchTerm, statusFilter, typeFilter, productFilter, safaQuantitySort, distanceSort])
   
   const goToPage = (page: number) => {
     setCurrentPage(Math.max(1, Math.min(page, totalPages)))
@@ -1131,7 +1137,7 @@ export default function BookingsPage() {
   }
 
   const exportBookings = async (format: 'csv'|'pdf') => {
-    const rows = filteredBookings
+    const rows = sortedBookings
     if(rows.length===0){
       toast({ title:'Nothing to export', description:'No bookings match current filters', variant:'destructive'})
       return
@@ -1530,8 +1536,9 @@ export default function BookingsPage() {
                 {bookingMode === "rental" ? (
                   <>
                     <SelectItem value="pending_selection">Pending Selection</SelectItem>
-                    <SelectItem value="confirmed">Confirmed</SelectItem>
-                    <SelectItem value="returned">Rental Completed</SelectItem>
+                    <SelectItem value="ready_for_dispatch">Ready for Dispatch</SelectItem>
+                    <SelectItem value="in_use">In Use (Active)</SelectItem>
+                    <SelectItem value="returned">Returned / Completed</SelectItem>
                   </>
                 ) : (
                   <>
@@ -1592,7 +1599,7 @@ export default function BookingsPage() {
 
         <TabsContent value="table">
           <BookingsTabs
-            bookings={filteredBookings}
+            bookings={sortedBookings}
             mode={bookingMode}
             loading={loading}
             paginatedBookings={paginatedBookings}
