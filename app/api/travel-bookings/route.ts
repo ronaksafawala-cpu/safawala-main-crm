@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
     let orderQ = supabaseServer
       .from("product_orders")
       .select(`
-        id, order_number, status, event_date, event_type,
+        id, order_number, status, event_date, event_time, event_type,
         venue_name, venue_address,
         customer:customers(id, name, phone),
         assigned_stylist_id,
@@ -73,8 +73,9 @@ export async function GET(request: NextRequest) {
         id: order.id,
         order_number: order.order_number,
         event_date: order.event_date,
+        event_time: order.event_time,
         event_type: order.event_type,
-        venue: order.venue_name ?? order.venue_address,
+        venue: order.venue_name ? `${order.venue_name}${order.venue_address ? `, ${order.venue_address}` : ""}` : order.venue_address,
         customer_name: order.customer?.name ?? "—",
         customer_phone: order.customer?.phone,
         assigned_stylist: order.stylist,
@@ -97,12 +98,8 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
     const {
-      booking_id, order_number, event_date, event_name, venue, venue_city,
-      customer_name, stylist_id, travel_mode, ticket_ref, pnr,
-      departure_from, arrival_at, departure_date, departure_time,
-      return_date, return_time, hotel_name, hotel_address,
-      hotel_checkin, hotel_checkout, hotel_ref, hotel_contact,
-      ticket_cost, hotel_cost, other_cost, advance_given, notes,
+      booking_id, order_number, event_date, event_name, venue,
+      customer_name, stylist_id, status, notes, documents,
     } = body
 
     const franchiseId = auth.user!.franchise_id
@@ -119,13 +116,7 @@ export async function POST(request: NextRequest) {
         // Update instead
         const { data, error } = await supabaseServer
           .from("travel_bookings")
-          .update({
-            stylist_id, travel_mode, ticket_ref, pnr,
-            departure_from, arrival_at, departure_date, departure_time,
-            return_date, return_time, hotel_name, hotel_address,
-            hotel_checkin, hotel_checkout, hotel_ref, hotel_contact,
-            ticket_cost, hotel_cost, other_cost, advance_given, notes,
-          })
+          .update({ stylist_id, status, notes, documents })
           .eq("id", existing.id)
           .select()
           .single()
@@ -138,16 +129,9 @@ export async function POST(request: NextRequest) {
     const { data, error } = await supabaseServer
       .from("travel_bookings")
       .insert({
-        booking_id, order_number, event_date, event_name, venue, venue_city,
+        booking_id, order_number, event_date, event_name, venue,
         customer_name, stylist_id, franchise_id: franchiseId,
-        travel_mode: travel_mode ?? "train",
-        ticket_ref, pnr, departure_from, arrival_at,
-        departure_date, departure_time, return_date, return_time,
-        hotel_name, hotel_address, hotel_checkin, hotel_checkout,
-        hotel_ref, hotel_contact,
-        ticket_cost: ticket_cost ?? 0, hotel_cost: hotel_cost ?? 0,
-        other_cost: other_cost ?? 0, advance_given: advance_given ?? 0,
-        notes, status: "pending",
+        notes, documents: documents ?? [], status: status || "pending",
       })
       .select()
       .single()
