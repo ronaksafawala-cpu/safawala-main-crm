@@ -206,13 +206,13 @@ export default function DashboardPage() {
     }
   }, [refreshStats, refreshBookings, refreshCalendar, user?.permissions?.bookings])
 
-  // Auto-refresh dashboard data every 30 seconds
+  // Auto-refresh dashboard data every 5 minutes
   useEffect(() => {
     if (!user) return
     const interval = setInterval(() => {
-      console.log("[Dashboard] Auto-refreshing data (30s interval)...")
+      console.log("[Dashboard] Auto-refreshing data (5m interval)...")
       handleRefresh()
-    }, 30000)
+    }, 300000)
     return () => clearInterval(interval)
   }, [user, handleRefresh])
 
