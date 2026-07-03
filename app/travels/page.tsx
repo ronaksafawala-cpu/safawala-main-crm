@@ -9,98 +9,73 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog"
-import { Plane, Hotel, MapPin, Calendar, Phone, Plus, Search, Loader2, RefreshCw, Train, Car } from "lucide-react"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
+import { Plane, Hotel, MapPin, Calendar, Search, Loader2, RefreshCw, FileText, Image as ImageIcon, Upload, X, Paperclip } from "lucide-react"
 import { toast } from "sonner"
 import { format } from "date-fns"
+import { uploadWithProgress, type UploadResult } from "@/lib/upload-with-progress"
+
+const STATUS_OPTIONS = [
+  { value: "pending", label: "Pending" },
+  { value: "arranged", label: "Arranged" },
+  { value: "completed", label: "Completed" },
+  { value: "cancelled", label: "Cancelled" },
+]
 
 const STATUS_COLOR: Record<string, string> = {
-  confirmed: "bg-green-100 text-green-700 border-green-200",
-  pending:   "bg-yellow-100 text-yellow-700 border-yellow-200",
+  pending: "bg-yellow-100 text-yellow-700 border-yellow-200",
+  arranged: "bg-blue-100 text-blue-700 border-blue-200",
+  completed: "bg-green-100 text-green-700 border-green-200",
   cancelled: "bg-red-100 text-red-700 border-red-200",
-  completed: "bg-blue-100 text-blue-700 border-blue-200",
+  // legacy values from the old schema, mapped to a sensible color
+  ticket_booked: "bg-blue-100 text-blue-700 border-blue-200",
+  hotel_booked: "bg-blue-100 text-blue-700 border-blue-200",
+  fully_booked: "bg-blue-100 text-blue-700 border-blue-200",
+  departed: "bg-blue-100 text-blue-700 border-blue-200",
+  returned: "bg-green-100 text-green-700 border-green-200",
 }
 
-const TRAVEL_ICONS: Record<string, any> = {
-  flight: Plane,
-  train: Train,
-  car: Car,
-}
+const DOC_LABELS = ["Ticket", "Hotel Booking Confirmation", "ID Proof", "Other"]
 
-const blank = {
-  event_name: "", customer_name: "", event_date: "", venue: "", venue_city: "",
-  travel_mode: "train", departure_from: "", arrival_at: "",
-  departure_date: "", departure_time: "", return_date: "", return_time: "",
-  ticket_ref: "", pnr: "",
-  hotel_name: "", hotel_address: "", hotel_checkin: "", hotel_checkout: "",
-  hotel_ref: "", hotel_contact: "",
-  ticket_cost: "", hotel_cost: "", other_cost: "", advance_given: "", notes: "",
+interface TravelDoc extends UploadResult {
+  label: string
+  uploaded_at: string
 }
 
 export default function TravelsPage() {
   const [trips, setTrips] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
-  const [showAdd, setShowAdd] = useState(false)
-  const [saving, setSaving] = useState(false)
-  const [form, setForm] = useState({ ...blank })
+  const [selected, setSelected] = useState<any | null>(null)
 
   useEffect(() => { fetchTrips() }, [])
 
   async function fetchTrips() {
-    setLoading(true)
     try {
+      setLoading(true)
       const res = await fetch("/api/travel-bookings")
       const json = await res.json()
       setTrips(json.data ?? [])
     } catch {
-      toast.error("Failed to load trips")
+      toast.error("Failed to load bookings")
     } finally {
       setLoading(false)
     }
   }
 
-  async function handleSave() {
-    if (!form.customer_name || !form.event_date) {
-      toast.error("Customer name and event date are required")
-      return
-    }
-    setSaving(true)
-    try {
-      const res = await fetch("/api/travel-bookings", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...form,
-          ticket_cost: Number(form.ticket_cost) || 0,
-          hotel_cost: Number(form.hotel_cost) || 0,
-          other_cost: Number(form.other_cost) || 0,
-          advance_given: Number(form.advance_given) || 0,
-        }),
-      })
-      const json = await res.json()
-      if (!res.ok || !json.success) throw new Error(json.error || "Failed to save")
-      toast.success("Trip added successfully!")
-      setShowAdd(false)
-      setForm({ ...blank })
-      fetchTrips()
-    } catch (err: any) {
-      toast.error(err.message)
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  const set = (k: string, v: string) => setForm(f => ({ ...f, [k]: v }))
-
   const filtered = trips.filter(t =>
     (t.customer_name ?? "").toLowerCase().includes(search.toLowerCase()) ||
     (t.venue ?? "").toLowerCase().includes(search.toLowerCase()) ||
-    (t.venue_city ?? "").toLowerCase().includes(search.toLowerCase())
+    (t.order_number ?? "").toLowerCase().includes(search.toLowerCase())
   )
 
   const upcoming = filtered.filter(t => t.event_date >= format(new Date(), "yyyy-MM-dd"))
-  const past     = filtered.filter(t => t.event_date < format(new Date(), "yyyy-MM-dd"))
+  const past = filtered.filter(t => t.event_date < format(new Date(), "yyyy-MM-dd"))
+
+  const handleSaved = (updated: any) => {
+    setTrips(prev => prev.map(t => (t.id === updated.booking_id ? { ...t, travel: updated } : t)))
+    setSelected(null)
+  }
 
   return (
     <DashboardLayout>
@@ -113,26 +88,21 @@ export default function TravelsPage() {
               Travels & Hotels
             </h1>
             <p className="text-muted-foreground text-sm mt-1">
-              Out-of-town event travel, hotel stays, and stylist logistics
+              Every out-of-town booking — click one to arrange travel & hotel
             </p>
           </div>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={fetchTrips}>
-              <RefreshCw className="h-4 w-4 mr-2" />Refresh
-            </Button>
-            <Button className="bg-[#0891b2] hover:bg-[#0e7490] text-white" onClick={() => setShowAdd(true)}>
-              <Plus className="h-4 w-4 mr-2" />Add Trip
-            </Button>
-          </div>
+          <Button variant="outline" size="sm" onClick={fetchTrips}>
+            <RefreshCw className="h-4 w-4 mr-2" />Refresh
+          </Button>
         </div>
 
         {/* Stats */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
           {[
-            { label: "Total Trips",  value: trips.length,                                          icon: Plane,    color: "#0891b2" },
-            { label: "Upcoming",     value: trips.filter(t => t.event_date >= format(new Date(), "yyyy-MM-dd")).length, icon: Calendar,  color: "#22c55e" },
-            { label: "With Hotel",   value: trips.filter(t => t.travel?.hotel_name).length,        icon: Hotel,    color: "#a855f7" },
-            { label: "Pending",      value: trips.filter(t => (t.travel?.status ?? "pending") === "pending").length,  icon: MapPin,    color: "#f59e0b" },
+            { label: "Total Bookings", value: trips.length, icon: Plane, color: "#0891b2" },
+            { label: "Upcoming", value: upcoming.length, icon: Calendar, color: "#22c55e" },
+            { label: "Documents Added", value: trips.filter(t => (t.travel?.documents?.length ?? 0) > 0).length, icon: Paperclip, color: "#a855f7" },
+            { label: "Pending", value: trips.filter(t => (t.travel?.status ?? "pending") === "pending").length, icon: MapPin, color: "#f59e0b" },
           ].map((stat) => (
             <Card key={stat.label} className="border border-gray-200">
               <CardContent className="p-4 flex items-center gap-3">
@@ -151,7 +121,7 @@ export default function TravelsPage() {
         {/* Search */}
         <div className="relative max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-          <Input placeholder="Search by client, venue, city..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
+          <Input placeholder="Search by client, venue, order #..." value={search} onChange={e => setSearch(e.target.value)} className="pl-9" />
         </div>
 
         {/* List */}
@@ -161,8 +131,7 @@ export default function TravelsPage() {
           <Card className="border-dashed">
             <CardContent className="flex flex-col items-center justify-center py-14 text-gray-400">
               <Plane className="h-12 w-12 mb-3 opacity-20" />
-              <p className="text-sm">No trips found</p>
-              <button onClick={() => setShowAdd(true)} className="mt-2 text-xs text-cyan-500 hover:underline">Add a trip →</button>
+              <p className="text-sm">No bookings found</p>
             </CardContent>
           </Card>
         ) : (
@@ -170,218 +139,186 @@ export default function TravelsPage() {
             {upcoming.length > 0 && (
               <div>
                 <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Upcoming ({upcoming.length})</h3>
-                <div className="space-y-3">{upcoming.map(t => <TripCard key={t.id} trip={t} />)}</div>
+                <div className="space-y-2">{upcoming.map(t => <BookingRow key={t.id} trip={t} onClick={() => setSelected(t)} />)}</div>
               </div>
             )}
             {past.length > 0 && (
               <div>
                 <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">Past ({past.length})</h3>
-                <div className="space-y-3 opacity-70">{past.map(t => <TripCard key={t.id} trip={t} />)}</div>
+                <div className="space-y-2 opacity-70">{past.map(t => <BookingRow key={t.id} trip={t} onClick={() => setSelected(t)} />)}</div>
               </div>
             )}
           </>
         )}
       </div>
 
-      {/* Add Trip Dialog */}
-      <Dialog open={showAdd} onOpenChange={setShowAdd}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="text-xl font-semibold">Add Travel & Hotel Booking</DialogTitle>
-          </DialogHeader>
-
-          <div className="space-y-4 py-2">
-            {/* Event Info */}
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label>Customer / Client Name *</Label>
-                <Input placeholder="e.g. Sharma Family" value={form.customer_name} onChange={e => set("customer_name", e.target.value)} />
-              </div>
-              <div className="space-y-1">
-                <Label>Event Date *</Label>
-                <Input type="date" value={form.event_date} onChange={e => set("event_date", e.target.value)} />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
-                <Label>Event Name</Label>
-                <Input placeholder="e.g. Sharma Wedding" value={form.event_name} onChange={e => set("event_name", e.target.value)} />
-              </div>
-              <div className="space-y-1">
-                <Label>Venue City</Label>
-                <Input placeholder="e.g. Jaipur" value={form.venue_city} onChange={e => set("venue_city", e.target.value)} />
-              </div>
-            </div>
-            <div className="space-y-1">
-              <Label>Venue / Address</Label>
-              <Input placeholder="Venue name or address" value={form.venue} onChange={e => set("venue", e.target.value)} />
-            </div>
-
-            {/* Travel */}
-            <div className="border-t pt-4">
-              <p className="text-sm font-semibold text-gray-700 mb-3">Travel Details</p>
-              <div className="grid grid-cols-3 gap-3">
-                <div className="space-y-1">
-                  <Label>Mode</Label>
-                  <Select value={form.travel_mode} onValueChange={v => set("travel_mode", v)}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="flight">✈️ Flight</SelectItem>
-                      <SelectItem value="train">🚂 Train</SelectItem>
-                      <SelectItem value="car">🚗 Car</SelectItem>
-                      <SelectItem value="bus">🚌 Bus</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <Label>From</Label>
-                  <Input placeholder="Departure city" value={form.departure_from} onChange={e => set("departure_from", e.target.value)} />
-                </div>
-                <div className="space-y-1">
-                  <Label>To</Label>
-                  <Input placeholder="Arrival city" value={form.arrival_at} onChange={e => set("arrival_at", e.target.value)} />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3 mt-3">
-                <div className="space-y-1">
-                  <Label>Departure Date & Time</Label>
-                  <div className="flex gap-2">
-                    <Input type="date" value={form.departure_date} onChange={e => set("departure_date", e.target.value)} />
-                    <Input type="time" value={form.departure_time} onChange={e => set("departure_time", e.target.value)} className="w-32" />
-                  </div>
-                </div>
-                <div className="space-y-1">
-                  <Label>Return Date & Time</Label>
-                  <div className="flex gap-2">
-                    <Input type="date" value={form.return_date} onChange={e => set("return_date", e.target.value)} />
-                    <Input type="time" value={form.return_time} onChange={e => set("return_time", e.target.value)} className="w-32" />
-                  </div>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3 mt-3">
-                <div className="space-y-1">
-                  <Label>Ticket / PNR Ref</Label>
-                  <Input placeholder="Ticket number or PNR" value={form.pnr} onChange={e => set("pnr", e.target.value)} />
-                </div>
-                <div className="space-y-1">
-                  <Label>Ticket Cost (₹)</Label>
-                  <Input type="number" placeholder="0" value={form.ticket_cost} onChange={e => set("ticket_cost", e.target.value)} />
-                </div>
-              </div>
-            </div>
-
-            {/* Hotel */}
-            <div className="border-t pt-4">
-              <p className="text-sm font-semibold text-gray-700 mb-3">Hotel Details</p>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label>Hotel Name</Label>
-                  <Input placeholder="Hotel name" value={form.hotel_name} onChange={e => set("hotel_name", e.target.value)} />
-                </div>
-                <div className="space-y-1">
-                  <Label>Hotel Contact</Label>
-                  <Input placeholder="+91 XXXXX XXXXX" value={form.hotel_contact} onChange={e => set("hotel_contact", e.target.value)} />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3 mt-3">
-                <div className="space-y-1">
-                  <Label>Check-in</Label>
-                  <Input type="date" value={form.hotel_checkin} onChange={e => set("hotel_checkin", e.target.value)} />
-                </div>
-                <div className="space-y-1">
-                  <Label>Check-out</Label>
-                  <Input type="date" value={form.hotel_checkout} onChange={e => set("hotel_checkout", e.target.value)} />
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3 mt-3">
-                <div className="space-y-1">
-                  <Label>Booking Ref</Label>
-                  <Input placeholder="Hotel booking ref" value={form.hotel_ref} onChange={e => set("hotel_ref", e.target.value)} />
-                </div>
-                <div className="space-y-1">
-                  <Label>Hotel Cost (₹)</Label>
-                  <Input type="number" placeholder="0" value={form.hotel_cost} onChange={e => set("hotel_cost", e.target.value)} />
-                </div>
-              </div>
-            </div>
-
-            {/* Costs & Notes */}
-            <div className="border-t pt-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <Label>Other Costs (₹)</Label>
-                  <Input type="number" placeholder="0" value={form.other_cost} onChange={e => set("other_cost", e.target.value)} />
-                </div>
-                <div className="space-y-1">
-                  <Label>Advance Given (₹)</Label>
-                  <Input type="number" placeholder="0" value={form.advance_given} onChange={e => set("advance_given", e.target.value)} />
-                </div>
-              </div>
-              <div className="space-y-1 mt-3">
-                <Label>Notes</Label>
-                <Textarea placeholder="Any special instructions..." rows={2} value={form.notes} onChange={e => set("notes", e.target.value)} />
-              </div>
-            </div>
-          </div>
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowAdd(false)}>Cancel</Button>
-            <Button onClick={handleSave} disabled={saving} className="bg-[#0891b2] hover:bg-[#0e7490] text-white">
-              {saving ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Saving...</> : "Save Trip"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {selected && (
+        <TravelPanel trip={selected} onClose={() => setSelected(null)} onSaved={handleSaved} />
+      )}
     </DashboardLayout>
   )
 }
 
-function TripCard({ trip }: { trip: any }) {
-  const travel = trip.travel
-  const status = travel?.status ?? "pending"
-  const TravelIcon = TRAVEL_ICONS[travel?.travel_mode ?? "train"] ?? Train
-
+function BookingRow({ trip, onClick }: { trip: any; onClick: () => void }) {
+  const status = trip.travel?.status ?? "pending"
+  const docCount = trip.travel?.documents?.length ?? 0
   return (
-    <Card className="border border-gray-200 hover:shadow-sm transition-shadow">
-      <CardContent className="p-5">
-        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-          <div className="flex items-start gap-4">
-            <div className="w-10 h-10 rounded-xl bg-cyan-50 flex items-center justify-center shrink-0">
-              <TravelIcon className="w-5 h-5 text-cyan-600" />
-            </div>
-            <div>
-              <div className="font-semibold text-gray-900">{trip.customer_name || trip.order_number}</div>
-              <div className="flex flex-wrap items-center gap-3 mt-1 text-sm text-gray-500">
-                {trip.event_date && (
-                  <span className="flex items-center gap-1">
-                    <Calendar className="h-3.5 w-3.5" />
-                    {format(new Date(trip.event_date + "T00:00:00"), "dd MMM yyyy")}
-                  </span>
-                )}
-                {(trip.venue_city || trip.venue) && (
-                  <span className="flex items-center gap-1"><MapPin className="h-3.5 w-3.5" />{trip.venue_city || trip.venue}</span>
-                )}
-                {travel?.hotel_name && (
-                  <span className="flex items-center gap-1"><Hotel className="h-3.5 w-3.5" />{travel.hotel_name}</span>
-                )}
-                {travel?.departure_from && (
-                  <span className="flex items-center gap-1">
-                    <TravelIcon className="h-3.5 w-3.5" />{travel.departure_from} → {travel.arrival_at}
-                  </span>
-                )}
-              </div>
-              {trip.customer_phone && (
-                <p className="text-xs text-gray-400 mt-1 flex items-center gap-1">
-                  <Phone className="h-3 w-3" />{trip.customer_phone}
-                </p>
-              )}
-            </div>
+    <Card onClick={onClick} className="border border-gray-200 hover:border-cyan-300 hover:shadow-sm transition-all cursor-pointer">
+      <CardContent className="p-3.5 flex items-center gap-4">
+        <div className="w-11 h-11 rounded-lg bg-cyan-50 flex flex-col items-center justify-center shrink-0 text-cyan-700">
+          <Calendar className="w-4 h-4" />
+        </div>
+        <div className="min-w-0 flex-1 grid grid-cols-1 sm:grid-cols-[1fr_2fr_auto] gap-x-4 gap-y-0.5 items-center">
+          <div>
+            <p className="text-sm font-bold text-gray-900 truncate">{trip.customer_name}</p>
+            <p className="text-xs text-gray-500">
+              {format(new Date(trip.event_date), "dd MMM yyyy")}
+              {trip.event_time ? ` · ${trip.event_time}` : ""}
+            </p>
           </div>
-          <Badge className={`text-xs border shrink-0 ${STATUS_COLOR[status] ?? "bg-gray-100 text-gray-600"}`}>
-            {status}
-          </Badge>
+          <p className="text-xs text-gray-500 truncate flex items-center gap-1">
+            <MapPin className="w-3 h-3 shrink-0" /> {trip.venue || "No venue on file"}
+          </p>
+          <div className="flex items-center gap-2 justify-start sm:justify-end">
+            {docCount > 0 && (
+              <span className="text-[10px] text-gray-400 flex items-center gap-0.5"><Paperclip className="w-3 h-3" />{docCount}</span>
+            )}
+            <Badge variant="outline" className={`text-[10px] ${STATUS_COLOR[status] || STATUS_COLOR.pending}`}>
+              {STATUS_OPTIONS.find(s => s.value === status)?.label || status}
+            </Badge>
+          </div>
         </div>
       </CardContent>
     </Card>
+  )
+}
+
+function TravelPanel({ trip, onClose, onSaved }: { trip: any; onClose: () => void; onSaved: (t: any) => void }) {
+  const [status, setStatus] = useState(trip.travel?.status ?? "pending")
+  const [notes, setNotes] = useState(trip.travel?.notes ?? "")
+  const [documents, setDocuments] = useState<TravelDoc[]>(trip.travel?.documents ?? [])
+  const [uploadLabel, setUploadLabel] = useState(DOC_LABELS[0])
+  const [uploading, setUploading] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    e.target.value = ""
+    if (!file) return
+    setUploading(true)
+    try {
+      const result = await uploadWithProgress(file, { folder: "travel-documents" })
+      setDocuments(prev => [...prev, { ...result, label: uploadLabel, uploaded_at: new Date().toISOString() }])
+      toast.success(`${uploadLabel} uploaded`)
+    } catch (err: any) {
+      toast.error(err.message || "Upload failed")
+    } finally {
+      setUploading(false)
+    }
+  }
+
+  const handleSave = async () => {
+    setSaving(true)
+    try {
+      const res = await fetch("/api/travel-bookings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          booking_id: trip.id,
+          order_number: trip.order_number,
+          event_date: trip.event_date,
+          event_name: trip.customer_name,
+          venue: trip.venue,
+          customer_name: trip.customer_name,
+          status, notes, documents,
+        }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || "Failed to save")
+      toast.success("Travel & hotel details saved")
+      onSaved(json.data)
+    } catch (err: any) {
+      toast.error(err.message || "Failed to save")
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2">
+            <Hotel className="w-5 h-5 text-[#0891b2]" />
+            Travel & Hotel — {trip.customer_name}
+          </DialogTitle>
+          <DialogDescription>
+            {format(new Date(trip.event_date), "dd MMM yyyy")}{trip.event_time ? ` · ${trip.event_time}` : ""} · {trip.venue || "No venue on file"} · {trip.order_number}
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4 pt-1">
+          <div>
+            <Label className="text-xs font-semibold text-gray-700 mb-1.5 block">Status</Label>
+            <Select value={status} onValueChange={setStatus}>
+              <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {STATUS_OPTIONS.map(s => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div>
+            <Label className="text-xs font-semibold text-gray-700 mb-1.5 block">Notes</Label>
+            <Textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2} placeholder="Any arrangement notes..." className="text-sm resize-none" />
+          </div>
+
+          <div>
+            <Label className="text-xs font-semibold text-gray-700 mb-1.5 block">Documents</Label>
+            <div className="space-y-2 mb-2">
+              {documents.length === 0 && (
+                <p className="text-xs text-gray-400">No documents uploaded yet.</p>
+              )}
+              {documents.map((doc, idx) => {
+                const isImage = doc.type?.startsWith("image/")
+                return (
+                  <div key={idx} className="flex items-center gap-2 border border-gray-200 rounded-lg px-3 py-2">
+                    {isImage ? <ImageIcon className="w-4 h-4 text-gray-400 shrink-0" /> : <FileText className="w-4 h-4 text-gray-400 shrink-0" />}
+                    <a href={doc.url} target="_blank" rel="noreferrer" className="text-xs text-gray-700 hover:text-cyan-600 truncate flex-1">
+                      <span className="font-semibold">{doc.label}</span> — {doc.filename}
+                    </a>
+                    <button onClick={() => setDocuments(prev => prev.filter((_, i) => i !== idx))} className="text-gray-300 hover:text-red-500 shrink-0">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )
+              })}
+            </div>
+            <div className="flex gap-2">
+              <Select value={uploadLabel} onValueChange={setUploadLabel}>
+                <SelectTrigger className="h-9 flex-1"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {DOC_LABELS.map(l => <SelectItem key={l} value={l}>{l}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <label className="shrink-0">
+                <input type="file" accept="image/jpeg,image/png,image/webp,application/pdf" className="hidden" onChange={handleFile} disabled={uploading} />
+                <Button type="button" variant="outline" size="sm" className="h-9" disabled={uploading} asChild>
+                  <span>
+                    {uploading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4 mr-1.5" />}
+                    {uploading ? "" : "Upload"}
+                  </span>
+                </Button>
+              </label>
+            </div>
+          </div>
+
+          <Button onClick={handleSave} disabled={saving} className="w-full bg-[#0891b2] hover:bg-[#0e7490] text-white h-9">
+            {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : null}
+            Save
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }
