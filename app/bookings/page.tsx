@@ -1390,10 +1390,10 @@ export default function BookingsPage() {
               <CardContent className="p-4 flex flex-col justify-between h-full min-h-[140px]">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-blue-600 dark:text-blue-400 uppercase tracking-wider">
-                    {bookingMode === "rental" ? "Rentals" : "Sales"}
+                    {bookingMode === "rental" ? "Total Rentals" : "Total Sales"}
                   </span>
                   {bookingMode === "rental" ? (
-                    <Package className="h-4 w-4 text-blue-500" />
+                    <Package className="h-4 w-4 text-blue-500 animate-pulse" />
                   ) : (
                     <ShoppingCart className="h-4 w-4 text-blue-500" />
                   )}
@@ -1408,12 +1408,14 @@ export default function BookingsPage() {
                 </div>
               </CardContent>
             </Card>
-
+ 
             {/* Card 3: Revenue */}
             <Card className="border-emerald-100 dark:border-emerald-900/30 bg-emerald-50/10 dark:bg-emerald-950/10 shadow-sm hover:shadow-md transition-all duration-300">
               <CardContent className="p-4 flex flex-col justify-between h-full min-h-[140px]">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">Revenue</span>
+                  <span className="text-xs font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider">
+                    {bookingMode === "rental" ? "Rental Revenue" : "Sales Revenue"}
+                  </span>
                   <TrendingUp className="h-4 w-4 text-emerald-500" />
                 </div>
                 <div className="mt-3">
@@ -1426,7 +1428,7 @@ export default function BookingsPage() {
                 </div>
               </CardContent>
             </Card>
-
+ 
             {/* Card 4: Payment Pending */}
             <Card className="border-rose-100 dark:border-rose-900/30 bg-rose-50/10 dark:bg-rose-950/10 shadow-sm hover:shadow-md transition-all duration-300">
               <CardContent className="p-4 flex flex-col justify-between h-full min-h-[140px]">
@@ -1444,15 +1446,15 @@ export default function BookingsPage() {
                 </div>
               </CardContent>
             </Card>
-
+ 
             {/* Card 5: Ready for Delivery/Pickup */}
             <Card className="border-amber-100 dark:border-amber-900/30 bg-amber-50/10 dark:bg-amber-950/10 shadow-sm hover:shadow-md transition-all duration-300">
               <CardContent className="p-4 flex flex-col justify-between h-full min-h-[140px]">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider">
-                    {bookingMode === "rental" ? "Ready for Pickup" : "Ready for Delivery"}
+                    {bookingMode === "rental" ? "Ready for Dispatch" : "Ready for Delivery"}
                   </span>
-                  <Clock className="h-4 w-4 text-amber-500" />
+                  <Clock className="h-4 w-4 text-amber-500 animate-pulse" />
                 </div>
                 <div className="mt-3">
                   <div className="text-3xl font-extrabold text-amber-600 dark:text-amber-400 tracking-tight">
@@ -1464,13 +1466,13 @@ export default function BookingsPage() {
                 </div>
               </CardContent>
             </Card>
-
+ 
             {/* Card 6: Delivered / In Use */}
             <Card className="border-teal-100 dark:border-teal-900/30 bg-teal-50/10 dark:bg-teal-950/10 shadow-sm hover:shadow-md transition-all duration-300">
               <CardContent className="p-4 flex flex-col justify-between h-full min-h-[140px]">
                 <div className="flex items-center justify-between">
                   <span className="text-xs font-bold text-teal-600 dark:text-teal-400 uppercase tracking-wider">
-                    {bookingMode === "rental" ? "In Use" : "Delivered"}
+                    {bookingMode === "rental" ? "In Use (Active)" : "Delivered"}
                   </span>
                   <CheckCircle className="h-4 w-4 text-teal-500" />
                 </div>
@@ -1545,17 +1547,6 @@ export default function BookingsPage() {
 
             {bookingMode === "rental" && (
               <>
-                <Select value={pendingFilters.type} onValueChange={(v)=>updateFilter('type',v)}>
-                  <SelectTrigger className="w-32">
-                    <SelectValue placeholder="All Types" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Types</SelectItem>
-                    <SelectItem value="rental">Rental</SelectItem>
-                    <SelectItem value="sale">Sale</SelectItem>
-                    <SelectItem value="package">Package</SelectItem>
-                  </SelectContent>
-                </Select>
                 <Select value={pendingFilters.products} onValueChange={(v)=>updateFilter('products',v)}>
                   <SelectTrigger className="w-40">
                     <SelectValue placeholder="Product Status" />
