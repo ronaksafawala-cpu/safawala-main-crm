@@ -22,14 +22,15 @@ export async function GET(request: NextRequest) {
     const franchiseId = auth.user!.franchise_id
 
     // 1. Fetch confirmed bookings with event dates
+    // (assigned_stylist_id has no FK constraint in the DB, so it's batch-fetched
+    // separately below rather than using a PostgREST embedded-resource join)
     let orderQ = supabaseServer
       .from("product_orders")
       .select(`
         id, order_number, status, event_date, event_time, event_type,
         venue_name, venue_address,
         customer:customers(id, name, phone),
-        assigned_stylist_id,
-        stylist:users!assigned_stylist_id(id, name, phone, department)
+        assigned_stylist_id
       `)
       .in("status", ["confirmed", "picked_up", "delivered", "in_progress"])
       .not("event_date", "is", null)
@@ -47,6 +48,16 @@ export async function GET(request: NextRequest) {
 
     const { data: orders, error: ordersErr } = await orderQ
     if (ordersErr) throw ordersErr
+
+    const stylistIds = [...new Set((orders ?? []).map((o: any) => o.assigned_stylist_id).filter(Boolean))]
+    const stylistMap = new Map<string, any>()
+    if (stylistIds.length > 0) {
+      const { data: stylists } = await supabaseServer
+        .from("users")
+        .select("id, name, phone, department")
+        .in("id", stylistIds)
+      for (const s of stylists ?? []) stylistMap.set(s.id, s)
+    }
 
     // 2. Fetch travel bookings for these orders
     const orderIds = (orders ?? []).map((o: any) => o.id)
@@ -78,7 +89,7 @@ export async function GET(request: NextRequest) {
         venue: order.venue_name ? `${order.venue_name}${order.venue_address ? `, ${order.venue_address}` : ""}` : order.venue_address,
         customer_name: order.customer?.name ?? "—",
         customer_phone: order.customer?.phone,
-        assigned_stylist: order.stylist,
+        assigned_stylist: order.assigned_stylist_id ? stylistMap.get(order.assigned_stylist_id) ?? null : null,
         travel,
       }
     })
