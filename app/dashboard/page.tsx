@@ -275,6 +275,15 @@ export default function DashboardPage() {
     return counts
   }, [workOrders])
 
+  // First not-yet-done task for a work order, in department flow order — used by the Bookings tab's Remind button
+  const getActiveTask = (wo: any) => {
+    const order = DEPARTMENT_FLOW.map((d) => d.key)
+    const sorted = [...(wo.work_order_tasks || [])].sort(
+      (a: any, b: any) => order.indexOf(a.department) - order.indexOf(b.department)
+    )
+    return sorted.find((t: any) => t.status !== "completed" && t.status !== "cancelled") || sorted[sorted.length - 1]
+  }
+
   const [remindingIds, setRemindingIds] = useState<Set<string>>(new Set())
 
   const handleRemind = async (taskId: string) => {
@@ -668,13 +677,15 @@ export default function DashboardPage() {
                     <p className="text-xs mt-0.5">Everything is packed and delivered!</p>
                   </div>
                 ) : (
-                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 max-h-[600px] overflow-y-auto pr-1">
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 max-h-[480px] overflow-y-auto pr-1">
                     {activeWorkOrders.map((wo) => {
                       const isRental = wo.booking_source === 'product_orders' || wo.booking_source === 'package_bookings'
                       const totalTasks = wo.work_order_tasks?.length || 0
                       const completedTasks = wo.work_order_tasks?.filter((t: any) => t && (t.status === 'completed' || t.status === 'picked')).length || 0
                       const progressPct = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0
                       const isUrgent = getWoPriorityLabel(wo.event_date).includes("Critical")
+                      const activeTask = getActiveTask(wo)
+                      const isReminding = activeTask?.id ? remindingIds.has(activeTask.id) : false
 
                       return (
                         <div
@@ -733,9 +744,20 @@ export default function DashboardPage() {
                               </div>
                             )}
 
-                            <div className="flex items-center justify-end text-[11px] text-indigo-600 font-bold pt-1 gap-0.5">
-                              View Work Order Details
-                              <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                            <div className="flex items-center justify-end pt-1">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={!activeTask?.id || isReminding}
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  if (activeTask?.id) handleRemind(activeTask.id)
+                                }}
+                                className="h-6 px-2 text-[10px] font-bold text-indigo-600 border-indigo-200 hover:bg-indigo-50"
+                              >
+                                <Bell className="h-3 w-3 mr-1" />
+                                {isReminding ? 'Reminded' : 'Remind'}
+                              </Button>
                             </div>
                           </div>
                         </div>
@@ -750,7 +772,7 @@ export default function DashboardPage() {
                   <p className="text-xs mt-0.5">Nothing waiting in this department right now.</p>
                 </div>
               ) : (
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 max-h-[600px] overflow-y-auto pr-1">
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 max-h-[480px] overflow-y-auto pr-1">
                   {activeDeptTasks.map(({ workOrder: wo, task }) => {
                     const isRental = wo.booking_source === 'product_orders' || wo.booking_source === 'package_bookings'
                     const isUrgent = getWoPriorityLabel(wo.event_date).includes("Critical")
