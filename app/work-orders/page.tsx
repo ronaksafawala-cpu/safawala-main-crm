@@ -434,15 +434,7 @@ export default function WorkOrdersPage() {
                           </div>
                         )}
 
-                        <div className="flex items-center justify-end gap-1.5 pt-1">
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => router.push(`/bookings?search=${encodeURIComponent(workOrder.booking_number || '')}`)}
-                            className="h-7 px-2.5 text-[11px] font-bold text-slate-600 border-slate-200 hover:bg-slate-50"
-                          >
-                            View
-                          </Button>
+                        <div className="flex items-center justify-end pt-1">
                           <Button
                             size="sm"
                             variant="outline"
@@ -554,15 +546,7 @@ export default function WorkOrdersPage() {
                       )}
 
                       {/* Action CTA */}
-                      <div className="flex items-center justify-end gap-1.5 pt-1">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => router.push(`/bookings?search=${encodeURIComponent(workOrder.booking_number || '')}`)}
-                          className="h-7 px-2.5 text-[11px] font-bold text-slate-600 border-slate-200 hover:bg-slate-50"
-                        >
-                          View
-                        </Button>
+                      <div className="flex items-center justify-end pt-1">
                         <Button
                           size="sm"
                           variant="outline"
