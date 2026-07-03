@@ -367,10 +367,9 @@ export default function WorkOrdersPage() {
                   const isReminding = activeTask?.id ? remindingIds.has(activeTask.id) : false
 
                   return (
-                    <Card 
+                    <Card
                       key={workOrder.id}
-                      onClick={() => router.push(`/work-orders/${workOrder.id}`)}
-                      className={`bg-white border rounded-xl overflow-hidden hover:shadow-lg transition-all cursor-pointer border-t-4 ${
+                      className={`bg-white border rounded-xl overflow-hidden border-t-4 ${
                         isUrgent ? 'border-t-red-500' : isRental ? 'border-t-indigo-500' : 'border-t-emerald-500'
                       }`}
                     >
@@ -435,13 +434,20 @@ export default function WorkOrdersPage() {
                           </div>
                         )}
 
-                        <div className="flex items-center justify-end pt-1">
+                        <div className="flex items-center justify-end gap-1.5 pt-1">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => router.push(`/bookings?search=${encodeURIComponent(workOrder.booking_number || '')}`)}
+                            className="h-7 px-2.5 text-[11px] font-bold text-slate-600 border-slate-200 hover:bg-slate-50"
+                          >
+                            View
+                          </Button>
                           <Button
                             size="sm"
                             variant="outline"
                             disabled={!activeTask?.id || isReminding}
-                            onClick={(e) => {
-                              e.stopPropagation()
+                            onClick={() => {
                               if (activeTask?.id) handleRemind(activeTask.id)
                             }}
                             className="h-7 px-2.5 text-[11px] font-bold text-indigo-600 border-indigo-200 hover:bg-indigo-50"
@@ -474,10 +480,9 @@ export default function WorkOrdersPage() {
                 const isReminding = remindingIds.has(task.id)
 
                 return (
-                  <Card 
+                  <Card
                     key={task.id}
-                    onClick={() => router.push(`/work-orders/${workOrder.id}`)}
-                    className={`bg-white border rounded-xl overflow-hidden hover:shadow-lg transition-all cursor-pointer border-t-4 ${
+                    className={`bg-white border rounded-xl overflow-hidden border-t-4 ${
                       isUrgent ? 'border-t-red-500' : isRental ? 'border-t-indigo-500' : 'border-t-emerald-500'
                     }`}
                   >
@@ -549,15 +554,20 @@ export default function WorkOrdersPage() {
                       )}
 
                       {/* Action CTA */}
-                      <div className="flex items-center justify-end pt-1">
+                      <div className="flex items-center justify-end gap-1.5 pt-1">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => router.push(`/bookings?search=${encodeURIComponent(workOrder.booking_number || '')}`)}
+                          className="h-7 px-2.5 text-[11px] font-bold text-slate-600 border-slate-200 hover:bg-slate-50"
+                        >
+                          View
+                        </Button>
                         <Button
                           size="sm"
                           variant="outline"
                           disabled={isReminding}
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleRemind(task.id)
-                          }}
+                          onClick={() => handleRemind(task.id)}
                           className="h-7 px-2.5 text-[11px] font-bold text-indigo-600 border-indigo-200 hover:bg-indigo-50"
                         >
                           <Bell className="h-3 w-3 mr-1" />
