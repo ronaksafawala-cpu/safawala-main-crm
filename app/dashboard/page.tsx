@@ -14,7 +14,7 @@ import {
   Calendar, Users, Package, DollarSign, Plus, Eye, Crown, RefreshCw, Search,
   TrendingUp, TrendingDown, AlertCircle, Clock, CheckCircle2, XCircle,
   ArrowUpRight, ArrowDownRight, Minus, Box, Truck, RotateCcw,
-  MapPin, ClipboardList, Bell, User as UserIcon, Warehouse
+  MapPin, ClipboardList, Bell, User as UserIcon, Warehouse, FileText
 } from "lucide-react"
 import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
@@ -612,6 +612,32 @@ export default function DashboardPage() {
             </Card>
           </div>
         )}
+
+        {/* Quick Actions */}
+        <Card className="bg-white border-slate-100 shadow-sm">
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base font-extrabold">Quick Actions</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-2.5">
+              {[
+                { label: "New Lead", href: "/leads", icon: Users, className: "bg-orange-500 hover:bg-orange-600" },
+                { label: "New Quotation", href: "/quotes", icon: FileText, className: "bg-blue-500 hover:bg-blue-600" },
+                { label: "New Order", href: "/create-invoice", icon: Package, className: "bg-emerald-500 hover:bg-emerald-600" },
+                { label: "New Invoice", href: "/create-invoice", icon: ClipboardList, className: "bg-purple-500 hover:bg-purple-600" },
+                { label: "Add Customer", href: "/customers", icon: Plus, className: "bg-orange-500 hover:bg-orange-600" },
+                { label: "Add Employee", href: "/staff", icon: Plus, className: "bg-blue-500 hover:bg-blue-600" },
+              ].map((action) => (
+                <Link key={action.label} href={action.href}>
+                  <Button className={`w-full justify-start text-white font-semibold ${action.className}`}>
+                    <action.icon className="h-4 w-4 mr-2" />
+                    {action.label}
+                  </Button>
+                </Link>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Business Flow — department tabs, same layout as the old Work Orders board, above the calendar */}
         {user?.permissions?.bookings && (
