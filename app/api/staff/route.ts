@@ -24,16 +24,22 @@ function defaultPermissionsForRole(role: string): UserPermissions {
     bookings: true,
     customers: true,
     inventory: true,
-    sales: true,
+    packages: true,
+    vendors: true,
+    quotes: true,
+    invoices: true,
+    invoice_payment_access: true,
     laundry: true,
-    purchases: true,
     expenses: true,
     deliveries: true,
+    productArchive: true,
+    payroll: true,
+    attendance: true,
     reports: true,
     financials: true,
-    invoices: true,
     franchises: true,
     staff: true,
+    integrations: true,
     settings: true,
   }
   const staff: UserPermissions = {
@@ -41,16 +47,22 @@ function defaultPermissionsForRole(role: string): UserPermissions {
     bookings: true,
     customers: true,
     inventory: true,
-    sales: true,
+    packages: false,
+    vendors: false,
+    quotes: true,
+    invoices: true,
+    invoice_payment_access: true,
     laundry: true,
-    purchases: false,
     expenses: false,
     deliveries: true,
+    productArchive: false,
+    payroll: false,
+    attendance: true,
     reports: false,
     financials: false,
-    invoices: true,
     franchises: false,
     staff: false,
+    integrations: false,
     settings: false,
   }
   const readonly: UserPermissions = {
@@ -58,16 +70,22 @@ function defaultPermissionsForRole(role: string): UserPermissions {
     bookings: false,
     customers: true,
     inventory: false,
-    sales: false,
+    packages: false,
+    vendors: false,
+    quotes: false,
+    invoices: false,
+    invoice_payment_access: false,
     laundry: false,
-    purchases: false,
     expenses: false,
     deliveries: false,
+    productArchive: false,
+    payroll: false,
+    attendance: true,
     reports: true,
     financials: false,
-    invoices: false,
     franchises: false,
     staff: false,
+    integrations: false,
     settings: false,
   }
   if (role === 'super_admin' || role === 'franchise_admin') return all
@@ -153,8 +171,7 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    // Allow franchise_admin and hr_staff to create staff members
-    const auth = await authenticateRequest(request, { minRole: 'staff' })
+    const auth = await authenticateRequest(request, { minRole: 'franchise_admin', requirePermission: 'staff' })
     if (!auth.authorized) {
       return NextResponse.json(auth.error, { status: auth.statusCode || 401 })
     }

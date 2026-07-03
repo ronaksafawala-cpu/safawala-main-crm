@@ -73,7 +73,13 @@ export async function POST(request: NextRequest) {
 
     if (delError) {
       console.error('[Staff Delete] Error:', delError)
-      return NextResponse.json({ error: 'Failed to delete staff member' }, { status: 500 })
+      if (delError.code === '23503') {
+        return NextResponse.json(
+          { error: "This staff member has existing bookings, tasks, or other records linked to their account and can't be permanently deleted. Deactivate them instead to preserve that history, or reassign their records first." },
+          { status: 409 }
+        )
+      }
+      return NextResponse.json({ error: delError.message || 'Failed to delete staff member' }, { status: 500 })
     }
 
     return NextResponse.json({ message: 'Staff member deleted successfully' }, { headers: { 'x-route': 'fallback-delete' } })

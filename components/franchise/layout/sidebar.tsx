@@ -30,7 +30,6 @@ const NAV_GROUPS = [
       { label: 'HR',               href: '/franchise-dashboard/hr',                icon: Stethoscope,   permission: 'staff' },
       { label: 'Travels & Hotels', href: '/franchise-dashboard/travels',           icon: Plane,         permission: 'bookings' },
       { label: 'Lock Dates',       href: '/leads',                                 icon: Lock,          permission: 'bookings' },
-      { label: 'Virtual Trial',    href: '/franchise-dashboard/virtual-trial',     icon: Sparkles,      permission: 'inventory' },
     ],
   },
   {

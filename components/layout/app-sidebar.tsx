@@ -30,7 +30,6 @@ import {
   UserPlus,
   Plane,
   Stethoscope,
-  Sparkles,
   ShieldCheck,
 } from "lucide-react"
 
@@ -148,13 +147,6 @@ const navigationItems = {
       icon: Plane,
       permission: "bookings",
       description: "Manage travel bookings, hotel stays, and event logistics for out-of-town events",
-    },
-    {
-      title: "Virtual Trial",
-      url: "/virtual-trial",
-      icon: Sparkles,
-      permission: "inventory",
-      description: "AI-powered virtual try-on — upload person & product photos to see 4-angle previews",
     },
   ],
   business: [
