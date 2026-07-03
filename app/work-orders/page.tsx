@@ -11,10 +11,10 @@ import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { getCurrentUser } from "@/lib/auth"
 import type { User } from "@/lib/types"
-import { 
-  ClipboardList, Search, Warehouse, Package, Truck, 
-  MapPin, RotateCcw, DollarSign, Calendar, Clock, 
-  ChevronRight, RefreshCw, ArrowLeft, ArrowRightLeft, TrendingDown
+import {
+  ClipboardList, Search, Warehouse, Package, Truck,
+  MapPin, RotateCcw, DollarSign, Calendar, Clock,
+  RefreshCw, ArrowLeft, ArrowRightLeft, TrendingDown, Bell
 } from "lucide-react"
 import { format } from "date-fns"
 import { toast } from "sonner"
@@ -59,6 +59,16 @@ interface WorkOrder {
 const isRentalSource = (source: string) =>
   source === "product_orders" || source === "package_bookings"
 
+const DEPT_ORDER = ['warehouse', 'packing', 'dispatch', 'event_team', 'returns', 'accounts']
+
+// First not-yet-done task for a work order, in department flow order — used by the Remind button
+const getActiveTask = (workOrder: WorkOrder) => {
+  const sorted = [...(workOrder.work_order_tasks || [])].sort(
+    (a, b) => DEPT_ORDER.indexOf(a.department) - DEPT_ORDER.indexOf(b.department)
+  )
+  return sorted.find((t) => t.status !== "completed" && t.status !== "cancelled") || sorted[sorted.length - 1]
+}
+
 export default function WorkOrdersPage() {
   const router = useRouter()
   const [user, setUser] = useState<User | null>(null)
@@ -66,8 +76,32 @@ export default function WorkOrdersPage() {
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState("all") // all, new, in_progress, completed
-  const [typeFilter, setTypeFilter] = useState<"all" | "rental" | "sales">("all")
   const [activeTab, setActiveTab] = useState<'bookings' | 'warehouse' | 'packing' | 'dispatch' | 'event_team' | 'returns' | 'accounts'>('bookings')
+  const [remindingIds, setRemindingIds] = useState<Set<string>>(new Set())
+
+  const handleRemind = async (taskId: string) => {
+    if (!taskId || remindingIds.has(taskId)) return
+    setRemindingIds((prev) => new Set(prev).add(taskId))
+    try {
+      const res = await fetch(`/api/work-orders/tasks/${taskId}/remind`, { method: "POST" })
+      const data = await res.json()
+      if (res.ok) {
+        toast.success(`Reminded ${data.notified?.join(", ") || "the team"}`)
+      } else {
+        toast.error(data.error || "Failed to send reminder")
+      }
+    } catch (e) {
+      toast.error("Failed to send reminder")
+    } finally {
+      setTimeout(() => {
+        setRemindingIds((prev) => {
+          const next = new Set(prev)
+          next.delete(taskId)
+          return next
+        })
+      }, 10000)
+    }
+  }
 
   useEffect(() => {
     async function loadUser() {
@@ -104,28 +138,21 @@ export default function WorkOrdersPage() {
     }
   }, [user])
 
-  // Filters logic
+  // Filters logic — this board only ever shows rental bookings and their flow
   const filteredWorkOrders = useMemo(() => {
     return workOrders.filter((wo) => {
-      // 1. Search filter
-      const matchesSearch = 
+      if (!isRentalSource(wo.booking_source)) return false
+
+      const matchesSearch =
         wo.work_order_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
         wo.booking_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
         wo.customer_name.toLowerCase().includes(searchQuery.toLowerCase())
 
-      // 2. Status filter
       const matchesStatus = statusFilter === "all" || wo.status === statusFilter
 
-      // 3. Type filter (Rental vs Sales)
-      const isRental = isRentalSource(wo.booking_source)
-      const matchesType =
-        typeFilter === "all" ||
-        (typeFilter === "rental" && isRental) ||
-        (typeFilter === "sales" && !isRental)
-
-      return matchesSearch && matchesStatus && matchesType
+      return matchesSearch && matchesStatus
     })
-  }, [workOrders, searchQuery, statusFilter, typeFilter])
+  }, [workOrders, searchQuery, statusFilter])
 
   // Get tasks matching the active tab (department) from filtered work orders
   const departmentTasks = useMemo(() => {
@@ -271,23 +298,6 @@ export default function WorkOrdersPage() {
                   <SelectItem value="completed" className="text-xs">Completed</SelectItem>
                 </SelectContent>
               </Select>
-
-              {/* Rental vs Sales Quick Filter */}
-              <div className="flex items-center bg-slate-100 rounded-lg p-0.5 gap-0.5">
-                {(["all", "rental", "sales"] as const).map(t => (
-                  <button
-                    key={t}
-                    onClick={() => setTypeFilter(t)}
-                    className={`px-3 py-1.5 rounded-md text-[11px] font-bold transition-all capitalize ${
-                      typeFilter === t
-                        ? "bg-white shadow text-indigo-700 border border-slate-200"
-                        : "text-slate-500 hover:text-slate-700"
-                    }`}
-                  >
-                    {t === "rental" ? "🔄 Rental" : t === "sales" ? "📦 Sales" : "All"}
-                  </button>
-                ))}
-              </div>
             </div>
           </div>
 
@@ -353,6 +363,8 @@ export default function WorkOrdersPage() {
                   const totalTasks = workOrder.work_order_tasks?.length || 0
                   const completedTasks = workOrder.work_order_tasks?.filter(t => t.status === 'completed' || t.status === 'picked').length || 0
                   const progressPct = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0
+                  const activeTask = getActiveTask(workOrder)
+                  const isReminding = activeTask?.id ? remindingIds.has(activeTask.id) : false
 
                   return (
                     <Card 
@@ -423,9 +435,20 @@ export default function WorkOrdersPage() {
                           </div>
                         )}
 
-                        <div className="flex items-center justify-end text-[11px] text-indigo-600 font-bold pt-1 gap-0.5 hover:translate-x-0.5 transition-transform">
-                          View Work Order Details
-                          <ChevronRight className="h-3 w-3" />
+                        <div className="flex items-center justify-end pt-1">
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={!activeTask?.id || isReminding}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              if (activeTask?.id) handleRemind(activeTask.id)
+                            }}
+                            className="h-7 px-2.5 text-[11px] font-bold text-indigo-600 border-indigo-200 hover:bg-indigo-50"
+                          >
+                            <Bell className="h-3 w-3 mr-1" />
+                            {isReminding ? 'Reminded' : 'Send Remind'}
+                          </Button>
                         </div>
                       </CardContent>
                     </Card>
@@ -448,6 +471,7 @@ export default function WorkOrdersPage() {
                 const checkedChecklist = task.checklist?.filter(c => c.checked).length || 0
                 const isUrgent = getPriorityLabel(workOrder.event_date).includes("Critical")
                 const isRental = isRentalSource(workOrder.booking_source)
+                const isReminding = remindingIds.has(task.id)
 
                 return (
                   <Card 
@@ -525,9 +549,20 @@ export default function WorkOrdersPage() {
                       )}
 
                       {/* Action CTA */}
-                      <div className="flex items-center justify-end text-[11px] text-indigo-600 font-bold pt-1 gap-0.5 hover:translate-x-0.5 transition-transform">
-                        Execute Workflow
-                        <ChevronRight className="h-3 w-3" />
+                      <div className="flex items-center justify-end pt-1">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          disabled={isReminding}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleRemind(task.id)
+                          }}
+                          className="h-7 px-2.5 text-[11px] font-bold text-indigo-600 border-indigo-200 hover:bg-indigo-50"
+                        >
+                          <Bell className="h-3 w-3 mr-1" />
+                          {isReminding ? 'Reminded' : 'Send Remind'}
+                        </Button>
                       </div>
                     </CardContent>
                   </Card>
