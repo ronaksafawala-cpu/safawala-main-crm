@@ -1136,8 +1136,40 @@ export default function BookingsPage() {
     }
   }
 
+  const getFriendlyStatusLabel = (status: string, booking?: any) => {
+    const totalAmount = booking?.total_amount || 0
+    const paidAmount = booking?.paid_amount || 0
+    const hasPartialPayment = paidAmount > 0 && paidAmount < totalAmount
+    const isUnpaid = paidAmount === 0
+
+    if (status === 'draft') {
+      return "Draft"
+    } else if (hasPartialPayment || status === 'pending_payment') {
+      return "Advance Paid"
+    } else if (status === 'cancelled') {
+      return "Cancelled"
+    } else if (status === 'pending_selection' || status === 'pending' || status === 'waiting') {
+      return "Waiting"
+    } else if (isUnpaid && totalAmount > 0) {
+      return "Full Payment Pending"
+    } else if (status === 'delivered') {
+      return booking?.type === 'sale' ? "Delivered" : "In Use (Active)"
+    } else if (status === 'returned') {
+      return "Rental Completed"
+    } else if (status === 'order_complete') {
+      return "Order Complete"
+    } else if (status === 'confirmed') {
+      return booking?.type === 'sale' ? "Ready for Delivery" : "Confirmed"
+    }
+    return status.charAt(0).toUpperCase() + status.slice(1)
+  }
+
   const exportBookings = async (format: 'csv'|'pdf') => {
-    const rows = sortedBookings
+    // Filter rows based on active bookingMode (Rental vs Sale)
+    const rows = sortedBookings.filter((b: any) => 
+      bookingMode === "rental" ? (b.type === "rental" || b.type === "package") : b.type === "sale"
+    )
+    
     if(rows.length===0){
       toast({ title:'Nothing to export', description:'No bookings match current filters', variant:'destructive'})
       return
@@ -1149,7 +1181,7 @@ export default function BookingsPage() {
         (b.customer?.name||'').replace(/,/g,' '),
         b.customer?.phone||'',
         (b as any).type || '',
-        b.status,
+        getFriendlyStatusLabel(b.status, b),
         b.total_amount||0,
         new Date(b.event_date).toLocaleDateString(),
         getVenueNameForExport(b.venue_name).replace(/,/g,' '),
@@ -1170,7 +1202,7 @@ export default function BookingsPage() {
         b.booking_number,
         (b.customer?.name||'').slice(0,25),
         (b as any).type || '',
-        b.status,
+        getFriendlyStatusLabel(b.status, b),
         (b.total_amount||0).toFixed(2),
         new Date(b.event_date).toISOString().slice(0,10),
         formatVenueWithCity(b.venue_name, b.venue_address).slice(0,30)
