@@ -690,8 +690,7 @@ export default function DashboardPage() {
                       return (
                         <div
                           key={wo.id}
-                          onClick={() => router.push(`/work-orders/${wo.id}`)}
-                          className={`bg-white border rounded-xl overflow-hidden hover:shadow-lg transition-all cursor-pointer border-t-4 ${
+                          className={`bg-white border rounded-xl overflow-hidden border-t-4 ${
                             isUrgent ? 'border-t-red-500' : isRental ? 'border-t-indigo-500' : 'border-t-emerald-500'
                           }`}
                         >
@@ -744,13 +743,20 @@ export default function DashboardPage() {
                               </div>
                             )}
 
-                            <div className="flex items-center justify-end pt-1">
+                            <div className="flex items-center justify-end gap-1.5 pt-1">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => router.push(`/bookings?search=${encodeURIComponent(wo.booking_number || '')}`)}
+                                className="h-6 px-2 text-[10px] font-bold text-slate-600 border-slate-200 hover:bg-slate-50"
+                              >
+                                View
+                              </Button>
                               <Button
                                 size="sm"
                                 variant="outline"
                                 disabled={!activeTask?.id || isReminding}
-                                onClick={(e) => {
-                                  e.stopPropagation()
+                                onClick={() => {
                                   if (activeTask?.id) handleRemind(activeTask.id)
                                 }}
                                 className="h-6 px-2 text-[10px] font-bold text-indigo-600 border-indigo-200 hover:bg-indigo-50"
@@ -783,8 +789,7 @@ export default function DashboardPage() {
                     return (
                       <div
                         key={task.id}
-                        onClick={() => router.push(`/work-orders/${wo.id}`)}
-                        className={`bg-white border rounded-xl overflow-hidden hover:shadow-lg transition-all cursor-pointer border-t-4 ${
+                        className={`bg-white border rounded-xl overflow-hidden border-t-4 ${
                           isUrgent ? 'border-t-red-500' : isRental ? 'border-t-indigo-500' : 'border-t-emerald-500'
                         }`}
                       >
@@ -839,19 +844,26 @@ export default function DashboardPage() {
                               <UserIcon className="h-3 w-3 text-slate-400" />
                               <span className="font-semibold text-slate-700">{task.assignee_name || 'Unassigned'}</span>
                             </span>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              disabled={isReminding}
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                handleRemind(task.id)
-                              }}
-                              className="h-6 px-2 text-[10px] font-bold text-indigo-600 border-indigo-200 hover:bg-indigo-50"
-                            >
-                              <Bell className="h-3 w-3 mr-1" />
-                              {isReminding ? 'Reminded' : 'Remind'}
-                            </Button>
+                            <div className="flex items-center gap-1.5">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => router.push(`/bookings?search=${encodeURIComponent(wo.booking_number || '')}`)}
+                                className="h-6 px-2 text-[10px] font-bold text-slate-600 border-slate-200 hover:bg-slate-50"
+                              >
+                                View
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                disabled={isReminding}
+                                onClick={() => handleRemind(task.id)}
+                                className="h-6 px-2 text-[10px] font-bold text-indigo-600 border-indigo-200 hover:bg-indigo-50"
+                              >
+                                <Bell className="h-3 w-3 mr-1" />
+                                {isReminding ? 'Reminded' : 'Remind'}
+                              </Button>
+                            </div>
                           </div>
                         </div>
                       </div>
