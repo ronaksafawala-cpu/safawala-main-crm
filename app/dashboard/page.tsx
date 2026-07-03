@@ -602,7 +602,7 @@ export default function DashboardPage() {
               <CardContent className="flex-1 flex flex-col">
                 <div className="text-2xl font-bold text-orange-600 flex-1">{stats?.lowStockItems || 0}</div>
                 <p className="text-xs text-muted-foreground mb-2">Items need restocking</p>
-                <Link href="/inventory" className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-700 inline-flex items-center gap-0.5">
+                <Link href="/inventory?stock=low_stock" className="text-[11px] font-semibold text-indigo-600 hover:text-indigo-700 inline-flex items-center gap-0.5">
                   View →
                 </Link>
               </CardContent>

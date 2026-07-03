@@ -22,6 +22,7 @@ import { supabase } from '@/lib/supabase'
 import { toast } from 'sonner'
 import { useConfirmationDialog } from '@/components/ui/confirmation-dialog'
 import Link from 'next/link'
+import { useSearchParams } from 'next/navigation'
 
 interface User {
   id: string
@@ -160,6 +161,7 @@ function StatCard({
 }
 
 export default function InventoryDashboard() {
+  const searchParams = useSearchParams()
   const [products, setProducts] = useState<Product[]>([])
   const [categories, setCategories] = useState<Array<{ id: string; name: string }>>([])
   const [loading, setLoading] = useState(true)
@@ -183,6 +185,12 @@ export default function InventoryDashboard() {
         if (saved.sortBy) setSortBy(saved.sortBy)
       }
     } catch {}
+    // URL param wins over saved filters — lets dashboard cards deep-link straight into a filter,
+    // e.g. the "Low Stock Alert" card links to /inventory?stock=low_stock
+    const stockParam = searchParams.get('stock')
+    if (stockParam === 'low_stock' || stockParam === 'out_of_stock' || stockParam === 'in_stock') {
+      setStockFilter(stockParam)
+    }
     setFiltersLoaded(true)
   }, [])
 
@@ -452,6 +460,7 @@ export default function InventoryDashboard() {
   const handleSaveProduct = async (data: any) => {
     const { images, variants, _variation_count, category_name, product_code, ...productData } = data
     let productId = selectedProduct?.id
+    const isExistingProduct = Boolean(productId)
     const activeFranchiseId = resolvedFranchiseId || user?.franchise_id || null
 
     if (productId) {
@@ -517,7 +526,29 @@ export default function InventoryDashboard() {
       }
     }
 
-    fetchProducts()
+    if (isExistingProduct && productId) {
+      // Keep the current grid and scroll position intact after an edit. Replacing the
+      // page with the global loading state here caused the browser to jump to the top.
+      setProducts((currentProducts) =>
+        currentProducts.map((product) => {
+          if (product.id !== productId) return product
+
+          const updatedProduct = normalizeProduct({
+            ...product,
+            ...productData,
+            id: productId,
+            image_url: images?.find((image: any) => image.is_main)?.url ?? productData.image_url ?? product.image_url,
+            updated_at: new Date().toISOString(),
+          })
+
+          ;(updatedProduct as any)._variation_count = variants?.length ?? (product as any)._variation_count
+          return updatedProduct
+        })
+      )
+    } else {
+      // New products still need a full fetch so server-generated fields are included.
+      await fetchProducts()
+    }
   }
 
   // ── Category Actions ──
