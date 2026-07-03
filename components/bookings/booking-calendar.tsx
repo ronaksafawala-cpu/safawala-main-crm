@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { format, isBefore, startOfDay } from "date-fns"
-import { Search, CalendarIcon, Package, Eye, Wrench, Lock, Trash2, User, MapPin, Loader2 } from "lucide-react"
+import { Search, CalendarIcon, Package, Eye, Wrench, Lock, Trash2, User, MapPin, Loader2, Scissors } from "lucide-react"
 import { ItemsDisplayDialog, ItemsSelectionDialog, CompactItemsDisplayDialog } from "@/components/shared"
 import type { SelectedItem } from "@/components/shared/types/items"
 import { PincodeService } from "@/lib/pincode-service"
@@ -570,11 +570,11 @@ export function BookingCalendar({ franchiseId, compact = false, mini = false, on
               <span className="text-slate-600 dark:text-slate-400 font-medium">Past Date</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <span className="text-[10px]">✂️</span>
+              <Scissors className="h-3 w-3 text-amber-500" />
               <span className="text-slate-600 dark:text-slate-400 font-medium">Modifications</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <span className="text-[10px]">🚫</span>
+              <Lock className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
               <span className="text-slate-600 dark:text-slate-400 font-medium">Locked Date</span>
             </div>
           </div>
@@ -627,7 +627,9 @@ export function BookingCalendar({ franchiseId, compact = false, mini = false, on
                   </span>
                   
                   {dayModifications.length > 0 && (
-                    <span className="text-[10px] text-amber-500 animate-pulse" title="Modifications Pending">✂️</span>
+                    <span className="animate-pulse" title="Modifications Pending">
+                      <Scissors className="h-3 w-3 text-amber-500" />
+                    </span>
                   )}
                 </div>
                 
@@ -664,8 +666,9 @@ export function BookingCalendar({ franchiseId, compact = false, mini = false, on
                     </div>
                   )}
                   {isLocked && (
-                    <div className="text-[9px] bg-red-50 text-red-700 border border-red-100 dark:bg-red-950/40 dark:text-red-300 dark:border-red-900/30 px-1.5 py-0.5 rounded font-semibold truncate">
-                      🚫 Locked ({lockedDetails?.notes ? parseLockNote(lockedDetails.notes).personName : "Date Locked"})
+                    <div className="text-[9px] bg-emerald-50 text-emerald-800 border border-emerald-100 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-900/30 px-1.5 py-0.5 rounded font-semibold truncate flex items-center gap-1">
+                      <Lock className="h-2.5 w-2.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                      <span>Locked ({lockedDetails?.notes ? parseLockNote(lockedDetails.notes).personName : "Date Locked"})</span>
                     </div>
                   )}
                 </div>
