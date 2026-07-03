@@ -14,7 +14,7 @@ import {
   Calendar, Users, Package, DollarSign, Plus, Eye, Crown, RefreshCw, Search,
   TrendingUp, TrendingDown, AlertCircle, Clock, CheckCircle2, XCircle,
   ArrowUpRight, ArrowDownRight, Minus, ShoppingCart, Box, Truck, RotateCcw,
-  MapPin, ClipboardList, Bell, User as UserIcon
+  MapPin, ClipboardList, Bell, User as UserIcon, Warehouse
 } from "lucide-react"
 import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
@@ -270,17 +270,6 @@ export default function DashboardPage() {
     return counts
   }, [workOrders])
 
-  const getSortedTasks = (wo: any) => {
-    const tasks = wo.work_order_tasks || []
-    const order = DEPARTMENT_FLOW.map((d) => d.key)
-    return [...tasks].sort((a: any, b: any) => order.indexOf(a.department) - order.indexOf(b.department))
-  }
-
-  const getActiveTask = (wo: any) => {
-    const sorted = getSortedTasks(wo)
-    return sorted.find((t: any) => t.status !== "completed" && t.status !== "cancelled") || sorted[sorted.length - 1]
-  }
-
   const [remindingIds, setRemindingIds] = useState<Set<string>>(new Set())
 
   const handleRemind = async (taskId: string) => {
@@ -304,6 +293,81 @@ export default function DashboardPage() {
           return next
         })
       }, 10000)
+    }
+  }
+
+  // Department tabs shown on the Business Flow widget — "Bookings" is the overview tab,
+  // the rest mirror the work_order_tasks department enum in flow order.
+  const DASHBOARD_TABS = [
+    { key: "bookings", label: "Bookings", icon: Calendar },
+    { key: "warehouse", label: "Warehouse", icon: Warehouse },
+    { key: "packing", label: "Packing", icon: Package },
+    { key: "dispatch", label: "Dispatch", icon: Truck },
+    { key: "event_team", label: "Event Team", icon: MapPin },
+    { key: "returns", label: "Returns", icon: RotateCcw },
+    { key: "accounts", label: "Accounts", icon: DollarSign },
+  ] as const
+
+  const [activeDeptTab, setActiveDeptTab] = useState<typeof DASHBOARD_TABS[number]["key"]>("bookings")
+
+  // Active work orders (used by the "Bookings" tab)
+  const activeWorkOrders = useMemo(
+    () => workOrders.filter((wo) => wo && wo.status !== "completed" && wo.status !== "cancelled"),
+    [workOrders]
+  )
+
+  // One card per task for the currently selected department tab
+  const activeDeptTasks = useMemo(() => {
+    if (activeDeptTab === "bookings") return []
+    const list: Array<{ workOrder: any; task: any }> = []
+    activeWorkOrders.forEach((wo) => {
+      const task = (wo.work_order_tasks || []).find((t: any) => t && t.department === activeDeptTab)
+      if (task) list.push({ workOrder: wo, task })
+    })
+    return list
+  }, [activeWorkOrders, activeDeptTab])
+
+  const getWoPriorityLabel = (dateStr: string | null) => {
+    if (!dateStr) return "Low"
+    const diffDays = Math.ceil((new Date(dateStr).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
+    if (diffDays <= 1) return "Critical (Immediate)"
+    if (diffDays <= 3) return "High"
+    if (diffDays <= 7) return "Medium"
+    return "Low"
+  }
+
+  const getWoPriorityColor = (dateStr: string | null) => {
+    if (!dateStr) return "bg-slate-100 text-slate-700 border-slate-200"
+    const diffDays = Math.ceil((new Date(dateStr).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
+    if (diffDays <= 1) return "bg-red-100 text-red-800 border-red-200"
+    if (diffDays <= 3) return "bg-orange-100 text-orange-800 border-orange-200"
+    if (diffDays <= 7) return "bg-yellow-100 text-yellow-800 border-yellow-200"
+    return "bg-green-100 text-green-800 border-green-200"
+  }
+
+  const formatWoDate = (dateStr: string | null) => {
+    if (!dateStr) return "N/A"
+    try {
+      const d = new Date(dateStr)
+      if (isNaN(d.getTime())) return "N/A"
+      return d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+    } catch {
+      return "N/A"
+    }
+  }
+
+  const getTaskStatusBadge = (status: string) => {
+    switch (status) {
+      case "active":
+        return <Badge className="bg-blue-600 text-white hover:bg-blue-600">Active</Badge>
+      case "picked":
+        return <Badge className="bg-green-600 text-white hover:bg-green-600">Picked</Badge>
+      case "shortage":
+        return <Badge className="bg-red-500 text-white hover:bg-red-500">Shortage</Badge>
+      case "completed":
+        return <Badge className="bg-green-600 text-white hover:bg-green-600">Completed</Badge>
+      default:
+        return <Badge variant="outline" className="text-slate-500 border-slate-200">Waiting</Badge>
     }
   }
 
@@ -520,7 +584,7 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Business Flow — every booking's journey from warehouse to accounts, displayed above the calendar */}
+        {/* Business Flow — department tabs, same layout as the old Work Orders board, above the calendar */}
         {user?.permissions?.bookings && (
           <Card className="bg-white border-slate-100 shadow-sm">
             <CardHeader className="pb-3">
@@ -529,21 +593,35 @@ export default function DashboardPage() {
                 Business Flow
               </CardTitle>
               <CardDescription className="text-xs">
-                Every active booking, which department it's in, and who's on it
+                Every active booking, section by section, from Bookings through to Accounts
               </CardDescription>
-              {/* Department load strip — whole-business glance */}
-              <div className="flex flex-wrap gap-1.5 pt-1">
-                {DEPARTMENT_FLOW.map((d) => (
-                  <span
-                    key={d.key}
-                    className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-full bg-slate-50 border border-slate-200 text-slate-600"
-                  >
-                    {d.label}
-                    <span className={`px-1.5 rounded-full ${departmentCounts[d.key] > 0 ? 'bg-indigo-600 text-white' : 'bg-slate-200 text-slate-500'}`}>
-                      {departmentCounts[d.key] || 0}
-                    </span>
-                  </span>
-                ))}
+
+              {/* Department Tabs */}
+              <div className="grid grid-cols-2 md:grid-cols-7 gap-2 bg-slate-100 p-1 rounded-xl border mt-2">
+                {DASHBOARD_TABS.map((tab) => {
+                  const Icon = tab.icon
+                  const count = tab.key === "bookings" ? activeWorkOrders.length : (departmentCounts[tab.key] || 0)
+                  const isActive = activeDeptTab === tab.key
+                  return (
+                    <button
+                      key={tab.key}
+                      onClick={() => setActiveDeptTab(tab.key)}
+                      className={`flex flex-col items-center justify-center py-2.5 px-2 rounded-lg transition-all border ${
+                        isActive
+                          ? "bg-white text-indigo-600 border-slate-200 shadow-sm font-bold"
+                          : "text-slate-600 border-transparent hover:bg-slate-50/50 hover:text-slate-800"
+                      }`}
+                    >
+                      <Icon className="h-4 w-4 mb-1" />
+                      <span className="text-[10px] font-semibold tracking-wide uppercase">{tab.label}</span>
+                      {count > 0 && (
+                        <Badge className="mt-1 bg-indigo-100 text-indigo-800 font-bold border border-indigo-200 text-[9px] px-1.5 py-0 rounded-full">
+                          {count}
+                        </Badge>
+                      )}
+                    </button>
+                  )
+                })}
               </div>
             </CardHeader>
             <CardContent>
@@ -551,36 +629,21 @@ export default function DashboardPage() {
                 <div className="flex items-center justify-center py-8">
                   <div className="animate-spin rounded-full h-6 w-6 border-2 border-indigo-600 border-t-transparent" />
                 </div>
-              ) : workOrders && workOrders.filter(wo => wo && wo.status !== 'completed' && wo.status !== 'cancelled').length > 0 ? (
-                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 max-h-[600px] overflow-y-auto pr-1">
-                  {workOrders
-                    .filter(wo => wo && wo.status !== 'completed' && wo.status !== 'cancelled')
-                    .map((wo) => {
+              ) : activeDeptTab === "bookings" ? (
+                activeWorkOrders.length === 0 ? (
+                  <div className="text-center py-8 text-slate-400">
+                    <ClipboardList className="h-8 w-8 mx-auto mb-2 opacity-40" />
+                    <p className="text-sm font-medium">No active bookings</p>
+                    <p className="text-xs mt-0.5">Everything is packed and delivered!</p>
+                  </div>
+                ) : (
+                  <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 max-h-[600px] overflow-y-auto pr-1">
+                    {activeWorkOrders.map((wo) => {
                       const isRental = wo.booking_source === 'product_orders' || wo.booking_source === 'package_bookings'
-                      const sortedTasks = getSortedTasks(wo)
-                      const activeTask = getActiveTask(wo)
-
-                      const getPriorityLabel = (dateStr: string | null) => {
-                        if (!dateStr) return "Low"
-                        const diffDays = Math.ceil((new Date(dateStr).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))
-                        if (diffDays <= 1) return "Critical (Immediate)"
-                        if (diffDays <= 3) return "High"
-                        if (diffDays <= 7) return "Medium"
-                        return "Low"
-                      }
-
-                      let formattedDate = ""
-                      if (wo.event_date) {
-                        try {
-                          const d = new Date(wo.event_date)
-                          if (!isNaN(d.getTime())) {
-                            formattedDate = d.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
-                          }
-                        } catch (e) {}
-                      }
-
-                      const isUrgent = getPriorityLabel(wo.event_date).includes("Critical")
-                      const isReminding = activeTask?.id ? remindingIds.has(activeTask.id) : false
+                      const totalTasks = wo.work_order_tasks?.length || 0
+                      const completedTasks = wo.work_order_tasks?.filter((t: any) => t && (t.status === 'completed' || t.status === 'picked')).length || 0
+                      const progressPct = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0
+                      const isUrgent = getWoPriorityLabel(wo.event_date).includes("Critical")
 
                       return (
                         <div
@@ -593,95 +656,154 @@ export default function DashboardPage() {
                           <div className="pb-2 pt-3 px-4 flex flex-row items-start justify-between space-y-0">
                             <div className="space-y-1">
                               <div className="flex items-center gap-1.5 flex-wrap">
-                                <span className="text-xs font-black text-indigo-600 tracking-wider">
-                                  {wo.work_order_number || ''}
-                                </span>
+                                <span className="text-xs font-black text-indigo-600 tracking-wider">{wo.work_order_number || ''}</span>
                                 <span className="text-[10px] text-slate-400 font-bold">•</span>
-                                <span className="text-xs font-semibold text-slate-500">
-                                  {wo.booking_number || ''}
-                                </span>
+                                <span className="text-xs font-semibold text-slate-500">{wo.booking_number || ''}</span>
                                 {isRental ? (
-                                  <span className="inline-flex items-center gap-0.5 text-[9px] font-black bg-indigo-50 text-indigo-700 border border-indigo-200 px-1.5 py-0.5 rounded-full">
-                                    Rental
-                                  </span>
+                                  <span className="inline-flex items-center gap-0.5 text-[9px] font-black bg-indigo-50 text-indigo-700 border border-indigo-200 px-1.5 py-0.5 rounded-full">Rental</span>
                                 ) : (
-                                  <span className="inline-flex items-center gap-0.5 text-[9px] font-black bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded-full">
-                                    Sale
-                                  </span>
+                                  <span className="inline-flex items-center gap-0.5 text-[9px] font-black bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded-full">Sale</span>
                                 )}
                               </div>
                               <p className="text-sm font-bold text-slate-800 line-clamp-1">{wo.customer_name || 'N/A'}</p>
                             </div>
-                            <span className="flex items-center gap-1 text-[10px] text-slate-500 shrink-0">
-                              <Calendar className="h-3 w-3 text-slate-400" />
-                              {formattedDate || 'N/A'}
-                            </span>
-                          </div>
-
-                          <div className="px-4 pb-2">
-                            {/* Department stage tracker */}
-                            <div className="flex items-center gap-1">
-                              {DEPARTMENT_FLOW.map((d, idx) => {
-                                const task = sortedTasks.find((t: any) => t.department === d.key)
-                                const done = task && (task.status === 'completed' || task.status === 'picked')
-                                const active = task && task.id === activeTask?.id && !done
-                                return (
-                                  <div key={d.key} className="flex items-center flex-1">
-                                    <div
-                                      title={`${d.label}${task ? ` — ${task.status}` : ' — n/a'}`}
-                                      className={`h-2 w-2 rounded-full shrink-0 ${
-                                        done ? 'bg-emerald-500' : active ? 'bg-indigo-600 animate-pulse' : 'bg-slate-200'
-                                      }`}
-                                    />
-                                    {idx < DEPARTMENT_FLOW.length - 1 && (
-                                      <div className={`h-0.5 flex-1 ${done ? 'bg-emerald-300' : 'bg-slate-200'}`} />
-                                    )}
-                                  </div>
-                                )
-                              })}
-                            </div>
+                            <Badge className={
+                              wo.status === 'new'
+                                ? 'bg-blue-50 text-blue-700 border-blue-100 shrink-0'
+                                : 'bg-amber-50 text-amber-700 border-amber-100 shrink-0'
+                            } variant="outline">
+                              {wo.status === 'new' ? 'New' : 'In Progress'}
+                            </Badge>
                           </div>
 
                           <div className="pb-3 px-4 space-y-2">
                             <div className="flex items-center justify-between gap-2 border-y py-2 text-[11px] text-slate-500">
                               <span className="flex items-center gap-1">
-                                <UserIcon className="h-3 w-3 text-slate-400" />
-                                {activeTask
-                                  ? `${DEPARTMENT_FLOW.find(d => d.key === activeTask.department)?.label || activeTask.department}: `
-                                  : ''}
-                                <span className="font-semibold text-slate-700">
-                                  {activeTask?.assignee_name || 'Unassigned'}
-                                </span>
+                                <Calendar className="h-3 w-3 text-slate-400" />
+                                Event: {formatWoDate(wo.event_date)}
                               </span>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={!activeTask?.id || isReminding}
-                                onClick={(e) => {
-                                  e.stopPropagation()
-                                  if (activeTask?.id) handleRemind(activeTask.id)
-                                }}
-                                className="h-6 px-2 text-[10px] font-bold text-indigo-600 border-indigo-200 hover:bg-indigo-50"
-                              >
-                                <Bell className="h-3 w-3 mr-1" />
-                                {isReminding ? 'Reminded' : 'Remind'}
-                              </Button>
+                              <Badge variant="outline" className={`text-[9px] border font-bold ${getWoPriorityColor(wo.event_date)}`}>
+                                {getWoPriorityLabel(wo.event_date)}
+                              </Badge>
                             </div>
 
+                            {totalTasks > 0 && (
+                              <div className="space-y-1">
+                                <div className="flex items-center justify-between text-[10px] font-bold text-slate-600">
+                                  <span>Operations Progress</span>
+                                  <span>{completedTasks}/{totalTasks} ({progressPct}%)</span>
+                                </div>
+                                <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                                  <div
+                                    className={`h-full transition-all duration-300 ${isRental ? 'bg-indigo-600' : 'bg-emerald-600'}`}
+                                    style={{ width: `${progressPct}%` }}
+                                  />
+                                </div>
+                              </div>
+                            )}
+
                             <div className="flex items-center justify-end text-[11px] text-indigo-600 font-bold pt-1 gap-0.5">
-                              View Details
+                              View Work Order Details
                               <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
                             </div>
                           </div>
                         </div>
                       )
                     })}
-                </div>
-              ) : (
+                  </div>
+                )
+              ) : activeDeptTasks.length === 0 ? (
                 <div className="text-center py-8 text-slate-400">
                   <ClipboardList className="h-8 w-8 mx-auto mb-2 opacity-40" />
-                  <p className="text-sm font-medium">No active work orders</p>
-                  <p className="text-xs mt-0.5">Everything is packed and delivered!</p>
+                  <p className="text-sm font-medium">No operations pending</p>
+                  <p className="text-xs mt-0.5">Nothing waiting in this department right now.</p>
+                </div>
+              ) : (
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 max-h-[600px] overflow-y-auto pr-1">
+                  {activeDeptTasks.map(({ workOrder: wo, task }) => {
+                    const isRental = wo.booking_source === 'product_orders' || wo.booking_source === 'package_bookings'
+                    const isUrgent = getWoPriorityLabel(wo.event_date).includes("Critical")
+                    const totalChecklist = task.checklist?.length || 0
+                    const checkedChecklist = task.checklist?.filter((c: any) => c.checked).length || 0
+                    const isReminding = remindingIds.has(task.id)
+
+                    return (
+                      <div
+                        key={task.id}
+                        onClick={() => router.push(`/work-orders/${wo.id}`)}
+                        className={`bg-white border rounded-xl overflow-hidden hover:shadow-lg transition-all cursor-pointer border-t-4 ${
+                          isUrgent ? 'border-t-red-500' : isRental ? 'border-t-indigo-500' : 'border-t-emerald-500'
+                        }`}
+                      >
+                        <div className="pb-2 pt-3 px-4 flex flex-row items-start justify-between space-y-0">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="text-xs font-black text-indigo-600 tracking-wider">{task.task_number || ''}</span>
+                              <span className="text-[10px] text-slate-400 font-bold">•</span>
+                              <span className="text-xs font-semibold text-slate-500">{wo.work_order_number || ''}</span>
+                              {isRental ? (
+                                <span className="inline-flex items-center gap-0.5 text-[9px] font-black bg-indigo-50 text-indigo-700 border border-indigo-200 px-1.5 py-0.5 rounded-full">Rental</span>
+                              ) : (
+                                <span className="inline-flex items-center gap-0.5 text-[9px] font-black bg-emerald-50 text-emerald-700 border border-emerald-200 px-1.5 py-0.5 rounded-full">Sale</span>
+                              )}
+                            </div>
+                            <p className="text-sm font-bold text-slate-800 line-clamp-1">{wo.customer_name || 'N/A'}</p>
+                          </div>
+                          {getTaskStatusBadge(task.status)}
+                        </div>
+
+                        <div className="px-4 pb-2 space-y-1.5">
+                          <div className="flex items-center justify-between gap-2 border-y py-2 text-[11px] text-slate-500">
+                            <span className="flex items-center gap-1">
+                              <Calendar className="h-3 w-3 text-slate-400" />
+                              Event: {formatWoDate(wo.event_date)}
+                            </span>
+                            <Badge variant="outline" className={`text-[9px] border font-bold ${getWoPriorityColor(wo.event_date)}`}>
+                              {getWoPriorityLabel(wo.event_date)}
+                            </Badge>
+                          </div>
+                          <p className="text-xs font-bold text-slate-700 leading-snug">{task.title}</p>
+
+                          {totalChecklist > 0 && (
+                            <div className="space-y-1 pt-1">
+                              <div className="flex items-center justify-between text-[10px] font-bold text-slate-600">
+                                <span>Checklist</span>
+                                <span>{checkedChecklist}/{totalChecklist}</span>
+                              </div>
+                              <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full transition-all duration-300 ${isRental ? 'bg-indigo-600' : 'bg-emerald-600'}`}
+                                  style={{ width: `${(checkedChecklist / totalChecklist) * 100}%` }}
+                                />
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="pb-3 px-4 space-y-2">
+                          <div className="flex items-center justify-between gap-2 pt-1 text-[11px] text-slate-500">
+                            <span className="flex items-center gap-1">
+                              <UserIcon className="h-3 w-3 text-slate-400" />
+                              <span className="font-semibold text-slate-700">{task.assignee_name || 'Unassigned'}</span>
+                            </span>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              disabled={isReminding}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleRemind(task.id)
+                              }}
+                              className="h-6 px-2 text-[10px] font-bold text-indigo-600 border-indigo-200 hover:bg-indigo-50"
+                            >
+                              <Bell className="h-3 w-3 mr-1" />
+                              {isReminding ? 'Reminded' : 'Remind'}
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
               )}
             </CardContent>
