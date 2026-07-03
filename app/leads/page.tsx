@@ -226,6 +226,30 @@ export default function LeadsPage() {
     }
   }
 
+  const handleCreateLockDate = async () => {
+    if (!newLock.date) { toast.error("Please select a date"); return }
+    if (!newLock.personName.trim()) { toast.error("Person name is required"); return }
+    setCreatingLock(true)
+    const encodedNotes = `PERSON: ${newLock.personName.trim()}|CITY: ${newLock.city.trim() || "—"}|NOTE: ${newLock.note.trim()}`
+    try {
+      const res = await fetch("/api/locked-dates", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ locked_date: newLock.date, whatsapp_number: newLock.whatsapp || null, notes: encodedNotes }),
+      })
+      const json = await res.json()
+      if (!res.ok) throw new Error(json.error || "Failed to lock date")
+      setLockedDates((prev) => [...prev, json.data].sort((a, b) => a.locked_date.localeCompare(b.locked_date)))
+      toast.success(`${format(new Date(newLock.date), "dd MMM yyyy")} locked`)
+      setNewLock({ date: format(new Date(), "yyyy-MM-dd"), personName: "", city: "", whatsapp: "", note: "" })
+      setShowAddLockDialog(false)
+    } catch (e: any) {
+      toast.error(e.message || "Failed to lock date")
+    } finally {
+      setCreatingLock(false)
+    }
+  }
+
   // Master Data
   const [currentUser, setCurrentUser] = useState<any>(null)
   const [staffMembers, setStaffMembers] = useState<any[]>([])
@@ -256,6 +280,15 @@ export default function LeadsPage() {
   const [savingLockId, setSavingLockId] = useState<string | null>(null)
   const [convertingLockId, setConvertingLockId] = useState<string | null>(null)
   const [convertedLockIds, setConvertedLockIds] = useState<Set<string>>(new Set())
+  const [showAddLockDialog, setShowAddLockDialog] = useState(false)
+  const [creatingLock, setCreatingLock] = useState(false)
+  const [newLock, setNewLock] = useState({
+    date: format(new Date(), "yyyy-MM-dd"),
+    personName: "",
+    city: "",
+    whatsapp: "",
+    note: "",
+  })
 
   // Details Edit States
   const [isEditingDetails, setIsEditingDetails] = useState(false)
@@ -1044,12 +1077,18 @@ export default function LeadsPage() {
 
         {/* ─── Locked Dates Section ─── */}
         <div>
-          <div className="flex items-center gap-2 mb-4">
-            <Lock className="h-5 w-5 text-green-500" />
-            <h2 className="text-lg font-semibold text-gray-900">Locked Dates</h2>
-            {lockedDates.length > 0 && (
-              <Badge className="text-xs bg-green-100 text-green-800 border-green-200 hover:bg-green-100">{lockedDates.filter(ld => ld.locked_date >= format(new Date(), "yyyy-MM-dd")).length} upcoming</Badge>
-            )}
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-2">
+              <Lock className="h-5 w-5 text-green-500" />
+              <h2 className="text-lg font-semibold text-gray-900">Locked Dates</h2>
+              {lockedDates.length > 0 && (
+                <Badge className="text-xs bg-green-100 text-green-800 border-green-200 hover:bg-green-100">{lockedDates.filter(ld => ld.locked_date >= format(new Date(), "yyyy-MM-dd")).length} upcoming</Badge>
+              )}
+            </div>
+            <Button size="sm" onClick={() => setShowAddLockDialog(true)} className="bg-green-600 hover:bg-green-700 text-white">
+              <Plus className="h-4 w-4 mr-1" />
+              Lock a Date
+            </Button>
           </div>
 
           {loadingLocks ? (
@@ -1216,6 +1255,88 @@ export default function LeadsPage() {
         </div>
 
       </div>
+
+      {/* Lock a Date Dialog */}
+      <Dialog open={showAddLockDialog} onOpenChange={setShowAddLockDialog}>
+        <DialogContent className="max-w-md bg-white border border-slate-100 shadow-lg rounded-xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-gray-900">
+              <Lock className="h-5 w-5 text-green-600" />
+              Lock a Date
+            </DialogTitle>
+            <DialogDescription>Block a date from new bookings.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 pt-1">
+            <div>
+              <Label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5 mb-1.5">
+                <Calendar className="h-3.5 w-3.5" /> Select Date *
+              </Label>
+              <Input
+                type="date"
+                value={newLock.date}
+                onChange={(e) => setNewLock((f) => ({ ...f, date: e.target.value }))}
+                className="h-9"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <Label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5 mb-1.5">
+                  <User className="h-3.5 w-3.5" /> Person Name *
+                </Label>
+                <Input
+                  placeholder="e.g. Rahul Sharma"
+                  value={newLock.personName}
+                  onChange={(e) => setNewLock((f) => ({ ...f, personName: e.target.value }))}
+                  className="h-9"
+                />
+              </div>
+              <div>
+                <Label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5 mb-1.5">
+                  <MapPin className="h-3.5 w-3.5" /> City
+                </Label>
+                <Input
+                  placeholder="e.g. Surat"
+                  value={newLock.city}
+                  onChange={(e) => setNewLock((f) => ({ ...f, city: e.target.value }))}
+                  className="h-9"
+                />
+              </div>
+            </div>
+            <div>
+              <Label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5 mb-1.5">
+                <Phone className="h-3.5 w-3.5" /> WhatsApp Number
+              </Label>
+              <Input
+                type="tel"
+                placeholder="+91 97252 95691"
+                value={newLock.whatsapp}
+                onChange={(e) => setNewLock((f) => ({ ...f, whatsapp: e.target.value }))}
+                className="h-9"
+              />
+            </div>
+            <div>
+              <Label className="text-xs font-semibold text-slate-700 flex items-center gap-1.5 mb-1.5">
+                <FileText className="h-3.5 w-3.5" /> Requirement / Notes
+              </Label>
+              <Textarea
+                placeholder="e.g. High season, no new bookings after 4pm..."
+                value={newLock.note}
+                onChange={(e) => setNewLock((f) => ({ ...f, note: e.target.value }))}
+                rows={2}
+                className="text-sm resize-none"
+              />
+            </div>
+            <Button
+              onClick={handleCreateLockDate}
+              disabled={creatingLock || !newLock.date}
+              className="w-full bg-green-600 hover:bg-green-700 text-white h-9"
+            >
+              {creatingLock ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Lock className="h-4 w-4 mr-2" />}
+              Lock This Date
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Manual Add Lead Dialog */}
       <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
