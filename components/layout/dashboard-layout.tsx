@@ -166,7 +166,7 @@ export function DashboardLayout({ children, userRole }: DashboardLayoutProps) {
               variant="outline"
               size="sm"
               onClick={() => setShowLockDate(true)}
-              className="gap-1 text-xs px-2 text-red-400 border-zinc-700 bg-zinc-800 hover:bg-red-900/30 hover:text-red-300 hover:border-red-700"
+              className="gap-1 text-xs px-2 text-green-400 border-zinc-700 bg-zinc-800 hover:bg-green-900/30 hover:text-green-300 hover:border-green-700"
               title="Lock a date"
             >
               <Lock className="h-3.5 w-3.5" />
