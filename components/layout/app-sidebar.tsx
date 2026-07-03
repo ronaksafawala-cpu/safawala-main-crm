@@ -28,7 +28,6 @@ import {
   Layers,
   FileCheck,
   Archive,
-  ClipboardList,
   UserPlus,
   Lock,
   Plane,
@@ -216,13 +215,6 @@ const navigationItems = {
       icon: Truck,
       permission: "deliveries",
       description: "Manage delivery schedules, track shipments, coordinate logistics, and handle product returns",
-    },
-    {
-      title: "Work Orders",
-      url: "/work-orders",
-      icon: ClipboardList,
-      permission: "bookings",
-      description: "Manage department-wise work orders, task checklists for warehouse, packing and dispatch",
     },
     {
       title: "Modifications",

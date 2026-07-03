@@ -70,6 +70,26 @@ export async function GET(request: NextRequest) {
     const packageBookingsMap = new Map(packageBookingsRes.data?.filter((o: any) => o && o.id).map((o: any) => [o.id, o]) || [])
     const directSalesMap = new Map(directSalesRes.data?.filter((o: any) => o && o.id).map((o: any) => [o.id, o]) || [])
 
+    // Batch-fetch assignee names/phones for every task's assigned_to id
+    const assigneeIds = Array.from(
+      new Set(
+        workOrders
+          .flatMap((wo) => wo.work_order_tasks || [])
+          .map((t: any) => t?.assigned_to)
+          .filter(Boolean)
+      )
+    )
+    const assigneeMap = new Map<string, { name: string; phone: string | null }>()
+    if (assigneeIds.length > 0) {
+      const { data: assignees } = await supabase
+        .from("users")
+        .select("id, name, phone")
+        .in("id", assigneeIds)
+      for (const a of assignees || []) {
+        assigneeMap.set(a.id, { name: a.name, phone: a.phone || null })
+      }
+    }
+
     // Enrich each work order with its booking number, event date, and customer details
     const enrichedWorkOrders = workOrders.map((wo) => {
       let bookingDetails: any = null
@@ -110,6 +130,14 @@ export async function GET(request: NextRequest) {
         event_date: eventDate || null,
         customer_name: customerName || "N/A",
         customer_phone: customerPhone || "N/A",
+        work_order_tasks: (wo.work_order_tasks || []).map((t: any) => {
+          const assignee = t?.assigned_to ? assigneeMap.get(t.assigned_to) : null
+          return {
+            ...t,
+            assignee_name: assignee?.name || null,
+            assignee_phone: assignee?.phone || null,
+          }
+        }),
       }
     })
 
