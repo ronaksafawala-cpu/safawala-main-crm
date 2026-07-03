@@ -29,7 +29,6 @@ import {
   FileCheck,
   Archive,
   UserPlus,
-  Lock,
   Plane,
   Stethoscope,
   Sparkles,
@@ -157,13 +156,6 @@ const navigationItems = {
       icon: Plane,
       permission: "bookings",
       description: "Manage travel bookings, hotel stays, and event logistics for out-of-town events",
-    },
-    {
-      title: "Lock Dates",
-      url: "/lock-dates",
-      icon: Lock,
-      permission: "bookings",
-      description: "Block dates from new bookings — manage locked dates with person name and city",
     },
     {
       title: "Virtual Trial",
