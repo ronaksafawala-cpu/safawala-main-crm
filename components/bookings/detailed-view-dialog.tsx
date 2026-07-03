@@ -50,6 +50,44 @@ export function DetailedBookingViewDialog({
   const { toast } = useToast()
   const [sendingWhatsapp, setSendingWhatsapp] = useState(false)
   const [updatingStatus, setUpdatingStatus] = useState(false)
+  const [localItems, setLocalItems] = useState<any[]>(bookingItems || [])
+  const [loadingItems, setLoadingItems] = useState(false)
+
+  // Map booking.source to the backend's expected orderType string
+  const mapSourceToOrderType = (source?: string) => {
+    if (source === "product_orders") return "product_order"
+    if (source === "package_bookings") return "package_booking"
+    if (source === "direct_sales" || source === "direct_sales_orders") return "direct_sale"
+    return "product_order" // Default fallback
+  }
+
+  useEffect(() => {
+    if (bookingItems && bookingItems.length > 0) {
+      setLocalItems(bookingItems)
+      return
+    }
+
+    const fetchItems = async () => {
+      if (!booking?.id) return
+      setLoadingItems(true)
+      try {
+        const source = mapSourceToOrderType(booking.source)
+        const res = await fetch(`/api/bookings-items?id=${booking.id}&source=${source}`)
+        if (res.ok) {
+          const data = await res.json()
+          if (Array.isArray(data.items)) {
+            setLocalItems(data.items)
+          }
+        }
+      } catch (err) {
+        console.error("Failed to fetch booking items dynamically:", err)
+      } finally {
+        setLoadingItems(false)
+      }
+    }
+
+    fetchItems()
+  }, [booking?.id, bookingItems])
 
   if (!booking) return null
 
@@ -95,14 +133,6 @@ export function DetailedBookingViewDialog({
       default:
         return status.charAt(0).toUpperCase() + status.slice(1)
     }
-  }
-
-  // Map booking.source to the backend's expected orderType string
-  const mapSourceToOrderType = (source?: string) => {
-    if (source === "product_orders") return "product_order"
-    if (source === "package_bookings") return "package_booking"
-    if (source === "direct_sales" || source === "direct_sales_orders") return "direct_sale"
-    return "product_order" // Default fallback
   }
 
   const handleEdit = () => {
@@ -202,6 +232,15 @@ export function DetailedBookingViewDialog({
                   <Send className="h-3.5 w-3.5 mr-1.5" />
                 )}
                 WhatsApp Invoice
+              </Button>
+              <Button 
+                size="sm" 
+                variant="ghost" 
+                onClick={() => onOpenChange(false)} 
+                className="h-8 w-8 p-0 text-white/80 hover:text-white hover:bg-white/10 rounded-full flex items-center justify-center ml-1"
+                title="Close"
+              >
+                <XCircle className="h-5 w-5" />
               </Button>
             </div>
           </div>
@@ -373,11 +412,16 @@ export function DetailedBookingViewDialog({
             <CardHeader className="pb-2 border-b border-slate-100 dark:border-slate-800/60">
               <CardTitle className="text-sm font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-2">
                 <Package className="h-4 w-4 text-indigo-500" />
-                Purchased / Rental Items ({bookingItems.length})
+                Purchased / Rental Items ({localItems.length})
               </CardTitle>
             </CardHeader>
             <CardContent className="p-0">
-              {bookingItems.length === 0 ? (
+              {loadingItems ? (
+                <div className="flex items-center justify-center py-10 gap-3">
+                  <Loader2 className="h-5 w-5 animate-spin text-indigo-500" />
+                  <span className="text-sm text-slate-500">Loading items...</span>
+                </div>
+              ) : localItems.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-10 text-muted-foreground gap-1.5">
                   <Package className="h-8 w-8 stroke-[1.5]" />
                   <span className="text-sm font-medium">No items added to this booking</span>
@@ -396,7 +440,7 @@ export function DetailedBookingViewDialog({
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {bookingItems.map((item, idx) => (
+                      {localItems.map((item, idx) => (
                         <TableRow key={item.id || idx}>
                           <TableCell className="text-center text-muted-foreground">{idx + 1}</TableCell>
                           <TableCell>
