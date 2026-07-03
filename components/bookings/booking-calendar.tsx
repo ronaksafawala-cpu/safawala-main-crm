@@ -554,24 +554,28 @@ export function BookingCalendar({ franchiseId, compact = false, mini = false, on
 
           <div className="flex items-center gap-4 text-[11px] flex-wrap">
             <div className="flex items-center gap-1.5">
-              <span className="inline-block w-2.5 h-2.5 rounded-sm bg-blue-500/80 border border-blue-600/30 shadow-sm" />
-              <span className="text-muted-foreground font-medium">Rentals</span>
+              <span className="inline-block w-2.5 h-2.5 rounded-full bg-white border border-slate-300 dark:border-slate-700 shadow-sm" />
+              <span className="text-slate-600 dark:text-slate-400 font-medium">0 Bookings</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <span className="inline-block w-2.5 h-2.5 rounded-sm bg-purple-500/80 border border-purple-600/30 shadow-sm" />
-              <span className="text-muted-foreground font-medium">Packages</span>
+              <span className="inline-block w-2.5 h-2.5 rounded-full bg-emerald-100 dark:bg-emerald-950 border border-emerald-300 shadow-sm" />
+              <span className="text-slate-600 dark:text-slate-400 font-medium">1-10 Bookings</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <span className="inline-block w-2.5 h-2.5 rounded-sm bg-emerald-500/80 border border-emerald-600/30 shadow-sm" />
-              <span className="text-muted-foreground font-medium">Sales</span>
+              <span className="inline-block w-2.5 h-2.5 rounded-full bg-orange-100 dark:bg-orange-950 border border-orange-300 shadow-sm" />
+              <span className="text-slate-600 dark:text-slate-400 font-medium">10+ Bookings</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <span className="inline-block w-2.5 h-2.5 rounded-sm bg-orange-400 border border-orange-500/30 shadow-sm flex items-center justify-center text-[8px]">🔧</span>
-              <span className="text-muted-foreground font-medium">Alteration</span>
+              <span className="inline-block w-2.5 h-2.5 rounded-full bg-slate-100 dark:bg-slate-800 border border-slate-200 shadow-sm" />
+              <span className="text-slate-600 dark:text-slate-400 font-medium">Past Date</span>
             </div>
             <div className="flex items-center gap-1.5">
-              <span className="inline-block w-2.5 h-2.5 rounded-sm bg-red-100 border border-red-200" />
-              <span className="text-muted-foreground font-medium">Locked</span>
+              <span className="text-[10px]">✂️</span>
+              <span className="text-slate-600 dark:text-slate-400 font-medium">Modifications</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-[10px]">🚫</span>
+              <span className="text-slate-600 dark:text-slate-400 font-medium">Locked Date</span>
             </div>
           </div>
         </div>
@@ -597,23 +601,33 @@ export function BookingCalendar({ franchiseId, compact = false, mini = false, on
             const isLocked = lockedDates.includes(dateStr)
             const lockedDetails = lockedDateObjects.find(ld => ld.locked_date === dateStr)
             
+            const isPastDate = isBefore(startOfDay(day), startOfDay(new Date()))
+            let cellBgClass = "bg-white dark:bg-slate-900 text-slate-700 dark:text-slate-300"
+            if (isPastDate) {
+              cellBgClass = "bg-slate-100 dark:bg-slate-900/65 text-slate-400 dark:text-slate-500 opacity-80 cursor-not-allowed"
+            } else if (dayBookings.length > 0 && dayBookings.length <= 10) {
+              cellBgClass = "bg-emerald-50 dark:bg-emerald-950/20 text-emerald-900 dark:text-emerald-300 border-emerald-100 dark:border-emerald-900/10"
+            } else if (dayBookings.length > 10) {
+              cellBgClass = "bg-orange-50 dark:bg-orange-950/20 text-orange-900 dark:text-orange-300 border-orange-100 dark:border-orange-900/10"
+            }
+            
             return (
               <div 
                 key={dateStr} 
                 onClick={() => handleDateClick(day)}
-                className={`bg-white dark:bg-slate-900 min-h-[110px] p-2 flex flex-col justify-between border-slate-100 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-all cursor-pointer group ${
+                className={`${cellBgClass} min-h-[110px] p-2 flex flex-col justify-between border-slate-100 hover:bg-slate-50 dark:hover:bg-slate-800/40 transition-all cursor-pointer group ${
                   isToday ? "ring-1 ring-inset ring-indigo-500 bg-indigo-50/5" : ""
                 }`}
               >
                 <div className="flex justify-between items-center mb-1">
                   <span className={`text-xs font-bold flex items-center justify-center h-5 w-5 rounded-full ${
-                    isToday ? "bg-indigo-600 text-white font-extrabold" : "text-slate-700 dark:text-slate-300"
+                    isToday ? "bg-indigo-600 text-white font-extrabold" : isPastDate ? "text-slate-400 dark:text-slate-500" : "text-slate-700 dark:text-slate-300"
                   }`}>
                     {day.getDate()}
                   </span>
                   
                   {dayModifications.length > 0 && (
-                    <span className="text-[10px] text-amber-500 animate-pulse" title="Modifications Pending">🔧</span>
+                    <span className="text-[10px] text-amber-500 animate-pulse" title="Modifications Pending">✂️</span>
                   )}
                 </div>
                 
@@ -625,12 +639,12 @@ export function BookingCalendar({ franchiseId, compact = false, mini = false, on
                       <div 
                         key={b.id} 
                         onClick={(e) => {
-                          e.stopPropagation()
-                          setSelectedCalendarBooking(b)
-                          setSelectedDate(day)
-                          setDateBookings(dayBookings)
-                          setModificationBookings(dayModifications)
-                          setShowDateDetails(true)
+                           e.stopPropagation()
+                           setSelectedCalendarBooking(b)
+                           setSelectedDate(day)
+                           setDateBookings(dayBookings)
+                           setModificationBookings(dayModifications)
+                           setShowDateDetails(true)
                         }}
                         className={`text-[9px] px-1.5 py-0.5 rounded font-semibold truncate transition-colors ${
                           isRental 
@@ -651,7 +665,7 @@ export function BookingCalendar({ franchiseId, compact = false, mini = false, on
                   )}
                   {isLocked && (
                     <div className="text-[9px] bg-red-50 text-red-700 border border-red-100 dark:bg-red-950/40 dark:text-red-300 dark:border-red-900/30 px-1.5 py-0.5 rounded font-semibold truncate">
-                      🔒 Locked ({lockedDetails?.notes ? parseLockNote(lockedDetails.notes).personName : "Date Locked"})
+                      🚫 Locked ({lockedDetails?.notes ? parseLockNote(lockedDetails.notes).personName : "Date Locked"})
                     </div>
                   )}
                 </div>
