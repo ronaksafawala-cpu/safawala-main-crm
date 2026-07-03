@@ -1574,16 +1574,6 @@ export default function BookingsPage() {
                     <SelectItem value="high-to-low">Safa: High→Low</SelectItem>
                   </SelectContent>
                 </Select>
-                <Select value={pendingFilters.distanceSort} onValueChange={(v)=>updateFilter('distanceSort',v)}>
-                  <SelectTrigger className="w-36">
-                    <SelectValue placeholder="Distance" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">All Distances</SelectItem>
-                    <SelectItem value="low-to-high">Near→Far</SelectItem>
-                    <SelectItem value="high-to-low">Far→Near</SelectItem>
-                  </SelectContent>
-                </Select>
               </>
             )}
 
