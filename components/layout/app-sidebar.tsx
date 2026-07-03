@@ -5,7 +5,6 @@ import { useRouter, usePathname } from "next/navigation"
 import { useState, useEffect } from "react"
 import {
   Calendar,
-  Crown,
   Users,
   Package,
   FileText,
@@ -106,13 +105,6 @@ const navigationItems = {
       icon: Package,
       permission: "inventory",
       description: "Track wedding accessories, manage stock levels, and monitor product availability",
-    },
-    {
-      title: "Retail Catalog",
-      url: "/retail-catalog",
-      icon: Crown,
-      permission: "inventory",
-      description: "Browse jewelry, apparel, and retail product catalog with visual image gallery",
     },
     {
       title: "Packages",

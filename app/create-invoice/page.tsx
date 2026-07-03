@@ -208,6 +208,7 @@ export default function CreateInvoicePage() {
   const qCustomerName = searchParams.get("customerName")
   const qCustomerPhone = searchParams.get("customerPhone")
   const qCustomerEmail = searchParams.get("customerEmail")
+  const qCustomerId = searchParams.get("customerId")
 
   // Company Settings for PDF
   const [companySettings, setCompanySettings] = useState<any>(null)
@@ -348,6 +349,17 @@ export default function CreateInvoicePage() {
       })
       .catch(err => console.error('[CreateInvoice] Failed to load current user:', err))
   }, [pdfToken])
+
+  // Pre-select an existing customer when arriving via ?customerId= (e.g. "same customer, new booking")
+  useEffect(() => {
+    if (mode !== "new" || !qCustomerId || pdfToken) return
+    fetch(`/api/customers/${qCustomerId}`)
+      .then(res => (res.ok ? res.json() : null))
+      .then(json => {
+        if (json?.data) setSelectedCustomer(json.data)
+      })
+      .catch(err => console.error('[CreateInvoice] Failed to load customer from customerId:', err))
+  }, [mode, qCustomerId, pdfToken])
 
   // Generate invoice number based on stored sequences
   useEffect(() => {

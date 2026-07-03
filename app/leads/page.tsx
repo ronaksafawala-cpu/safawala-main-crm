@@ -1,6 +1,7 @@
 "use client"
 
 import { useState, useEffect, useCallback, useMemo } from "react"
+import { useRouter } from "next/navigation"
 import { format, parseISO } from "date-fns"
 import {
   Users, Phone, MapPin, Calendar, Search, RefreshCw, Filter,
@@ -90,6 +91,7 @@ const getWhatsAppLink = (phone: string) => {
 }
 
 export default function LeadsPage() {
+  const router = useRouter()
   const [leads, setLeads] = useState<Lead[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState("")
@@ -180,27 +182,8 @@ export default function LeadsPage() {
     }
   }
 
-  const handleConvertLockToCustomer = async (ld: any) => {
-    const parsed = parseLockNote(ld.notes)
-    if (!parsed.personName.trim()) {
-      toast.error("Add a person name before converting to a customer")
-      return
-    }
-    const phone = (ld.whatsapp_number || "").replace(/\D/g, "")
-    if (phone.length < 10) {
-      toast.error("Add a valid WhatsApp number before converting to a customer")
-      return
-    }
-    setConvertingLockId(ld.id)
+  const createCustomerFromLock = async (ld: any, parsed: { personName: string; city: string; note: string }) => {
     try {
-      const existingRes = await fetch(`/api/customers?search=${encodeURIComponent(phone)}`)
-      const existing = existingRes.ok ? await existingRes.json() : null
-      if (existing?.success && existing.data?.length > 0) {
-        setConvertedLockIds((prev) => new Set(prev).add(ld.id))
-        toast.info(`${parsed.personName} is already a customer`)
-        return
-      }
-
       const res = await fetch("/api/customers", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -219,6 +202,45 @@ export default function LeadsPage() {
         const data = await res.json().catch(() => ({}))
         toast.error(data.error || "Failed to convert to customer")
       }
+    } catch {
+      toast.error("Failed to convert to customer")
+    }
+  }
+
+  const handleConvertLockToCustomer = async (ld: any) => {
+    const parsed = parseLockNote(ld.notes)
+    if (!parsed.personName.trim()) {
+      toast.error("Add a person name before converting to a customer")
+      return
+    }
+    const phone = (ld.whatsapp_number || "").replace(/\D/g, "")
+    if (phone.length < 10) {
+      toast.error("Add a valid WhatsApp number before converting to a customer")
+      return
+    }
+    setConvertingLockId(ld.id)
+    try {
+      // Check for a duplicate by phone first, then by name, before creating a new record
+      let match: any = null
+      const phoneRes = await fetch(`/api/customers?search=${encodeURIComponent(phone)}`)
+      if (phoneRes.ok) {
+        const j = await phoneRes.json()
+        if (j.success && j.data?.length > 0) match = j.data[0]
+      }
+      if (!match) {
+        const nameRes = await fetch(`/api/customers?search=${encodeURIComponent(parsed.personName.trim())}`)
+        if (nameRes.ok) {
+          const j = await nameRes.json()
+          if (j.success && j.data?.length > 0) match = j.data[0]
+        }
+      }
+
+      if (match) {
+        setDuplicateCandidate({ lockedDate: ld, customer: match, parsed })
+        return
+      }
+
+      await createCustomerFromLock(ld, parsed)
     } catch {
       toast.error("Failed to convert to customer")
     } finally {
@@ -280,6 +302,7 @@ export default function LeadsPage() {
   const [savingLockId, setSavingLockId] = useState<string | null>(null)
   const [convertingLockId, setConvertingLockId] = useState<string | null>(null)
   const [convertedLockIds, setConvertedLockIds] = useState<Set<string>>(new Set())
+  const [duplicateCandidate, setDuplicateCandidate] = useState<{ lockedDate: any; customer: any; parsed: { personName: string; city: string; note: string } } | null>(null)
   const [showAddLockDialog, setShowAddLockDialog] = useState(false)
   const [creatingLock, setCreatingLock] = useState(false)
   const [newLock, setNewLock] = useState({
@@ -1333,6 +1356,48 @@ export default function LeadsPage() {
             >
               {creatingLock ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Lock className="h-4 w-4 mr-2" />}
               Lock This Date
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Duplicate Customer Confirmation */}
+      <Dialog open={!!duplicateCandidate} onOpenChange={(open) => !open && setDuplicateCandidate(null)}>
+        <DialogContent className="max-w-md bg-white border border-slate-100 shadow-lg rounded-xl">
+          <DialogHeader>
+            <DialogTitle className="text-gray-900">Already a Customer</DialogTitle>
+            <DialogDescription>
+              {duplicateCandidate?.customer?.name} is already a customer (matched by {duplicateCandidate?.customer?.phone === duplicateCandidate?.lockedDate?.whatsapp_number ? "phone number" : "name"}). Do you want to use this customer for the next order?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-2 pt-2">
+            <Button
+              onClick={() => {
+                if (!duplicateCandidate) return
+                router.push(`/create-invoice?customerId=${duplicateCandidate.customer.id}&mode=new`)
+                setDuplicateCandidate(null)
+              }}
+              className="w-full bg-indigo-600 hover:bg-indigo-700 text-white"
+            >
+              Yes, Same Customer — New Booking
+            </Button>
+            <Button
+              variant="outline"
+              disabled={!!(duplicateCandidate && convertingLockId === duplicateCandidate.lockedDate.id)}
+              onClick={async () => {
+                if (!duplicateCandidate) return
+                const { lockedDate, parsed } = duplicateCandidate
+                setConvertingLockId(lockedDate.id)
+                await createCustomerFromLock(lockedDate, parsed)
+                setConvertingLockId(null)
+                setDuplicateCandidate(null)
+              }}
+              className="w-full"
+            >
+              {duplicateCandidate && convertingLockId === duplicateCandidate.lockedDate.id ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : null}
+              Add as New Customer
             </Button>
           </div>
         </DialogContent>
