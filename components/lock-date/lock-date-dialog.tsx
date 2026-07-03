@@ -182,11 +182,11 @@ export function LockDateDialog({ open, onOpenChange, lockedDates, onLocked, onUn
                 {lockedDates.map((ld) => {
                   const parsed = parseLockNote(ld.notes)
                   return (
-                  <div key={ld.id} className="flex items-start justify-between bg-red-50 border border-red-200 rounded-lg px-3 py-2">
+                  <div key={ld.id} className="flex items-start justify-between bg-green-50 border border-green-200 rounded-lg px-3 py-2">
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <Lock className="h-3.5 w-3.5 text-red-500 shrink-0" />
-                        <span className="text-sm font-bold text-red-700">
+                        <Lock className="h-3.5 w-3.5 text-green-500 shrink-0" />
+                        <span className="text-sm font-bold text-green-700">
                           {format(new Date(ld.locked_date + "T00:00:00"), "dd MMM yyyy")}
                         </span>
                       </div>
