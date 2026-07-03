@@ -18,19 +18,22 @@ async function hashPassword(password: string): Promise<string> {
 
 function defaultPermissionsForRole(role: string): UserPermissions {
   const all: UserPermissions = {
-    dashboard: true, bookings: true, customers: true, inventory: true, sales: true, laundry: true,
-    purchases: true, expenses: true, deliveries: true, reports: true, financials: true, invoices: true,
-    franchises: true, staff: true, settings: true,
+    dashboard: true, bookings: true, customers: true, inventory: true, packages: true, vendors: true,
+    quotes: true, invoices: true, invoice_payment_access: true, laundry: true, expenses: true,
+    deliveries: true, productArchive: true, payroll: true, attendance: true, reports: true,
+    financials: true, franchises: true, staff: true, integrations: true, settings: true,
   }
   const staff: UserPermissions = {
-    dashboard: true, bookings: true, customers: true, inventory: true, sales: true, laundry: true,
-    purchases: false, expenses: false, deliveries: true, reports: false, financials: false, invoices: true,
-    franchises: false, staff: false, settings: false,
+    dashboard: true, bookings: true, customers: true, inventory: true, packages: false, vendors: false,
+    quotes: true, invoices: true, invoice_payment_access: true, laundry: true, expenses: false,
+    deliveries: true, productArchive: false, payroll: false, attendance: true, reports: false,
+    financials: false, franchises: false, staff: false, integrations: false, settings: false,
   }
   const readonly: UserPermissions = {
-    dashboard: true, bookings: false, customers: true, inventory: false, sales: false, laundry: false,
-    purchases: false, expenses: false, deliveries: false, reports: true, financials: false, invoices: false,
-    franchises: false, staff: false, settings: false,
+    dashboard: true, bookings: false, customers: true, inventory: false, packages: false, vendors: false,
+    quotes: false, invoices: false, invoice_payment_access: false, laundry: false, expenses: false,
+    deliveries: false, productArchive: false, payroll: false, attendance: true, reports: true,
+    financials: false, franchises: false, staff: false, integrations: false, settings: false,
   }
   if (role === 'super_admin' || role === 'franchise_admin') return all
   if (role === 'readonly') return readonly
@@ -288,10 +291,16 @@ export async function DELETE(
       .from("users")
       .delete()
       .eq("id", id)
-    
+
     if (error) {
       console.error("Error deleting staff member:", error)
-      return NextResponse.json({ error: "Failed to delete staff member" }, { status: 500 })
+      if (error.code === "23503") {
+        return NextResponse.json(
+          { error: "This staff member has existing bookings, tasks, or other records linked to their account and can't be permanently deleted. Deactivate them instead to preserve that history, or reassign their records first." },
+          { status: 409 }
+        )
+      }
+      return NextResponse.json({ error: error.message || "Failed to delete staff member" }, { status: 500 })
     }
     
     return NextResponse.json({ 

@@ -690,7 +690,7 @@ export default function StaffPage() {
       toast.success('Staff member deleted successfully!')
     } catch (error) {
       console.error('Error deleting user:', error)
-      toast.error('Failed to delete staff member')
+      toast.error(error instanceof Error ? error.message : 'Failed to delete staff member')
     }
   }
 
