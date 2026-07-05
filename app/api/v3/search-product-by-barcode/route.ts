@@ -15,7 +15,7 @@ export default async function handler(
   }
 
   try {
-    const { barcode } = req.query
+    const { barcode, franchise_id } = req.query
 
     // Validate barcode parameter
     if (!barcode || typeof barcode !== 'string') {
@@ -23,11 +23,17 @@ export default async function handler(
     }
 
     // Search product by barcode
-    const { data: products, error } = await supabase
+    let query = supabase
       .from('products')
       .select('*')
       .eq('barcode', barcode.trim())
       .limit(1)
+
+    if (typeof franchise_id === "string" && franchise_id.trim()) {
+      query = query.eq("franchise_id", franchise_id.trim())
+    }
+
+    const { data: products, error } = await query
 
     if (error) {
       console.error('Supabase error:', error)

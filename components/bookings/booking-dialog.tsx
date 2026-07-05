@@ -20,6 +20,7 @@ import { Badge } from "@/components/ui/badge"
 import { PlusIcon, MinusIcon, UserIcon, CalendarIcon, MapPinIcon, IndianRupeeIcon, ChevronDownIcon } from "lucide-react"
 import { useToast } from "@/hooks/use-toast"
 import { supabase } from "@/lib/supabase"
+import { getCurrentUser } from "@/lib/auth"
 
 interface Customer {
   id: string
@@ -60,6 +61,7 @@ export function BookingDialog({ open, onOpenChange, onBookingCreated }: BookingD
   const [showNewCustomer, setShowNewCustomer] = useState(false)
   const [customerSearch, setCustomerSearch] = useState("")
   const [productSearch, setProductSearch] = useState("")
+  const [activeFranchiseId, setActiveFranchiseId] = useState("")
   const [formData, setFormData] = useState({
     customer_id: "",
     new_customer_name: "",
@@ -76,18 +78,34 @@ export function BookingDialog({ open, onOpenChange, onBookingCreated }: BookingD
   })
 
   useEffect(() => {
-    if (open) {
-      loadData()
-    }
-  }, [open])
+    let mounted = true
 
-  const loadData = async () => {
+    const loadUser = async () => {
+      const currentUser = await getCurrentUser()
+      if (mounted && currentUser?.franchise_id) {
+        setActiveFranchiseId(currentUser.franchise_id)
+      }
+    }
+
+    loadUser()
+
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!open || !activeFranchiseId) return
+    loadData(activeFranchiseId)
+  }, [open, activeFranchiseId])
+
+  const loadData = async (franchiseId: string) => {
     try {
       console.log("[v0] Loading booking dialog data...")
 
       const [customersResult, productsResult] = await Promise.all([
-        supabase.from("customers").select("id, name, phone, email").order("name"),
-        supabase.from("products").select("id, name, price, rental_price").order("name"),
+        supabase.from("customers").select("id, name, phone, email").eq("franchise_id", franchiseId).order("name"),
+        supabase.from("products").select("id, name, price, rental_price").eq("franchise_id", franchiseId).order("name"),
       ])
 
       if (customersResult.error) throw customersResult.error
@@ -179,6 +197,7 @@ export function BookingDialog({ open, onOpenChange, onBookingCreated }: BookingD
             name: formData.new_customer_name,
             phone: formData.new_customer_phone,
             email: formData.new_customer_email || null,
+            franchise_id: activeFranchiseId || null,
           })
           .select()
           .single()
@@ -189,6 +208,7 @@ export function BookingDialog({ open, onOpenChange, onBookingCreated }: BookingD
 
       const bookingData = {
         customer_id: customerId,
+        franchise_id: activeFranchiseId || null,
         event_date: formData.event_date,
         event_time: formData.event_time || null,
         event_location: formData.event_location || null,

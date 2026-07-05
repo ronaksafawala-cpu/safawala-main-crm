@@ -129,12 +129,26 @@ export function PackageBookingForm({ onSubmit, currentUser }: PackageBookingForm
   const [couponDiscount, setCouponDiscount] = useState<number>(0)
   const [couponValidating, setCouponValidating] = useState(false)
   const [couponError, setCouponError] = useState("")
+  const [activeFranchiseId, setActiveFranchiseId] = useState<string>(currentUser?.franchise_id || "")
 
   const supabase = createClient()
 
   useEffect(() => {
-    loadData()
-  }, [])
+    if (currentUser?.franchise_id && currentUser.franchise_id !== activeFranchiseId) {
+      setActiveFranchiseId(currentUser.franchise_id)
+    }
+  }, [activeFranchiseId, currentUser?.franchise_id])
+
+  useEffect(() => {
+    if (currentUser?.id && !assignedStaff) {
+      setAssignedStaff(currentUser.id)
+    }
+  }, [currentUser?.id, assignedStaff])
+
+  useEffect(() => {
+    if (!activeFranchiseId) return
+    loadData(activeFranchiseId)
+  }, [activeFranchiseId])
 
   useEffect(() => {
     if (selectedCategory) {
@@ -160,7 +174,7 @@ export function PackageBookingForm({ onSubmit, currentUser }: PackageBookingForm
     calculateDistancePricing()
   }, [selectedCustomer, newCustomer.pincode, selectedLevel, isNewCustomer])
 
-  const loadData = async () => {
+  const loadData = async (franchiseId: string) => {
     try {
       setLoading(true)
 
@@ -168,6 +182,7 @@ export function PackageBookingForm({ onSubmit, currentUser }: PackageBookingForm
         .from("packages_categories")
         .select("*")
         .eq("is_active", true)
+        .eq("franchise_id", franchiseId)
         .order("display_order")
 
       if (categoriesError) throw categoriesError
@@ -176,6 +191,7 @@ export function PackageBookingForm({ onSubmit, currentUser }: PackageBookingForm
         .from("package_sets")
         .select("*")
         .eq("is_active", true)
+        .eq("franchise_id", franchiseId)
         .order("display_order")
 
       if (packagesError) throw packagesError
@@ -184,6 +200,7 @@ export function PackageBookingForm({ onSubmit, currentUser }: PackageBookingForm
         .from("package_variants")
         .select("*")
         .eq("is_active", true)
+        .eq("franchise_id", franchiseId)
         .order("display_order")
 
       if (variantsError) throw variantsError
@@ -223,7 +240,11 @@ export function PackageBookingForm({ onSubmit, currentUser }: PackageBookingForm
         }))
       }
 
-      const { data: customersData, error: customersError } = await supabase.from("customers").select("*").order("name")
+      const { data: customersData, error: customersError } = await supabase
+        .from("customers")
+        .select("*")
+        .eq("franchise_id", franchiseId)
+        .order("name")
 
       if (customersError) throw customersError
 
@@ -231,6 +252,7 @@ export function PackageBookingForm({ onSubmit, currentUser }: PackageBookingForm
         .from("users")
         .select("*")
         .eq("is_active", true)
+        .eq("franchise_id", franchiseId)
         .order("name")
 
       if (staffError) throw staffError

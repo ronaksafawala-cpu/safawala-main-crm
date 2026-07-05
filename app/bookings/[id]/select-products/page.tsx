@@ -70,10 +70,16 @@ export default function SelectProductsForBookingPage() {
         setItems(next)
 
         // Load products
-        const { data: prods, error: pErr } = await supabase
+        let productsQuery = supabase
           .from("products")
           .select("id, name, category, price, rental_price, stock_available, barcode, product_code")
           .order("name", { ascending: true })
+
+        if (bk?.franchise_id) {
+          productsQuery = productsQuery.eq("franchise_id", bk.franchise_id)
+        }
+
+        const { data: prods, error: pErr } = await productsQuery
         if (pErr) throw pErr
         setProducts(prods || [])
       } catch (e) {

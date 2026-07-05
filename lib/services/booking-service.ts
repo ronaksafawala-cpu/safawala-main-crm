@@ -98,12 +98,20 @@ export class BookingService {
         // Try to find existing customer by phone or email
         let existingCustomer = null
         if (quote.customer_phone) {
-          const { data } = await supabase.from("customers").select("id").eq("phone", quote.customer_phone).single()
+          let customerQuery = supabase.from("customers").select("id").eq("phone", quote.customer_phone)
+          if (quote.franchise_id) {
+            customerQuery = customerQuery.eq("franchise_id", quote.franchise_id)
+          }
+          const { data } = await customerQuery.single()
           existingCustomer = data
         }
 
         if (!existingCustomer && quote.customer_email) {
-          const { data } = await supabase.from("customers").select("id").eq("email", quote.customer_email).single()
+          let customerQuery = supabase.from("customers").select("id").eq("email", quote.customer_email)
+          if (quote.franchise_id) {
+            customerQuery = customerQuery.eq("franchise_id", quote.franchise_id)
+          }
+          const { data } = await customerQuery.single()
           existingCustomer = data
         }
 
@@ -264,6 +272,7 @@ export class BookingService {
             booking_items(*, products(name, product_code))
           `)
           .eq("id", booking.id)
+          .eq("franchise_id", franchiseId)
           .single()
 
         if (bookingWithItems && customer) {

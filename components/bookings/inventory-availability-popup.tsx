@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -10,6 +10,7 @@ import { format, addDays, subDays } from "date-fns"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "@/hooks/use-toast"
 import { cn } from "@/lib/utils"
+import { getCurrentUser } from "@/lib/auth"
 
 interface Product {
   id: string
@@ -61,7 +62,24 @@ export function InventoryAvailabilityPopup({
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [availabilityData, setAvailabilityData] = useState<ProductAvailability[]>([])
+  const [activeFranchiseId, setActiveFranchiseId] = useState("")
   const supabase = createClient()
+
+  useEffect(() => {
+    let mounted = true
+
+    getCurrentUser()
+      .then((user) => {
+        if (mounted && user?.franchise_id) {
+          setActiveFranchiseId(user.franchise_id)
+        }
+      })
+      .catch(() => undefined)
+
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   const checkAvailability = async () => {
     if (!eventDate) {
@@ -75,6 +93,8 @@ export function InventoryAvailabilityPopup({
 
     setLoading(true)
     try {
+      const franchiseId = activeFranchiseId || (await getCurrentUser())?.franchise_id || ""
+
       // Calculate date range (2 days before event, event day, 2 days after = 5 days)
       const startDate = subDays(eventDate, 2)
       const endDate = addDays(eventDate, 2)
@@ -91,10 +111,18 @@ export function InventoryAvailabilityPopup({
       if (productId) {
         productIds = [productId]
       } else if (variantId) {
-        const { data: allProducts } = await supabase.from("products").select("id").eq("is_active", true)
+        let query = supabase.from("products").select("id").eq("is_active", true)
+        if (franchiseId) {
+          query = query.eq("franchise_id", franchiseId)
+        }
+        const { data: allProducts } = await query
         productIds = allProducts?.map((p) => p.id) || []
       } else {
-        const { data: allProducts } = await supabase.from("products").select("id").eq("is_active", true)
+        let query = supabase.from("products").select("id").eq("is_active", true)
+        if (franchiseId) {
+          query = query.eq("franchise_id", franchiseId)
+        }
+        const { data: allProducts } = await query
         productIds = allProducts?.map((p) => p.id) || []
       }
 
@@ -104,6 +132,7 @@ export function InventoryAvailabilityPopup({
         .select("*")
         .in("id", productIds)
         .eq("is_active", true)
+        .eq("franchise_id", franchiseId)
 
       if (!products || products.length === 0) {
         setAvailabilityData([])
@@ -126,6 +155,7 @@ export function InventoryAvailabilityPopup({
         .lte('delivery_date', format(endDate, 'yyyy-MM-dd'))
         .gte('return_date', format(startDate, 'yyyy-MM-dd'))
         .neq('status', 'cancelled')
+        .eq('franchise_id', franchiseId)
 
       // Get package booking items
       const packageBookingIds = packageBookings?.map(b => b.id) || []
@@ -150,6 +180,7 @@ export function InventoryAvailabilityPopup({
         .lte('delivery_date', format(endDate, 'yyyy-MM-dd'))
         .gte('return_date', format(startDate, 'yyyy-MM-dd'))
         .neq('status', 'cancelled')
+        .eq('franchise_id', franchiseId)
 
       // Get product order items
       const productOrderIds = productOrders?.map(o => o.id) || []

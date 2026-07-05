@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { ArrowLeft } from "lucide-react"
@@ -8,11 +8,27 @@ import { PackageBookingForm } from "@/components/bookings/package-booking-form"
 import { createClient } from "@/lib/supabase/client"
 import { toast } from "@/hooks/use-toast"
 import { NotificationService } from "@/lib/notification-service"
+import { getCurrentUser } from "@/lib/auth"
 
 export default function PackageBookingPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
+  const [currentUser, setCurrentUser] = useState<any>(null)
   const supabase = createClient()
+
+  useEffect(() => {
+    let mounted = true
+
+    getCurrentUser()
+      .then((user) => {
+        if (mounted) setCurrentUser(user)
+      })
+      .catch(() => undefined)
+
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   const handleBookingSubmit = async (bookingData: any) => {
     try {
@@ -26,7 +42,12 @@ export default function PackageBookingPage() {
       if (bookingData.isNewCustomer) {
         const { data: customerData, error: customerError } = await supabase
           .from("customers")
-          .insert([bookingData.customer])
+          .insert([
+            {
+              ...bookingData.customer,
+              franchise_id: currentUser?.franchise_id || bookingData.customer?.franchise_id || null,
+            },
+          ])
           .select()
           .single()
 
@@ -47,6 +68,7 @@ export default function PackageBookingPage() {
       const bookingInsert = {
         booking_number: bookingNumber,
         customer_id: customerId,
+        franchise_id: currentUser?.franchise_id || customerInfo?.franchise_id || null,
         type: "package_booking",
         status: "pending_payment",
         booking_status: bookingData.bookingStatus,
@@ -134,7 +156,7 @@ export default function PackageBookingPage() {
         </div>
       </div>
 
-      <PackageBookingForm onSubmit={handleBookingSubmit} />
+      <PackageBookingForm onSubmit={handleBookingSubmit} currentUser={currentUser} />
     </div>
   )
 }
