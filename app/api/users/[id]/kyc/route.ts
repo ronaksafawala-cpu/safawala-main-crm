@@ -37,7 +37,10 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
 
     if (!doc_type) return NextResponse.json({ error: 'doc_type required' }, { status: 400 })
 
-    const isAdmin = auth.user!.is_super_admin || auth.user!.role === 'franchise_admin' || auth.user!.role === 'hr_staff'
+    const isAdmin =
+      auth.user!.is_super_admin ||
+      auth.user!.role === 'franchise_admin' ||
+      (auth.user!.role as string) === 'hr_staff'
 
     const upsertData: any = {
       user_id: params.id,
