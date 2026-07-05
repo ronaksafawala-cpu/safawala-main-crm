@@ -188,10 +188,25 @@ export async function PATCH(request: NextRequest) {
     if (message !== undefined) updateData.message = message
     if (franchise_id !== undefined) updateData.franchise_id = franchise_id
 
+    const { data: existingLead, error: leadFetchError } = await supabase
+      .from("leads")
+      .select("id, franchise_id")
+      .eq("id", id)
+      .single()
+
+    if (leadFetchError || !existingLead) {
+      return NextResponse.json({ error: "Lead not found" }, { status: 404 })
+    }
+
+    if (!auth.user.is_super_admin && auth.user.franchise_id && existingLead.franchise_id !== auth.user.franchise_id) {
+      return NextResponse.json({ error: "Access denied to this lead" }, { status: 403 })
+    }
+
     const { data, error } = await supabase
       .from("leads")
       .update(updateData)
       .eq("id", id)
+      .eq("franchise_id", existingLead.franchise_id)
       .select()
       .single()
 

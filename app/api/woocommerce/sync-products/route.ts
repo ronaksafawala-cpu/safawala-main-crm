@@ -9,6 +9,8 @@ export async function POST(request: NextRequest) {
     if (!auth.authorized) {
       return NextResponse.json(auth.error, { status: auth.statusCode })
     }
+    const franchiseId = auth.user?.franchise_id || ""
+    const isSuperAdmin = auth.user?.is_super_admin || false
 
     const { productIds, syncAll } = await request.json()
 
@@ -64,6 +66,9 @@ export async function POST(request: NextRequest) {
 
     // Get products to sync
     let query = supabase.from("products").select("*").eq("is_active", true)
+    if (!isSuperAdmin && franchiseId) {
+      query = query.eq("franchise_id", franchiseId)
+    }
 
     if (!syncAll && productIds && productIds.length > 0) {
       query = query.in("id", productIds)

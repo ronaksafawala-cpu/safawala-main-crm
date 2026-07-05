@@ -83,6 +83,7 @@ export async function GET(
       .from("products")
       .select("id, name, product_code, category, stock_total, stock_available, stock_damaged, stock_booked, stock_in_laundry")
       .in("id", productIds)
+      .eq("franchise_id", returnRecord.franchise_id)
     
     if (productsError) {
       console.error("Error fetching products:", productsError)

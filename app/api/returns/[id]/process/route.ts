@@ -150,6 +150,7 @@ export async function POST(
         .from("products")
         .select("*")
         .eq("id", item.product_id)
+        .eq("franchise_id", returnRecord.franchise_id)
         .single()
       
       if (productError || !product) {
@@ -211,6 +212,7 @@ export async function POST(
         .from("products")
         .update(newInventory)
         .eq("id", item.product_id)
+        .eq("franchise_id", returnRecord.franchise_id)
       
       if (inventoryError) {
         console.error("Error updating inventory:", inventoryError)
@@ -314,6 +316,7 @@ export async function POST(
                 .from("products")
                 .select("name, category")
                 .eq("id", item.product_id)
+                .eq("franchise_id", returnRecord.franchise_id)
                 .single()
               
               return {

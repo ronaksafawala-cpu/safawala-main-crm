@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { supabaseServer } from "@/lib/supabase-server-simple"
-import { authenticateRequest } from "@/lib/auth-middleware"
+import { authenticateRequest, canAccessFranchise } from "@/lib/auth-middleware"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -70,9 +70,17 @@ export async function POST(request: NextRequest) {
     // Get delivery details for reference
     const { data: delivery } = await supabaseServer
       .from("deliveries")
-      .select("delivery_number, customer_id")
+      .select("delivery_number, customer_id, franchise_id")
       .eq("id", delivery_id)
       .single()
+
+    if (!delivery) {
+      return NextResponse.json({ error: "Delivery not found" }, { status: 404 })
+    }
+
+    if (!canAccessFranchise(auth.user as any, delivery.franchise_id)) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    }
 
     console.log("[Process Return] Starting return processing for delivery:", delivery?.delivery_number)
 

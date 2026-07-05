@@ -49,11 +49,13 @@ async function getCRMContext(supabase: any, franchiseId: string, isSuperAdmin: b
         .eq("delivery_date", today)
         .limit(10)
     ),
-    supabase
-      .from("leads")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(10),
+    baseFilter(
+      supabase
+        .from("leads")
+        .select("*")
+        .order("created_at", { ascending: false })
+        .limit(10)
+    ),
     baseFilter(
       supabase
         .from("bookings")
@@ -113,7 +115,7 @@ async function executeTool(
           name: description || `${code.trim().toUpperCase()} Offer`,
           discount_type: mappedType,
           discount_value: Number(discount_value) || 0,
-          franchise_id: franchiseId,
+          franchise_id: franchiseId || null,
           is_active: true,
         }
 
@@ -205,7 +207,7 @@ async function executeTool(
             email,
             password_hash,
             role,
-            franchise_id: franchiseId,
+            franchise_id: franchiseId || null,
             permissions,
             is_active: true
           }])
@@ -230,7 +232,7 @@ async function executeTool(
             user_metadata: {
               app_user_id: data.id,
               role,
-              franchise_id: franchiseId
+              franchise_id: franchiseId || null
             }
           })
         } catch (authErr) {
@@ -264,7 +266,7 @@ async function executeTool(
             state: state || null,
             pincode: pincode || null,
             notes: notes || null,
-            franchise_id: franchiseId,
+            franchise_id: franchiseId || null,
             created_by: userId,
           })
           .select()
@@ -294,6 +296,7 @@ async function executeTool(
             package_interest: package_interest || null,
             source,
             status: "new",
+            franchise_id: franchiseId || null,
           })
           .select()
           .single()
@@ -328,7 +331,7 @@ async function executeTool(
             receipt_number: receipt_number || null,
             booking_number: booking_number || null,
             description: description || null,
-            franchise_id: franchiseId,
+            franchise_id: franchiseId || null,
             created_by: userId,
           })
           .select()
@@ -416,7 +419,7 @@ async function executeTool(
             p_customer_id: customerId,
             p_event_date: event_date,
             p_venue_name: venue_name.trim(),
-            p_franchise_id: franchiseId,
+            p_franchise_id: franchiseId || null,
             p_created_by: userId,
             p_booking_data: {
               type: type,
@@ -481,12 +484,12 @@ async function executeTool(
         if (stock_available !== undefined) updates.stock_available = Number(stock_available)
         if (stock_total !== undefined) updates.stock_total = Number(stock_total)
 
-        const { data: updatedProd, error: updateErr } = await supabase
-          .from("products")
-          .update(updates)
-          .eq("id", product.id)
-          .select()
-          .single()
+        let productUpdate = supabase.from("products").update(updates).eq("id", product.id)
+        if (!isSuperAdmin && franchiseId) {
+          productUpdate = productUpdate.eq("franchise_id", franchiseId)
+        }
+
+        const { data: updatedProd, error: updateErr } = await productUpdate.select().single()
 
         if (updateErr) return { success: false, error: updateErr.message }
 
@@ -540,10 +543,12 @@ async function executeTool(
           updates.pending_amount = Number(booking.total_amount || 0) - Number(amount_paid)
         }
 
-        const { data: updatedBooking, error: updateErr } = await supabase
-          .from(targetTable)
-          .update(updates)
-          .eq("id", booking.id)
+        let bookingUpdate = supabase.from(targetTable).update(updates).eq("id", booking.id)
+        if (!isSuperAdmin && franchiseId) {
+          bookingUpdate = bookingUpdate.eq("franchise_id", franchiseId)
+        }
+
+        const { data: updatedBooking, error: updateErr } = await bookingUpdate
           .select(`
             *,
             customer:customers(name, phone)
@@ -581,6 +586,9 @@ async function executeTool(
         } else {
           return { success: false, error: "Either lead_id or lead_name is required." }
         }
+        if (!isSuperAdmin) {
+          findQuery = findQuery.eq("franchise_id", franchiseId)
+        }
 
         const { data: matchedLeads, error: findErr } = await findQuery.limit(1)
         if (findErr || !matchedLeads || matchedLeads.length === 0) {
@@ -595,12 +603,12 @@ async function executeTool(
           updates.notes = lead.notes ? `${lead.notes}\n${notes}` : notes
         }
 
-        const { data: updatedLead, error: updateErr } = await supabase
-          .from("leads")
-          .update(updates)
-          .eq("id", lead.id)
-          .select()
-          .single()
+        let leadUpdate = supabase.from("leads").update(updates).eq("id", lead.id)
+        if (!isSuperAdmin && franchiseId) {
+          leadUpdate = leadUpdate.eq("franchise_id", franchiseId)
+        }
+
+        const { data: updatedLead, error: updateErr } = await leadUpdate.select().single()
 
         if (updateErr) return { success: false, error: updateErr.message }
 

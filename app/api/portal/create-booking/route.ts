@@ -147,6 +147,7 @@ export async function POST(req: NextRequest) {
           .from("customers")
           .select("name, phone")
           .eq("id", customer_id)
+          .eq("franchise_id", franchiseId)
           .single()
 
         await NotificationService.notifyBookingCreated({
