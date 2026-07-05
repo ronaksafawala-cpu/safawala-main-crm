@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-import { authenticateRequest } from "@/lib/auth-middleware"
+import { authenticateRequest, AuthMiddleware } from "@/lib/auth-middleware"
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -40,36 +40,33 @@ export async function POST(req: NextRequest) {
     const supabase = createClient()
 
     // 1. Fetch source product A details
-    const { data: productA, error: errA } = await supabase
-      .from("products")
-      .select("*")
-      .eq("id", sourceProductId)
-      .single()
+    let sourceQuery = supabase.from("products").select("*").eq("id", sourceProductId)
+    let targetQuery = supabase.from("products").select("*").eq("id", targetProductId)
+
+    if (!auth.user!.is_super_admin && auth.user!.franchise_id) {
+      sourceQuery = sourceQuery.eq("franchise_id", auth.user!.franchise_id)
+      targetQuery = targetQuery.eq("franchise_id", auth.user!.franchise_id)
+    }
+
+    const { data: productA, error: errA } = await sourceQuery.single()
 
     if (errA || !productA) {
       return NextResponse.json({ error: "Source product (A) not found" }, { status: 404 })
     }
 
     // 2. Fetch target parent product B details
-    const { data: productB, error: errB } = await supabase
-      .from("products")
-      .select("*")
-      .eq("id", targetProductId)
-      .single()
+    const { data: productB, error: errB } = await targetQuery.single()
 
     if (errB || !productB) {
       return NextResponse.json({ error: "Target parent product (B) not found" }, { status: 404 })
     }
 
     // Franchise isolation check
-    if (!auth.user!.is_super_admin) {
-      const userFranchiseId = auth.user!.franchise_id
-      if (productA.franchise_id !== userFranchiseId || productB.franchise_id !== userFranchiseId) {
-        return NextResponse.json(
-          { error: "Access denied: products must belong to your assigned franchise" },
-          { status: 403 }
-        )
-      }
+    if (!AuthMiddleware.canAccessFranchise(auth.user!, productA.franchise_id) || !AuthMiddleware.canAccessFranchise(auth.user!, productB.franchise_id)) {
+      return NextResponse.json(
+        { error: "Access denied: products must belong to your assigned franchise" },
+        { status: 403 }
+      )
     }
 
     // 3. Calculate price adjustments relative to parent Product B

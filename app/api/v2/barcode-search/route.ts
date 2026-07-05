@@ -24,6 +24,7 @@ export async function POST(request: NextRequest) {
     if (!auth.authorized) {
       return NextResponse.json(auth.error, { status: auth.statusCode })
     }
+    const franchiseId = auth.user?.is_super_admin ? null : auth.user?.franchise_id || null
 
     const body = await request.json()
     const barcode = body.barcode?.trim()
@@ -38,7 +39,7 @@ export async function POST(request: NextRequest) {
 
     // Direct search by products.barcode (simple and effective)
     console.log("[Barcode Search V2] Querying products by barcode...")
-    const { data: products, error } = await supabase
+    let productQuery = supabase
       .from("products")
       .select(
         `
@@ -58,6 +59,12 @@ export async function POST(request: NextRequest) {
       .eq("barcode", barcode)
       .limit(1)
 
+    if (franchiseId) {
+      productQuery = productQuery.eq("franchise_id", franchiseId)
+    }
+
+    const { data: products, error } = await productQuery
+
     if (error) {
       console.error("[Barcode Search V2] ❌ Query error:", error.message)
       return NextResponse.json({ error: "Database error" }, { status: 500 })
@@ -65,12 +72,18 @@ export async function POST(request: NextRequest) {
 
     if (!products || products.length === 0) {
       console.log("[Barcode Search V2] Querying product_variations as fallback...")
-      const { data: variations, error: varError } = await supabase
+      let variationQuery = supabase
         .from("product_variations")
         .select("*, products(*)")
         .eq("barcode", barcode)
         .eq("is_active", true)
         .limit(1)
+
+      if (franchiseId) {
+        variationQuery = variationQuery.eq("franchise_id", franchiseId)
+      }
+
+      const { data: variations, error: varError } = await variationQuery
 
       if (variations && variations.length > 0) {
         const variation = variations[0] as any

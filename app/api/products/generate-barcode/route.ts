@@ -38,11 +38,16 @@ export async function POST(req: NextRequest) {
     const supabase = createClient()
 
     // Fetch product to verify ownership (franchise isolation)
-    const { data: product, error: fetchError } = await supabase
+    let productQuery = supabase
       .from("products")
       .select("id, franchise_id, barcode")
       .eq("id", productId)
-      .single()
+
+    if (!auth.user!.is_super_admin && auth.user!.franchise_id) {
+      productQuery = productQuery.eq("franchise_id", auth.user!.franchise_id)
+    }
+
+    const { data: product, error: fetchError } = await productQuery.single()
 
     if (fetchError || !product) {
       return NextResponse.json(
@@ -70,11 +75,17 @@ export async function POST(req: NextRequest) {
     const maxAttempts = 5
 
     while (attempts < maxAttempts) {
-      const { data: existing } = await supabase
+      let existingQuery = supabase
         .from("products")
         .select("id")
         .eq("barcode", barcode)
         .limit(1)
+
+      if (!auth.user!.is_super_admin && auth.user!.franchise_id) {
+        existingQuery = existingQuery.eq("franchise_id", auth.user!.franchise_id)
+      }
+
+      const { data: existing } = await existingQuery
 
       if (!existing || existing.length === 0) {
         // Barcode is unique

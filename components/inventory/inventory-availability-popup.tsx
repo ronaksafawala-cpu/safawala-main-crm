@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Calendar, Package, AlertTriangle, CheckCircle, Clock } from "lucide-react"
 import { createClient } from "@supabase/supabase-js"
+import { getCurrentUser } from "@/lib/auth"
 
 interface Product {
   id: string
@@ -50,16 +51,35 @@ export default function InventoryAvailabilityPopup({
 }: InventoryAvailabilityPopupProps) {
   const [availabilityData, setAvailabilityData] = useState<AvailabilityData[]>([])
   const [loading, setLoading] = useState(false)
+  const [currentUser, setCurrentUser] = useState<any>(null)
+  const [userLoaded, setUserLoaded] = useState(false)
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
   )
 
   useEffect(() => {
-    if (isOpen && productIds.length > 0 && bookingDate) {
+    let mounted = true
+    getCurrentUser()
+      .then((user) => {
+        if (mounted) {
+          setCurrentUser(user)
+          setUserLoaded(true)
+        }
+      })
+      .catch(() => {
+        if (mounted) setUserLoaded(true)
+      })
+    return () => {
+      mounted = false
+    }
+  }, [])
+
+  useEffect(() => {
+    if (isOpen && productIds.length > 0 && bookingDate && userLoaded) {
       checkAvailability()
     }
-  }, [isOpen, productIds, bookingDate, returnDate])
+  }, [isOpen, productIds, bookingDate, returnDate, userLoaded])
 
   const checkAvailability = async () => {
     setLoading(true)
@@ -77,14 +97,20 @@ export default function InventoryAvailabilityPopup({
         requiredQuantities,
       })
 
-      const { data: products, error: productsError } = await supabase
+      let productsQuery = supabase
         .from("products")
         .select("id, name, stock_available, stock_booked, stock_total")
         .in("id", productIds)
 
+      if (currentUser?.role !== "super_admin" && currentUser?.franchise_id) {
+        productsQuery = productsQuery.eq("franchise_id", currentUser.franchise_id)
+      }
+
+      const { data: products, error: productsError } = await productsQuery
+
       if (productsError) throw productsError
 
-      const { data: bookingConflicts, error: conflictsError } = await supabase
+      let bookingsQuery = supabase
         .from("bookings")
         .select(`
           id,
@@ -100,6 +126,12 @@ export default function InventoryAvailabilityPopup({
         .lte("return_date", endDate.toISOString().split("T")[0])
         .in("booking_items.product_id", productIds)
         .neq("status", "cancelled")
+
+      if (currentUser?.role !== "super_admin" && currentUser?.franchise_id) {
+        bookingsQuery = bookingsQuery.eq("franchise_id", currentUser.franchise_id)
+      }
+
+      const { data: bookingConflicts, error: conflictsError } = await bookingsQuery
 
       if (conflictsError) throw conflictsError
 

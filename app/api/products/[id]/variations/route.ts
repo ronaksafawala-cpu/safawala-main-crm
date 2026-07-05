@@ -85,11 +85,16 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     const supabase = createClient()
 
     // Verify product exists and get its franchise_id
-    const { data: product, error: prodError } = await supabase
+    let productQuery = supabase
       .from("products")
       .select("id, franchise_id")
       .eq("id", productId)
-      .single()
+
+    if (!auth.user!.is_super_admin && auth.user!.franchise_id) {
+      productQuery = productQuery.eq("franchise_id", auth.user!.franchise_id)
+    }
+
+    const { data: product, error: prodError } = await productQuery.single()
 
     if (prodError || !product) {
       return NextResponse.json({ error: "Product not found" }, { status: 404 })
