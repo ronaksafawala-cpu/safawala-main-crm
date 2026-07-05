@@ -364,10 +364,22 @@ export default function InventoryDashboard() {
     return map
   }, [categories])
 
-  const topLevelCategories = useMemo(
-    () => categories.filter((cat) => !cat.parent_id),
-    [categories]
-  )
+  const categoryOptions = useMemo(() => {
+    return categories
+      .map((cat) => {
+        const parentId = categoryParentMap[cat.id]
+        const parentName = parentId ? categoryNameMap[parentId] : null
+        return {
+          ...cat,
+          label: parentName ? `${parentName} / ${cat.name}` : cat.name,
+          depth: parentId ? 1 : 0,
+        }
+      })
+      .sort((a, b) => {
+        if (a.depth !== b.depth) return a.depth - b.depth
+        return a.label.localeCompare(b.label)
+      })
+  }, [categories, categoryNameMap, categoryParentMap])
 
   const handleRefresh = async () => {
     setRefreshing(true)
@@ -926,9 +938,9 @@ export default function InventoryDashboard() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Categories</SelectItem>
-              {topLevelCategories.map((cat) => (
+              {categoryOptions.map((cat) => (
                 <SelectItem key={cat.id} value={cat.id}>
-                  {cat.name}
+                  {cat.depth > 0 ? `— ${cat.label}` : cat.label}
                 </SelectItem>
               ))}
             </SelectContent>
