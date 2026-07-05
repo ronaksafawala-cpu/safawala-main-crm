@@ -9,6 +9,7 @@ import { Badge } from "@/components/ui/badge"
 import { toast } from "sonner"
 import { supabase } from "@/lib/supabase"
 import { printBarcodes } from "@/lib/barcode-print-service"
+import { getCurrentUser } from "@/lib/auth"
 import { 
   ShoppingBag, 
   Search, 
@@ -45,15 +46,34 @@ export default function RetailCatalogPage() {
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
   const [printingId, setPrintingId] = useState<string | null>(null)
+  const [currentUser, setCurrentUser] = useState<any>(null)
+
+  useEffect(() => {
+    let mounted = true
+    getCurrentUser()
+      .then((user) => {
+        if (mounted) setCurrentUser(user)
+      })
+      .catch(() => undefined)
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   const fetchProducts = async () => {
     setLoading(true)
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from("products")
         .select("*")
         .eq("category_id", MALA_CATEGORY_ID)
         .order("name", { ascending: true })
+
+      if (currentUser?.role !== "super_admin" && currentUser?.franchise_id) {
+        query = query.eq("franchise_id", currentUser.franchise_id)
+      }
+
+      const { data, error } = await query
 
       if (error) throw error
       setProducts(data || [])
@@ -67,7 +87,7 @@ export default function RetailCatalogPage() {
 
   useEffect(() => {
     fetchProducts()
-  }, [])
+  }, [currentUser])
 
   // Filter products by search term
   const filteredProducts = useMemo(() => {

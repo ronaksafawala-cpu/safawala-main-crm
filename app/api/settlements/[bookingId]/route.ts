@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import AuditLogger from "@/lib/audit-logger"
 import { generateSettlementInvoicePDF } from "@/lib/settlement-invoice"
 import { uploadToR2 } from "@/lib/r2-storage"
-import { authenticateRequest } from "@/lib/auth-middleware"
+import { authenticateRequest, AuthMiddleware } from "@/lib/auth-middleware"
 
 // Input JSON:
 // {
@@ -18,6 +18,7 @@ export async function POST(request: NextRequest, { params }: { params: { booking
   if (!auth.authorized) {
     return NextResponse.json(auth.error, { status: auth.statusCode })
   }
+  const requesterUser = auth.user!
   const supabase = createClient()
   try {
     const bookingId = params.bookingId
@@ -31,6 +32,10 @@ export async function POST(request: NextRequest, { params }: { params: { booking
       .eq("id", bookingId)
       .single()
     if (bErr) throw bErr
+
+    if (!AuthMiddleware.canAccessFranchise(requesterUser, booking.franchise_id)) {
+      return NextResponse.json({ error: "Access denied to this franchise" }, { status: 403 })
+    }
 
     if (booking.settlement_locked) {
       return NextResponse.json({ success: false, error: "Settlement already finalized" }, { status: 400 })
@@ -51,7 +56,11 @@ export async function POST(request: NextRequest, { params }: { params: { booking
 
     // Build product fee map from products
     const productIds = Array.from(new Set(items.map((it: any) => it.product_id))).filter(Boolean)
-    const { data: products } = await supabase.from("products").select("id, damage_fee, lost_fee").in("id", productIds)
+    const { data: products } = await supabase
+      .from("products")
+      .select("id, damage_fee, lost_fee, franchise_id")
+      .in("id", productIds)
+      .eq("franchise_id", booking.franchise_id)
     const productFeeMap = new Map<string, { damage_fee: number; lost_fee: number }>()
     products?.forEach((p: any) => productFeeMap.set(p.id, { damage_fee: Number(p.damage_fee || 0), lost_fee: Number(p.lost_fee || 0) }))
 
@@ -176,6 +185,7 @@ export async function POST(request: NextRequest, { params }: { params: { booking
           .from("products")
           .select("id, name")
           .in("id", productIds)
+          .eq("franchise_id", booking.franchise_id)
         prodNames?.forEach((p: any) => productNamesMap.set(p.id, p.name))
       }
 

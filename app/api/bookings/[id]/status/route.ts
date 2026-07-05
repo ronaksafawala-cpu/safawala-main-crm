@@ -73,6 +73,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         updated_at: new Date().toISOString(),
       })
       .eq("id", id)
+      .eq("franchise_id", existingBooking.franchise_id)
       .select()
       .single()
 

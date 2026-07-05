@@ -38,11 +38,16 @@ export async function POST(req: NextRequest) {
     const supabase = createClient()
 
     // 1. Fetch product to inspect stock
-    const { data: product, error: fetchError } = await supabase
+    let productQuery = supabase
       .from("products")
       .select("id, name, quantity, stock_quantity, stock_available, stock_damaged, franchise_id")
       .eq("id", productId)
-      .single()
+
+    if (!auth.user!.is_super_admin && auth.user!.franchise_id) {
+      productQuery = productQuery.eq("franchise_id", auth.user!.franchise_id)
+    }
+
+    const { data: product, error: fetchError } = await productQuery.single()
 
     if (fetchError || !product) {
       return NextResponse.json(
@@ -94,6 +99,7 @@ export async function POST(req: NextRequest) {
         updated_at: new Date().toISOString()
       })
       .eq("id", productId)
+      .eq("franchise_id", product.franchise_id)
 
     if (updateError) {
       console.error("Failed to update product stock:", updateError)

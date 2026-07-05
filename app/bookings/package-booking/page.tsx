@@ -57,7 +57,11 @@ export default function PackageBookingPage() {
         console.log("[v0] New customer created:", customerId)
       } else {
         // Fetch existing customer info for notifications
-        const { data: existingCustomer } = await supabase.from("customers").select("*").eq("id", customerId).single()
+        let customerQuery = supabase.from("customers").select("*").eq("id", customerId)
+        if (currentUser?.franchise_id) {
+          customerQuery = customerQuery.eq("franchise_id", currentUser.franchise_id)
+        }
+        const { data: existingCustomer } = await customerQuery.single()
         customerInfo = existingCustomer
       }
 
