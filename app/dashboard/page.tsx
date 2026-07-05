@@ -14,7 +14,7 @@ import {
   Calendar, Users, Package, DollarSign, Plus, Eye, Crown, RefreshCw, Search,
   TrendingUp, TrendingDown, AlertCircle, Clock, CheckCircle2, XCircle,
   ArrowUpRight, ArrowDownRight, Minus, Box, Truck, RotateCcw,
-  MapPin, ClipboardList, Bell, User as UserIcon, Warehouse, FileText, Image as ImageIcon, PlayCircle
+  MapPin, ClipboardList, Bell, User as UserIcon, Warehouse, FileText
 } from "lucide-react"
 import Link from "next/link"
 import { Badge } from "@/components/ui/badge"
@@ -629,7 +629,6 @@ export default function DashboardPage() {
                 { label: "New Invoice", href: "/create-invoice", icon: ClipboardList, className: "bg-purple-500 hover:bg-purple-600" },
                 { label: "Add Customer", href: "/customers", icon: Plus, className: "bg-orange-500 hover:bg-orange-600" },
                 { label: "Add Employee", href: "/staff", icon: Plus, className: "bg-blue-500 hover:bg-blue-600" },
-                { label: "Open Gallery", href: "/gallery", icon: ImageIcon, className: "bg-rose-500 hover:bg-rose-600" },
               ].map((action) => (
                 <Link key={action.label} href={action.href}>
                   <Button className={`w-full justify-start text-white font-semibold ${action.className}`}>
@@ -638,56 +637,6 @@ export default function DashboardPage() {
                   </Button>
                 </Link>
               ))}
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Gallery Preview */}
-        <Card className="bg-white border-rose-100 border-l-4 border-l-rose-500 shadow-sm overflow-hidden">
-          <CardHeader className="pb-3">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <CardTitle className="text-base font-extrabold">Gallery Preview</CardTitle>
-                <CardDescription className="text-xs">
-                  Latest photos and video placeholders from your brand library
-                </CardDescription>
-              </div>
-              <Link href="/gallery">
-                <Button variant="outline" size="sm" className="border-rose-200 text-rose-700 hover:bg-rose-50">
-                  View Gallery
-                </Button>
-              </Link>
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-3 md:grid-cols-3">
-              {[
-                { kind: "Image", title: "Wedding setup", tone: "from-rose-100 to-orange-100", icon: ImageIcon },
-                { kind: "Video", title: "Event highlight reel", tone: "from-slate-950 to-slate-700", icon: PlayCircle },
-                { kind: "Image", title: "Product showcase", tone: "from-amber-100 to-yellow-100", icon: ImageIcon },
-              ].map((item) => {
-                const Icon = item.icon
-                return (
-                  <div
-                    key={item.title}
-                    className="rounded-xl border border-rose-100 bg-gradient-to-br p-3 shadow-sm"
-                  >
-                    <div className={`h-32 rounded-lg bg-gradient-to-br ${item.tone} flex items-center justify-center relative overflow-hidden`}>
-                      <div className="absolute inset-0 bg-black/10" />
-                      <div className="relative flex flex-col items-center gap-1 text-white">
-                        <Icon className="h-8 w-8" />
-                        <span className="text-[10px] font-semibold uppercase tracking-[0.2em]">{item.kind} Placeholder</span>
-                      </div>
-                    </div>
-                    <div className="mt-2 flex items-center justify-between gap-2">
-                      <p className="text-sm font-semibold text-slate-800">{item.title}</p>
-                      <span className="text-[10px] font-semibold text-rose-600 bg-rose-50 px-2 py-1 rounded-full">
-                        Ready
-                      </span>
-                    </div>
-                  </div>
-                )
-              })}
             </div>
           </CardContent>
         </Card>

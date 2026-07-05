@@ -17,7 +17,10 @@ export async function GET(request: NextRequest) {
     const monthParam = searchParams.get('month') // YYYY-MM
     const franchiseId = auth.user!.franchise_id
     const isSuperAdmin = auth.user!.is_super_admin
-    const isAdmin = isSuperAdmin || auth.user!.role === 'franchise_admin' || (auth.user!.role as string) === 'hr_staff'
+    const isAdmin =
+      isSuperAdmin ||
+      auth.user!.role === 'franchise_admin' ||
+      (auth.user!.role as string) === 'hr_staff'
 
     let query = supabaseServer
       .from('attendance')
@@ -60,7 +63,10 @@ export async function POST(request: NextRequest) {
 
     if (!date) return NextResponse.json({ error: 'date is required' }, { status: 400 })
 
-    const isAdmin = auth.user!.is_super_admin || auth.user!.role === 'franchise_admin' || (auth.user!.role as string) === 'hr_staff'
+    const isAdmin =
+      auth.user!.is_super_admin ||
+      auth.user!.role === 'franchise_admin' ||
+      (auth.user!.role as string) === 'hr_staff'
     // Admin can mark attendance for any user; staff can only mark their own
     const userId = isAdmin && body.user_id ? body.user_id : auth.user!.id
     const franchiseId = auth.user!.franchise_id

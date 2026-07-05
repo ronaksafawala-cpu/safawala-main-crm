@@ -55,7 +55,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    let syncResults = { success: 0, errors: 0, details: [] }
+    let syncResults: { success: number; errors: number; details: { success: unknown[]; errors: unknown[] } } = {
+      success: 0,
+      errors: 0,
+      details: { success: [], errors: [] },
+    }
 
     if (syncType === "products") {
       syncResults = await syncProductsFromWooCommerce()
@@ -90,8 +94,8 @@ export async function POST(request: NextRequest) {
 }
 
 async function syncProductsFromWooCommerce() {
-  const success = []
-  const errors = []
+  const success: Array<{ name: string; sku: string }> = []
+  const errors: Array<{ product: string; error: string }> = []
 
   try {
     // Get all products from WooCommerce (paginated)
@@ -146,7 +150,7 @@ async function syncProductsFromWooCommerce() {
           }
 
           success.push({ name: wooProduct.name, sku: wooProduct.sku })
-        } catch (error) {
+        } catch (error: unknown) {
           errors.push({
             product: wooProduct.name,
             error: error instanceof Error ? error.message : "Unknown error",
@@ -157,7 +161,7 @@ async function syncProductsFromWooCommerce() {
       page++
       if (wooProducts.length < 50) hasMore = false
     }
-  } catch (error) {
+  } catch (error: unknown) {
     console.error("Error in syncProductsFromWooCommerce:", error)
     throw error
   }

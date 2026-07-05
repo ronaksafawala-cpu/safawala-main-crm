@@ -41,6 +41,8 @@ interface Product {
   category_id?: string
   subcategory_id?: string
   category_name?: string
+  category?: string
+  subcategory?: string
   price: number
   regular_price?: number
   rental_price: number
@@ -257,6 +259,8 @@ export default function InventoryDashboard() {
     category_id: p.category_id || undefined,
     subcategory_id: p.subcategory_id || undefined,
     category_name: p.category_name || undefined,
+    category: p.category || undefined,
+    subcategory: p.subcategory || undefined,
     is_active: p.is_active !== false,
     product_code: p.product_code || p.id?.slice(0, 8) || "CUST",
     created_at: p.created_at || "",
@@ -692,6 +696,8 @@ export default function InventoryDashboard() {
         const productCategoryId = product.category_id?.trim()
         const productSubcategoryId = product.subcategory_id?.trim()
         const productCategoryName = product.category_name?.trim().toLowerCase()
+        const legacyCategoryName = product.category?.trim().toLowerCase()
+        const legacySubcategoryName = product.subcategory?.trim().toLowerCase()
         const productCategoryParentId = productCategoryId ? categoryParentMap[productCategoryId] : null
         const productSubcategoryParentId = productSubcategoryId ? categoryParentMap[productSubcategoryId] : null
         const matchesCategory =
@@ -699,7 +705,11 @@ export default function InventoryDashboard() {
           productSubcategoryId === categoryFilter ||
           productCategoryParentId === categoryFilter ||
           productSubcategoryParentId === categoryFilter ||
-          (!!selectedCategoryName && productCategoryName === selectedCategoryName)
+          (!!selectedCategoryName && (
+            productCategoryName === selectedCategoryName ||
+            legacyCategoryName === selectedCategoryName ||
+            legacySubcategoryName === selectedCategoryName
+          ))
 
         if (!matchesCategory) return false
       }

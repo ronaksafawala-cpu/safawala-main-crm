@@ -31,7 +31,6 @@ import {
   Plane,
   Stethoscope,
   ShieldCheck,
-  Image as GalleryIcon,
 } from "lucide-react"
 
 import {
@@ -98,13 +97,6 @@ const navigationItems = {
       icon: Users,
       permission: "customers",
       description: "Customer database with contact information, booking history, and preferences",
-    },
-    {
-      title: "Gallery",
-      url: "/gallery",
-      icon: GalleryIcon,
-      permission: "dashboard",
-      description: "Showcase images and videos from events, products, and brand highlights",
     },
     {
       title: "Inventory",
@@ -301,34 +293,46 @@ export function AppSidebar({ userRole = "staff", ...props }: AppSidebarProps) {
         const user = JSON.parse(userStr)
         setCurrentUser(user)
       }
-    } catch {}
+    } catch (error) {
+      console.error("Failed to load user data:", error)
+    }
   }, [])
 
   // Fetch profile photo - SIMPLIFIED VERSION
   useEffect(() => {
     if (!currentUser?.franchise_id) {
+      console.log('[Sidebar] Waiting for franchise_id...')
       return
     }
-    
+
+    console.log('[Sidebar] Fetching profile for franchise:', currentUser.franchise_id)
+
     fetch(`/api/settings/profile?franchise_id=${currentUser.franchise_id}`)
       .then(res => res.json())
       .then(data => {
+        console.log('[Sidebar] Full API Response:', JSON.stringify(data, null, 2))
+
         // Try to get profile_photo_url from different possible structures
         let photoUrl = null
-        
+
         if (data.data) {
           if (Array.isArray(data.data) && data.data.length > 0) {
             photoUrl = data.data[0].profile_photo_url
+            console.log('[Sidebar] Found in array[0]:', photoUrl)
           } else if (typeof data.data === 'object') {
             photoUrl = data.data.profile_photo_url
+            console.log('[Sidebar] Found in object:', photoUrl)
           }
         }
         
         if (photoUrl) {
+          console.log('[Sidebar] ✅ Setting profile photo:', photoUrl)
           setProfilePhoto(photoUrl)
+        } else {
+          console.log('[Sidebar] ❌ No profile_photo_url found in:', data)
         }
       })
-      .catch(() => undefined)
+      .catch(err => console.error('[Sidebar] Fetch error:', err))
   }, [currentUser?.franchise_id, pathname]) // Re-fetch when pathname changes
 
   const handleSignOut = async () => {
@@ -369,6 +373,9 @@ export function AppSidebar({ userRole = "staff", ...props }: AppSidebarProps) {
   const userName = currentUser?.name || "User"
   const userInitials = getInitials(userName)
   const userAvatar = profilePhoto || currentUser?.avatar_url || ""
+
+  console.log('[Sidebar] Render - profilePhoto:', profilePhoto)
+  console.log('[Sidebar] Render - userAvatar:', userAvatar)
 
   return (
     <TooltipProvider>
