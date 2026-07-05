@@ -137,11 +137,32 @@ export default function NewBookingPage() {
     city: "",
     pincode: "",
   })
+  const [activeFranchiseId, setActiveFranchiseId] = useState("")
 
   useEffect(() => {
-    fetchCustomers()
-    fetchProducts()
+    const loadUser = async () => {
+      try {
+        const res = await fetch("/api/auth/user", { cache: "no-store" })
+        if (!res.ok) return
+        const user = await res.json()
+        if (user?.franchise_id) {
+          setActiveFranchiseId(user.franchise_id)
+        }
+      } catch {}
+    }
+
+    loadUser()
   }, [])
+
+  useEffect(() => {
+    if (!activeFranchiseId) return
+    fetchCustomers()
+  }, [activeFranchiseId])
+
+  useEffect(() => {
+    if (!activeFranchiseId) return
+    fetchProducts()
+  }, [activeFranchiseId])
 
   useEffect(() => {
     if (customerSearch.trim() === "") {
@@ -186,7 +207,8 @@ export default function NewBookingPage() {
 
   const fetchCustomers = async () => {
     try {
-      const data = await customerService.getAll()
+      if (!activeFranchiseId) return
+      const data = await customerService.getAll(activeFranchiseId)
       setCustomers(data || [])
     } catch (error) {
       console.error("Error fetching customers:", error)
@@ -196,7 +218,8 @@ export default function NewBookingPage() {
 
   const fetchProducts = async () => {
     try {
-      const data = await productService.getAvailable()
+      if (!activeFranchiseId) return
+      const data = await productService.getAvailable(activeFranchiseId)
       setProducts(data || [])
     } catch (error) {
       console.error("Error fetching products:", error)
@@ -246,7 +269,7 @@ export default function NewBookingPage() {
         outstanding_balance: 0,
         total_bookings: 0,
         total_spent: 0,
-        franchise_id: "", // Will be set by service
+        franchise_id: activeFranchiseId,
       }
 
       const newCustomer = await customerService.create(customerData as any)

@@ -16,9 +16,9 @@ async function NewQuotePage() {
   const franchiseId = currentUser?.franchise_id
 
   const [customers, products, categories] = await Promise.all([
-    customerService.getAll(),
+    customerService.getAll(franchiseId),
     productService.getAvailable(franchiseId),
-    categoryService.getAll(),
+    categoryService.getAll(franchiseId),
   ])
 
   return (
