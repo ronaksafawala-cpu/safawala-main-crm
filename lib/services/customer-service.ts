@@ -18,9 +18,18 @@ export interface UpdateCustomerData extends Partial<CreateCustomerData> {
 }
 
 class CustomerService {
-  async getAll(): Promise<Customer[]> {
+  async getAll(franchiseId?: string): Promise<Customer[]> {
     try {
-      const { data, error } = await supabase.from("customers").select("*").order("created_at", { ascending: false })
+      if (!franchiseId) {
+        console.warn("CustomerService.getAll called without a franchiseId; returning empty list")
+        return []
+      }
+
+      const { data, error } = await supabase
+        .from("customers")
+        .select("*")
+        .eq("franchise_id", franchiseId)
+        .order("created_at", { ascending: false })
 
       if (error) throw error
 
@@ -31,9 +40,19 @@ class CustomerService {
     }
   }
 
-  async getById(id: string): Promise<Customer | null> {
+  async getById(id: string, franchiseId?: string): Promise<Customer | null> {
     try {
-      const { data, error } = await supabase.from("customers").select("*").eq("id", id).single()
+      if (!franchiseId) {
+        console.warn("CustomerService.getById called without a franchiseId; returning null")
+        return null
+      }
+
+      const { data, error } = await supabase
+        .from("customers")
+        .select("*")
+        .eq("id", id)
+        .eq("franchise_id", franchiseId)
+        .single()
 
       if (error) throw error
 
@@ -105,12 +124,18 @@ class CustomerService {
     }
   }
 
-  async search(query: string): Promise<Customer[]> {
+  async search(query: string, franchiseId?: string): Promise<Customer[]> {
     try {
+      if (!franchiseId) {
+        console.warn("CustomerService.search called without a franchiseId; returning empty list")
+        return []
+      }
+
       const { data, error } = await supabase
         .from("customers")
         .select("*")
         .or(`name.ilike.%${query}%,phone.ilike.%${query}%,customer_code.ilike.%${query}%`)
+        .eq("franchise_id", franchiseId)
         .order("created_at", { ascending: false })
         .limit(20)
 

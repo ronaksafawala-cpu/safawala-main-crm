@@ -13,12 +13,18 @@ export interface UpdateCategoryData extends Partial<CreateCategoryData> {
 }
 
 class CategoryService {
-  async getAll(): Promise<Category[]> {
+  async getAll(franchiseId?: string): Promise<Category[]> {
     try {
+      if (!franchiseId) {
+        console.warn("CategoryService.getAll called without a franchiseId; returning empty list")
+        return []
+      }
+
       const { data, error } = await supabase
         .from("product_categories")
         .select("*")
         .eq("is_active", true)
+        .eq("franchise_id", franchiseId)
         .order("name", { ascending: true })
 
       if (error) throw error
@@ -30,9 +36,19 @@ class CategoryService {
     }
   }
 
-  async getById(id: string): Promise<Category | null> {
+  async getById(id: string, franchiseId?: string): Promise<Category | null> {
     try {
-      const { data, error } = await supabase.from("product_categories").select("*").eq("id", id).single()
+      if (!franchiseId) {
+        console.warn("CategoryService.getById called without a franchiseId; returning null")
+        return null
+      }
+
+      const { data, error } = await supabase
+        .from("product_categories")
+        .select("*")
+        .eq("id", id)
+        .eq("franchise_id", franchiseId)
+        .single()
 
       if (error) throw error
 
