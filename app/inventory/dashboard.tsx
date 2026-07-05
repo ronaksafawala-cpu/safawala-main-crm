@@ -314,7 +314,10 @@ export default function InventoryDashboard() {
 
       await fetchCategoriesList()
 
-      const prodRes = await fetch("/api/products?limit=3000&active_only=true", { cache: "no-store" })
+      const prodRes = await fetch(
+        `/api/products?limit=3000&active_only=true${currentUser.franchise_id ? `&franchise_id=${encodeURIComponent(currentUser.franchise_id)}` : ""}`,
+        { cache: "no-store" }
+      )
       const prodJson = prodRes.ok ? await prodRes.json() : { data: [] }
       const activeData = (prodJson.data || []).filter((p: any) => p.is_active !== false)
       const normalized = activeData.map(normalizeProduct)
