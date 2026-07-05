@@ -18,6 +18,22 @@ export async function GET(request: NextRequest) {
     const limit = parseInt(searchParams.get('limit') ?? '50', 10)
 
     const supabase = createClient()
+
+    if (bookingId) {
+      const { data: booking } = await supabase
+        .from("bookings")
+        .select("id, franchise_id")
+        .eq("id", bookingId)
+        .single()
+
+      if (!booking) {
+        return NextResponse.json({ error: "Booking not found" }, { status: 404 })
+      }
+
+      if (!isSuperAdmin && booking.franchise_id !== franchiseId) {
+        return NextResponse.json({ error: "Access denied to this franchise" }, { status: 403 })
+      }
+    }
     let query = supabase
       .from("payments")
       .select("*, booking:bookings(booking_number, customer:customers(name, phone))")
@@ -51,6 +67,19 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = createClient()
+    const { data: booking } = await supabase
+      .from("bookings")
+      .select("id, franchise_id")
+      .eq("id", booking_id)
+      .single()
+
+    if (!booking) {
+      return NextResponse.json({ error: "Booking not found" }, { status: 404 })
+    }
+
+    if (!user.is_super_admin && booking.franchise_id !== franchiseId) {
+      return NextResponse.json({ error: "Access denied to this franchise" }, { status: 403 })
+    }
 
     const { data, error } = await supabase
       .from("payments")
@@ -82,10 +111,11 @@ export async function POST(request: NextRequest) {
         .from("bookings")
         .select("paid_amount")
         .eq("id", booking_id)
+        .eq("franchise_id", booking.franchise_id)
         .single()
         .then(({ data: bk }) => {
           if (bk) {
-            supabase.from("bookings").update({ paid_amount: (bk.paid_amount ?? 0) + parseFloat(amount) }).eq("id", booking_id)
+            supabase.from("bookings").update({ paid_amount: (bk.paid_amount ?? 0) + parseFloat(amount) }).eq("id", booking_id).eq("franchise_id", booking.franchise_id)
           }
         })
     }

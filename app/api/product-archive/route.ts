@@ -138,6 +138,7 @@ export async function POST(request: NextRequest) {
       .from("products")
       .update({ stock_available: newStockAvailable })
       .eq("id", product_id)
+      .eq("franchise_id", product.franchise_id)
 
     if (updateError) {
       console.error("[Product Archive POST] Stock update error:", updateError)
@@ -225,6 +226,7 @@ export async function DELETE(request: NextRequest) {
       .from("products")
       .update({ stock_available: newStockAvailable })
       .eq("id", archiveRecord.product_id)
+      .eq("franchise_id", archiveRecord.franchise_id)
 
     if (updateError) {
       console.error("[Product Archive DELETE] Stock restore error:", updateError)

@@ -220,6 +220,7 @@ export async function POST(request: Request) {
         .from("products")
         .select("id, stock_total, stock_available, stock_booked, stock_damaged")
         .eq("id", r.product_id)
+        .eq("franchise_id", bookingRecord.franchise_id)
         .maybeSingle()
 
       // Compute new values safely
@@ -232,6 +233,7 @@ export async function POST(request: Request) {
         .from("products")
         .update({ stock_total, stock_available, stock_damaged, stock_booked })
         .eq("id", r.product_id)
+        .eq("franchise_id", bookingRecord.franchise_id)
     }
 
     // Push damaged/lost summary into booking (accumulative)
@@ -252,6 +254,7 @@ export async function POST(request: Request) {
       .from("bookings")
       .update({ settlement_details: newDetails })
       .eq("id", bookingId)
+      .eq("franchise_id", bookingRecord.franchise_id)
 
     // Audit log
     try {

@@ -52,11 +52,16 @@ export async function POST(req: NextRequest) {
       // Update inventory stock for lost/damaged
       for (const ldItem of lostDamagedItems) {
         if (ldItem.product_id) {
-          const { data: product } = await supabase
+          let productQuery = supabase
             .from("products")
-            .select("stock_available, stock_total")
+            .select("stock_available, stock_total, franchise_id")
             .eq("id", ldItem.product_id)
-            .single()
+
+          if (!user.is_super_admin && franchiseId) {
+            productQuery = productQuery.eq("franchise_id", franchiseId)
+          }
+
+          const { data: product } = await productQuery.single()
           if (product) {
             await supabase
               .from("products")
@@ -66,6 +71,7 @@ export async function POST(req: NextRequest) {
                 updated_at: new Date().toISOString(),
               })
               .eq("id", ldItem.product_id)
+              .eq("franchise_id", product.franchise_id || franchiseId)
           }
         }
       }

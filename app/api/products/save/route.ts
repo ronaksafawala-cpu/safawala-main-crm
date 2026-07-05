@@ -53,6 +53,7 @@ export async function POST(req: NextRequest) {
     }
 
     cleanData.franchise_id = franchise_id
+    delete cleanData.franchiseId
     cleanData.created_at = new Date().toISOString()
     cleanData.updated_at = new Date().toISOString()
 

@@ -124,8 +124,9 @@ export async function POST(request: NextRequest) {
         // Fetch current stock
         const { data: product, error: fetchError } = await supabase
           .from('products')
-          .select('stock_available, name')
+          .select('stock_available, name, franchise_id')
           .eq('id', item.product_id)
+          .eq('franchise_id', user.franchise_id)
           .single()
 
         if (fetchError || !product) {
@@ -139,6 +140,7 @@ export async function POST(request: NextRequest) {
           .from('products')
           .update({ stock_available: newStock })
           .eq('id', item.product_id)
+          .eq('franchise_id', user.franchise_id)
 
         if (updateError) {
           console.warn(`[Direct Sales API] Failed to deduct stock for ${product.name}:`, updateError)
