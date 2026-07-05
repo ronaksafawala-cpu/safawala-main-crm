@@ -98,6 +98,7 @@ export async function PATCH(
       .from("deliveries")
       .update(updateData)
       .eq("id", deliveryId)
+      .eq("franchise_id", delivery.franchise_id)
       .select()
       .single()
     
@@ -125,6 +126,7 @@ export async function PATCH(
         .from(bookingTable)
         .update({ status: newBookingStatus })
         .eq("id", delivery.booking_id)
+        .eq("franchise_id", delivery.franchise_id)
       
       console.log(`✅ Updated ${bookingTable} status to '${newBookingStatus}' for booking ${delivery.booking_id}`)
     }

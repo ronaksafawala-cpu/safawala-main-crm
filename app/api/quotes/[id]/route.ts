@@ -15,11 +15,17 @@ export async function GET(request: NextRequest, { params }: { params: { id: stri
     const { id } = params
     const supabase = createClient()
 
-    const { data, error } = await supabase
+    const franchiseId = auth.user!.franchise_id
+    const isSuperAdmin = auth.user!.is_super_admin
+
+    let query = supabase
       .from('product_orders')
       .select(`*, customers ( id, name, phone, email )`)
       .eq('id', id)
-      .single()
+    if (!isSuperAdmin && franchiseId) {
+      query = query.eq('franchise_id', franchiseId)
+    }
+    const { data, error } = await query.single()
 
     if (error || !data) {
       return NextResponse.json({ error: 'Quote not found' }, { status: 404 })
@@ -77,6 +83,7 @@ export async function PATCH(request: NextRequest, { params }: { params: { id: st
       .from('product_orders')
       .update(updates)
       .eq('id', id)
+      .eq('franchise_id', existing.franchise_id)
       .select()
       .single()
 

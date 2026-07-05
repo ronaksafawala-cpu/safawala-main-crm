@@ -29,6 +29,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "delivery_id is required" }, { status: 400 })
     }
 
+    const { data: existingDelivery, error: existingError } = await supabaseServer
+      .from("deliveries")
+      .select("delivery_number, delivery_charge, fuel_cost, franchise_id, delivery_date")
+      .eq("id", deliveryId)
+      .single()
+
+    if (existingError || !existingDelivery) {
+      return NextResponse.json({ error: "Delivery not found" }, { status: 404 })
+    }
+
+    if (!auth.user?.is_super_admin && existingDelivery.franchise_id && existingDelivery.franchise_id !== auth.user?.franchise_id) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    }
+
     // Build update object (only include fields that are provided)
     const updateData: any = {
       updated_at: new Date().toISOString()
@@ -68,6 +82,7 @@ export async function POST(request: NextRequest) {
           .from("delivery_staff")
           .delete()
           .eq("delivery_id", deliveryId)
+          .eq("franchise_id", existingDelivery.franchise_id)
 
         if (staffIds.length > 0) {
           const assignments = staffIds.map((staffId: string) => ({
@@ -103,17 +118,11 @@ export async function POST(request: NextRequest) {
     if (body.return_photo_url !== undefined) updateData.return_photo_url = body.return_photo_url
     if (body.return_notes !== undefined) updateData.return_notes = body.return_notes
 
-    // Get existing delivery for expense creation check
-    const { data: existingDelivery } = await supabaseServer
-      .from("deliveries")
-      .select("delivery_number, delivery_charge, fuel_cost, franchise_id, delivery_date")
-      .eq("id", deliveryId)
-      .single()
-
     const { data: delivery, error } = await supabaseServer
       .from("deliveries")
       .update(updateData)
       .eq("id", deliveryId)
+      .eq("franchise_id", existingDelivery.franchise_id)
       .select(`
         *,
         customer:customers(id, name, phone, email)

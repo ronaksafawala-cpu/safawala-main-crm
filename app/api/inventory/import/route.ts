@@ -140,6 +140,7 @@ export async function POST(request: NextRequest) {
                   updated_at: new Date().toISOString(),
                 })
                 .eq('id', existing.id)
+                .eq('franchise_id', franchiseId)
 
               if (updateError) {
                 console.error('[Import] Update error for', normalizedProduct.product_code, updateError)
@@ -155,6 +156,7 @@ export async function POST(request: NextRequest) {
                       .from('products')
                       .update({ image_url: imageUrl })
                       .eq('id', existing.id)
+                      .eq('franchise_id', franchiseId)
                     imagesUploaded++
                   }
                 } catch (imgErr) {

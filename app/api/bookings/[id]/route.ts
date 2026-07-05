@@ -111,6 +111,7 @@ export async function PATCH(
       .from(table)
       .update({ ...body, updated_at: new Date().toISOString() })
       .eq('id', params.id)
+      .eq('franchise_id', existing.franchise_id)
       .select()
       .single()
 
@@ -261,7 +262,7 @@ export async function DELETE(
 
     // Delete the booking itself
     console.log(`[Bookings DELETE] Deleting from ${foundTable}...`)
-    const { error } = await supabase.from(foundTable).delete().eq('id', id)
+    const { error } = await supabase.from(foundTable).delete().eq('id', id).eq('franchise_id', existing.franchise_id)
     if (error) {
       console.error('[Bookings DELETE] Delete failed:', error)
       return NextResponse.json({ error: error.message }, { status: 400 })
