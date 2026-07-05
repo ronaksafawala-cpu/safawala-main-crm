@@ -165,6 +165,7 @@ export async function POST(
           .from("products")
           .select("id, stock_available, stock_booked")
           .eq("id", it.product_id)
+          .eq("franchise_id", delivery.franchise_id)
           .single()
         if (pErr || !prod) {
           console.warn("[Handover API][POST] Product not found for restock:", it.product_id)
@@ -176,6 +177,7 @@ export async function POST(
           .from("products")
           .update({ stock_available: newAvail, stock_booked: newBooked })
           .eq("id", it.product_id)
+          .eq("franchise_id", delivery.franchise_id)
         if (invErr) {
           console.error("[Handover API][POST] Inventory update failed:", invErr)
           continue
@@ -228,6 +230,7 @@ export async function POST(
           .from("products")
           .select("id, stock_available, stock_booked, stock_in_laundry")
           .eq("id", it.product_id)
+          .eq("franchise_id", delivery.franchise_id)
           .single()
         if (pErr || !prod) {
           console.warn("[Handover API][POST] Product not found for returned-now:", it.product_id)
@@ -250,6 +253,7 @@ export async function POST(
           .from("products")
           .update(update)
           .eq("id", it.product_id)
+          .eq("franchise_id", delivery.franchise_id)
         if (invErr2) {
           console.error("[Handover API][POST] Inventory update (returned-now) failed:", invErr2)
           continue

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-import { authenticateRequest } from "@/lib/auth-middleware"
+import { authenticateRequest, AuthMiddleware } from "@/lib/auth-middleware"
 
 export async function POST(request: NextRequest) {
   try {
@@ -10,6 +10,7 @@ export async function POST(request: NextRequest) {
     }
 
     const supabase = createClient()
+    const user = auth.user!
     const { quote_id, booking_type } = await request.json()
 
     console.log("[Convert Quote] Starting conversion:", { quote_id, booking_type })
@@ -25,12 +26,17 @@ export async function POST(request: NextRequest) {
     const tableName = booking_type === "package" ? "package_bookings" : "product_orders"
 
     // Fetch the quote
-    const { data: quote, error: quoteError } = await supabase
+    let quoteQuery = supabase
       .from(tableName)
       .select("*")
       .eq("id", quote_id)
       .eq("is_quote", true)
-      .single()
+
+    if (!user.is_super_admin && user.franchise_id) {
+      quoteQuery = quoteQuery.eq("franchise_id", user.franchise_id)
+    }
+
+    const { data: quote, error: quoteError } = await quoteQuery.single()
 
     if (quoteError || !quote) {
       return NextResponse.json(
@@ -47,6 +53,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    if (!AuthMiddleware.canAccessFranchise(user, quote.franchise_id)) {
+      return NextResponse.json({ error: "Access denied to this franchise" }, { status: 403 })
+    }
+
     // Convert the quote to a booking by:
     // 1. Creating a NEW booking entry (duplicate of quote)
     // 2. Marking the original quote as 'converted' (keeps it visible in quotes)
@@ -59,6 +69,7 @@ export async function POST(request: NextRequest) {
         updated_at: new Date().toISOString()
       })
       .eq("id", quote_id)
+      .eq("franchise_id", quote.franchise_id)
 
     if (quoteUpdateError) {
       console.error("Error updating quote status:", quoteUpdateError)
@@ -151,6 +162,7 @@ export async function POST(request: NextRequest) {
               .from("products")
               .update({ total_quantity: newQuantity })
               .eq("id", item.product_id)
+              .eq("franchise_id", newBooking.franchise_id)
           }
         }
       }
@@ -174,6 +186,7 @@ export async function POST(request: NextRequest) {
         .from("customers")
         .select("*")
         .eq("id", newBooking.customer_id)
+        .eq("franchise_id", newBooking.franchise_id)
         .single()
 
       // Create invoice

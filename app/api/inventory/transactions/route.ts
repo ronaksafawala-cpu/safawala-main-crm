@@ -135,6 +135,7 @@ export async function POST(request: NextRequest) {
         .from("products")
         .select("*")
         .eq("id", product_id)
+        .eq("franchise_id", franchiseId)
         .single()
 
       if (productFetchError) {
@@ -174,6 +175,7 @@ export async function POST(request: NextRequest) {
             .from("products")
             .update(stockUpdate)
             .eq("id", product_id)
+            .eq("franchise_id", franchiseId)
 
           if (updateError) {
             console.error("Error updating product stock:", updateError)

@@ -127,6 +127,7 @@ export async function POST(
         .from("products")
         .select("available_qty, booked_qty")
         .eq("id", product_id)
+        .eq("franchise_id", delivery.franchise_id)
         .single()
 
       if (productError || !product) {
@@ -147,6 +148,7 @@ export async function POST(
             booked_qty: Math.max(0, product.booked_qty - qty_not_used)
           })
           .eq("id", product_id)
+          .eq("franchise_id", delivery.franchise_id)
 
         if (invError) {
           console.error("Error updating available inventory:", invError)
@@ -230,6 +232,7 @@ export async function POST(
             booked_qty: Math.max(0, product.booked_qty - archiveQty)
           })
           .eq("id", product_id)
+          .eq("franchise_id", delivery.franchise_id)
 
         if (invError) {
           console.error("Error updating inventory for archived items:", invError)
