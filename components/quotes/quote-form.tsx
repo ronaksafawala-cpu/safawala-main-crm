@@ -53,6 +53,7 @@ export function QuoteForm({ customers, products, categories }: QuoteFormProps) {
 
   const [selectedCategory, setSelectedCategory] = useState("all")
   const [productSearchTerm, setProductSearchTerm] = useState("")
+  const [activeFranchiseId, setActiveFranchiseId] = useState<string>("")
 
   const [realTimeProducts, setRealTimeProducts] = useState<Product[]>(products)
   const supabase = createClient()
@@ -76,6 +77,7 @@ export function QuoteForm({ customers, products, categories }: QuoteFormProps) {
     name: "",
     phone: "+91",
     whatsapp: "+91",
+    email: "",
     address: "",
     city: "",
     pincode: "",
@@ -87,9 +89,27 @@ export function QuoteForm({ customers, products, categories }: QuoteFormProps) {
   const [packageMode, setPackageMode] = useState(false)
 
   useEffect(() => {
+    const loadUserFranchise = async () => {
+      try {
+        const res = await fetch("/api/auth/user")
+        if (!res.ok) return
+        const user = await res.json()
+        if (user?.franchise_id) {
+          setActiveFranchiseId(user.franchise_id)
+        }
+      } catch {}
+    }
+
+    loadUserFranchise()
+
     const fetchProductsWithStock = async () => {
       try {
-        const { data, error } = await supabase.from("products").select("*").eq("is_active", true).order("name")
+        let query = supabase.from("products").select("*").eq("is_active", true).order("name")
+        if (activeFranchiseId) {
+          query = query.eq("franchise_id", activeFranchiseId)
+        }
+
+        const { data, error } = await query
 
         if (error) {
           return
@@ -102,7 +122,7 @@ export function QuoteForm({ customers, products, categories }: QuoteFormProps) {
     }
 
     fetchProductsWithStock()
-  }, [supabase])
+  }, [supabase, activeFranchiseId])
 
   useEffect(() => {
     if (customerSearch.trim() === "") {
@@ -214,7 +234,8 @@ export function QuoteForm({ customers, products, categories }: QuoteFormProps) {
   }
 
   const filteredProducts = realTimeProducts.filter((product) => {
-    const matchesCategory = selectedCategory === "all" || product.category === selectedCategory
+    const productCategoryId = (product as any).category_id || (product as any).category
+    const matchesCategory = selectedCategory === "all" || productCategoryId === selectedCategory
     const matchesSearch =
       product.name.toLowerCase().includes(productSearchTerm.toLowerCase()) ||
       (product.product_code && product.product_code.toLowerCase().includes(productSearchTerm.toLowerCase())) ||
