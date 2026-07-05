@@ -37,6 +37,7 @@ import {
 import { supabase } from "@/lib/supabase"
 import { useToast } from "@/hooks/use-toast"
 import { NotificationService } from "@/lib/notification-service"
+import { getCurrentUser } from "@/lib/auth"
 
 interface Customer {
   id: string
@@ -114,6 +115,7 @@ export default function CreateBookingPage() {
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState("customer")
+  const [activeFranchiseId, setActiveFranchiseId] = useState("")
 
   // Customer search and selection
   const [customerSearch, setCustomerSearch] = useState("")
@@ -173,15 +175,31 @@ export default function CreateBookingPage() {
   })
 
   useEffect(() => {
+    const loadUser = async () => {
+      const currentUser = await getCurrentUser()
+      if (currentUser?.franchise_id) {
+        setActiveFranchiseId(currentUser.franchise_id)
+      }
+    }
+
+    loadUser()
+  }, [])
+
+  useEffect(() => {
+    if (!activeFranchiseId) return
     console.log("[v0] CreateBookingPage component mounted")
     console.log("[v0] Loading customers and products...")
     fetchCustomers()
     fetchProductsAndCategories()
-  }, [])
+  }, [activeFranchiseId])
 
   const fetchCustomers = async () => {
     try {
-      const { data, error } = await supabase.from("customers").select("*").order("name")
+      const { data, error } = await supabase
+        .from("customers")
+        .select("*")
+        .eq("franchise_id", activeFranchiseId)
+        .order("name")
 
       if (error) {
         console.error("[v0] Error fetching customers:", error)
@@ -199,7 +217,11 @@ export default function CreateBookingPage() {
 
   const fetchProductsAndCategories = async () => {
     try {
-      const { data, error } = await supabase.from("products").select("*").order("name")
+      const { data, error } = await supabase
+        .from("products")
+        .select("*")
+        .eq("franchise_id", activeFranchiseId)
+        .order("name")
 
       if (error) {
         console.error("[v0] Error fetching products:", error)
@@ -256,6 +278,7 @@ export default function CreateBookingPage() {
           {
             ...newCustomerData,
             customer_code: customerCode,
+            franchise_id: activeFranchiseId || null,
           },
         ])
         .select()
@@ -421,6 +444,7 @@ export default function CreateBookingPage() {
       const bookingData = {
         booking_number: generateBookingNumber(),
         customer_id: formData.customer_id,
+        franchise_id: activeFranchiseId || null,
         type: formData.type,
         event_type: formData.event_type,
         payment_type: formData.payment_type,

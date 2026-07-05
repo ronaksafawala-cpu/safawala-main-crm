@@ -120,13 +120,26 @@ export class ProductItemService {
     }
   }
 
-  static async getProductItems(productId: string): Promise<ProductItem[]> {
+  static async getProductItems(productId: string, franchiseId?: string): Promise<ProductItem[]> {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from("product_items")
         .select("*")
         .eq("product_id", productId)
         .order("created_at", { ascending: false })
+
+      if (franchiseId) {
+        query = query.eq("franchise_id", franchiseId)
+      }
+
+      if (!franchiseId) {
+        const { data: product } = await supabase.from("products").select("franchise_id").eq("id", productId).single()
+        if (product?.franchise_id) {
+          query = query.eq("franchise_id", product.franchise_id)
+        }
+      }
+
+      const { data, error } = await query
 
       if (error) throw error
       return data || []
@@ -165,13 +178,13 @@ export class ProductItemService {
     }
   }
 
-  static async searchByBarcode(barcode: string): Promise<ProductItem | null> {
+  static async searchByBarcode(barcode: string, franchiseId?: string): Promise<ProductItem | null> {
     try {
-      const { data, error } = await supabase
-        .from("product_items")
-        .select("*")
-        .eq("barcode", barcode)
-        .single()
+      let query = supabase.from("product_items").select("*").eq("barcode", barcode)
+      if (franchiseId) {
+        query = query.eq("franchise_id", franchiseId)
+      }
+      const { data, error } = await query.single()
 
       if (error && error.code !== "PGRST116") throw error
       return data || null

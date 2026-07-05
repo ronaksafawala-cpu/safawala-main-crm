@@ -1856,11 +1856,16 @@ export default function CreateInvoicePage() {
         for (const ldItem of lostDamagedItems) {
           if (ldItem.product_id) {
             // Get current product stock
-            const { data: product } = await supabase
+            let productQuery = supabase
               .from("products")
               .select("stock_available, stock_total, name, category, barcode, product_code, rental_price, sale_price, image_url")
               .eq("id", ldItem.product_id)
-              .single()
+
+            if (franchiseId) {
+              productQuery = productQuery.eq("franchise_id", franchiseId)
+            }
+
+            const { data: product } = await productQuery.single()
 
             if (product) {
               const newStockAvailable = Math.max(0, (product.stock_available || 0) - ldItem.quantity)
@@ -1875,6 +1880,7 @@ export default function CreateInvoicePage() {
                   updated_at: new Date().toISOString(),
                 })
                 .eq("id", ldItem.product_id)
+                .eq("franchise_id", franchiseId)
 
               // Auto-archive: Insert into product_archive table
               // Only use columns that exist in the original table

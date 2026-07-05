@@ -28,8 +28,32 @@ export default function BarcodeSearchComponent({
   const [product, setProduct] = useState<Product | null>(null)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
+  const [activeFranchiseId, setActiveFranchiseId] = useState('')
   const inputRef = useRef<HTMLInputElement>(null)
   const debounceTimer = useRef<NodeJS.Timeout | null>(null)
+
+  useEffect(() => {
+    let mounted = true
+
+    const loadUser = async () => {
+      try {
+        const response = await fetch('/api/auth/user', { cache: 'no-store' })
+        if (!response.ok) return
+        const user = await response.json()
+        if (mounted && user?.franchise_id) {
+          setActiveFranchiseId(user.franchise_id)
+        }
+      } catch {
+        // ignore; barcode search still works without explicit franchise scoping
+      }
+    }
+
+    loadUser()
+
+    return () => {
+      mounted = false
+    }
+  }, [])
 
   // Search for product when barcode changes
   useEffect(() => {
@@ -66,7 +90,7 @@ export default function BarcodeSearchComponent({
       setError('')
 
       const response = await fetch(
-        `/api/v3/search-product-by-barcode?barcode=${encodeURIComponent(barcodeValue)}`
+        `/api/v3/search-product-by-barcode?barcode=${encodeURIComponent(barcodeValue)}${activeFranchiseId ? `&franchise_id=${encodeURIComponent(activeFranchiseId)}` : ""}`
       )
 
       const data = await response.json()

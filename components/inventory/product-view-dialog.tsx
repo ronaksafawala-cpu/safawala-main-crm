@@ -55,6 +55,7 @@ interface Product {
   updated_at: string
   category_id?: string
   subcategory_id?: string
+  franchise_id?: string
   image_url?: string // Added image_url field
 }
 
@@ -204,7 +205,7 @@ export function ProductViewDialog({ product, open, onOpenChange }: ProductViewDi
   const loadItemBarcodes = async () => {
     setLoadingItems(true)
     try {
-      const items = await ProductItemService.getProductItems(product.id)
+      const items = await ProductItemService.getProductItems(product.id, product.franchise_id)
       const itemsWithBarcodes = await Promise.all(
         items.map(async (item) => {
           try {
