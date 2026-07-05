@@ -46,13 +46,6 @@ export async function GET(request: NextRequest) {
     const isSuperAdmin = authContext!.user.role === 'super_admin'
     const supabase = createClient()
 
-    console.log(`\n========== [BOOKINGS API] START ==========`)
-    console.log(`User: ${authContext!.user.email}`)
-    console.log(`Franchise ID: ${franchiseId}`)
-    console.log(`Franchise Name: ${authContext!.user.franchise_name}`)
-    console.log(`Role: ${authContext!.user.role}`)
-    console.log(`Is Super Admin: ${isSuperAdmin}`)
-
     // ============ PRODUCT ORDERS (RENTALS ONLY) ============
     let productQuery = supabase
       .from("product_orders")
@@ -114,23 +107,6 @@ export async function GET(request: NextRequest) {
       directSalesQuery,
       packageQuery
     ])
-
-    // Log results
-    console.log(`\n--- QUERY RESULTS ---`)
-    console.log(`Product Rentals: ${(productRes.data || []).length} records`)
-    if (productRes.error) console.log(`  Error: ${productRes.error.message}`)
-    
-    console.log(`Product Sales: ${(productSalesRes.data || []).length} records`)
-    if (productSalesRes.error) console.log(`  Error: ${productSalesRes.error.message}`)
-    else if ((productSalesRes.data || []).length > 0) {
-      console.log(`  Sample sales:`, (productSalesRes.data || []).map((s: any) => `${s.order_number} (franchise: ${s.franchise_id})`).join(', '))
-    }
-    
-    console.log(`Direct Sales Orders: ${(directSalesRes.data || []).length} records`)
-    if (directSalesRes.error) console.log(`  Error: ${directSalesRes.error.message}`)
-    
-    console.log(`Package Bookings: ${(packageRes.data || []).length} records`)
-    if (packageRes.error) console.log(`  Error: ${packageRes.error.message}`)
 
     // Compute item quantity totals for each booking
     const productIds = [...(productRes.data || []).map((r: any) => r.id), ...(productSalesRes.data || []).map((r: any) => r.id)]
@@ -200,7 +176,6 @@ export async function GET(request: NextRequest) {
         }
       }
       
-      console.log(`[Bookings API] Safa totals calculated for ${Object.keys(productTotals).length} orders`)
     }
 
     // Initialize package data variables
@@ -336,7 +311,6 @@ export async function GET(request: NextRequest) {
             packageTotals[r.id] = parseInt(match[1])
           }
         }
-        console.log(`[Bookings API] Fallback category totals applied for ${missingPackageIds.length} packages`)
       }
     }
 
@@ -587,21 +561,6 @@ export async function GET(request: NextRequest) {
       (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
     )
 
-    console.log(`\n--- FINAL RESULT ---`)
-    console.log(`Total Bookings: ${data.length}`)
-    console.log(`  - Product Orders (rentals + sales): ${productRows.length}`)
-    console.log(`  - Direct Sales Orders: ${directSalesRows.length}`)
-    console.log(`  - Package Bookings: ${packageRows.length}`)
-    
-    // Show breakdown by type for product orders
-    const saleOrders = productRows.filter((r: any) => r.type === 'sale')
-    const rentalOrders = productRows.filter((r: any) => r.type === 'rental')
-    console.log(`  - Within Product Orders: ${rentalOrders.length} rentals + ${saleOrders.length} sales`)
-    if (saleOrders.length > 0) {
-      console.log(`    Sales orders:`, saleOrders.map((s: any) => s.booking_number).join(', '))
-    }
-    console.log(`========== [BOOKINGS API] END ==========\n`)
-    
     return NextResponse.json({ success: true, data })
   } catch (error) {
     console.error("[Bookings API] Error:", error)
@@ -709,8 +668,6 @@ export async function POST(request: NextRequest) {
 
     // Auto-assign barcodes for booking items (if available)
     if (booking && booking.id && booking_items && booking_items.length > 0) {
-      console.log('[Booking API] Auto-assigning barcodes for booking:', booking.id)
-      
       for (const item of booking_items) {
         if (item.product_id && item.quantity) {
           const assignResult = await autoAssignBarcodes(
@@ -722,9 +679,7 @@ export async function POST(request: NextRequest) {
             userId
           )
           
-          if (assignResult.success) {
-            console.log(`[Booking API] Auto-assigned ${assignResult.assigned_count} barcodes for product ${item.product_id}`)
-          } else {
+          if (!assignResult.success) {
             console.warn(`[Booking API] Could not auto-assign barcodes for product ${item.product_id}:`, assignResult.error)
           }
         }
@@ -733,7 +688,20 @@ export async function POST(request: NextRequest) {
 
     try {
       const { NotificationService } = await import("@/lib/notification-service")
-      // await NotificationService.sendBookingConfirmation(booking.id) // TODO: Implement notification service
+      const { data: customer } = await supabase
+        .from("customers")
+        .select("name, phone")
+        .eq("id", customer_id)
+        .single()
+
+      await NotificationService.notifyBookingCreated({
+        ...booking,
+        customer_name: customer?.name || null,
+        customer_phone: customer?.phone || null,
+        venue: body.venue_name || body.venue_address || null,
+        booking_type: body.type || "rental",
+        type: body.type || "rental",
+      })
     } catch (notificationError) {
       console.error("[v0] WATI notification failed:", notificationError)
       // Don't fail the booking creation if notification fails

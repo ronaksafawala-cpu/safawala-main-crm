@@ -1,28 +1,22 @@
-import type { NextApiRequest, NextApiResponse } from 'next'
+import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { authenticateRequest } from "@/lib/auth-middleware"
 
-type ResponseData = {
-  success?: boolean
-  product?: any
-  error?: string
-}
+export async function GET(request: NextRequest) {
+  const auth = await authenticateRequest(request, { minRole: 'staff' })
+  if (!auth.authorized) {
+    return NextResponse.json(auth.error, { status: auth.statusCode })
+  }
 
-export default async function handler(
-  req: NextApiRequest,
-  res: NextApiResponse<ResponseData>
-) {
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL || '',
     process.env.SUPABASE_SERVICE_ROLE_KEY || ''
   )
-  if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed' })
-  }
 
-  const { barcode } = req.query
+  const barcode = request.nextUrl.searchParams.get('barcode')
 
-  if (!barcode || typeof barcode !== 'string') {
-    return res.status(400).json({ error: 'Barcode is required' })
+  if (!barcode) {
+    return NextResponse.json({ error: 'Barcode is required' }, { status: 400 })
   }
 
   try {
@@ -35,21 +29,21 @@ export default async function handler(
 
     if (error) {
       if (error.code === 'PGRST116') {
-        return res.status(404).json({ error: 'Product not found' })
+        return NextResponse.json({ error: 'Product not found' }, { status: 404 })
       }
       throw error
     }
 
     if (!product) {
-      return res.status(404).json({ error: 'Product not found' })
+      return NextResponse.json({ error: 'Product not found' }, { status: 404 })
     }
 
-    return res.status(200).json({
+    return NextResponse.json({
       success: true,
       product
     })
   } catch (error: any) {
     console.error('Barcode search error:', error)
-    return res.status(500).json({ error: error.message })
+    return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }

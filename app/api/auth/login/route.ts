@@ -7,6 +7,10 @@ import bcrypt from "bcryptjs"
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
+const ALLOW_LEGACY_DEPT_LOGIN_BYPASS =
+  process.env.NODE_ENV !== "production" &&
+  process.env.ALLOW_LEGACY_DEPT_LOGIN_BYPASS === "true"
+
 /**
  * Get default permissions based on role
  */
@@ -142,11 +146,13 @@ export async function POST(request: NextRequest) {
     const emailMatch = email.match(/^([a-z]+)@safawala\.com$/i);
     const deptPrefix = emailMatch ? emailMatch[1].toLowerCase() : null;
     const deptCap = deptPrefix ? deptPrefix.charAt(0).toUpperCase() + deptPrefix.slice(1) : '';
+    const host = request.nextUrl.hostname
+    const isLocalDevHost = host === "localhost" || host === "127.0.0.1" || host === "::1"
 
-    // Accept master password OR dept-specific password (e.g. Bookings@5678, Warehouse@5678)
+    // Accept master password OR dept-specific password only when explicitly enabled.
     const isBypassPassword = password === 'Warehouse@5678' || password === `${deptCap}@5678`;
 
-    if (deptPrefix && validDepartments.includes(deptPrefix) && isBypassPassword) {
+    if (ALLOW_LEGACY_DEPT_LOGIN_BYPASS && isLocalDevHost && deptPrefix && validDepartments.includes(deptPrefix) && isBypassPassword) {
       console.log(`[v0] Bypassing auth for default ${deptPrefix} user`);
 
       // Stable valid UUIDs per department (all lowercase hex, valid v4 format)
@@ -245,12 +251,7 @@ export async function POST(request: NextRequest) {
         success: true,
         message: `Login successful (${deptPrefix})`,
         user,
-        session: {
-          access_token: "mock-access-token",
-          refresh_token: "mock-refresh-token",
-          expires_at: Math.floor(Date.now() / 1000) + 60 * 60 * 24,
-          expires_in: 60 * 60 * 24
-        }
+        session: null
       })
       
       const cookiePayload = JSON.stringify({

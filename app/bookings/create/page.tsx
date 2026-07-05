@@ -115,20 +115,6 @@ export default function CreateBookingPage() {
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState("customer")
 
-  useEffect(() => {
-    // Recalculate/update booking items prices when type changes
-    setBookingItems((prev) =>
-      prev.map((item) => {
-        const unitPrice = formData.type === "rental" ? item.product?.rental_price || item.unit_price : item.product?.price || item.unit_price
-        return {
-          ...item,
-          unit_price: unitPrice,
-          total_price: unitPrice * item.quantity,
-        }
-      })
-    )
-  }, [formData.type])
-
   // Customer search and selection
   const [customerSearch, setCustomerSearch] = useState("")
   const [showCustomerDropdown, setShowCustomerDropdown] = useState(false)
@@ -157,6 +143,23 @@ export default function CreateBookingPage() {
     venue_address: "",
     special_instructions: "",
   })
+
+  useEffect(() => {
+    // Recalculate/update booking items prices when type changes
+    setBookingItems((prev) =>
+      prev.map((item) => {
+        const unitPrice =
+          formData.type === "rental"
+            ? item.product?.rental_price || item.unit_price
+            : item.product?.price || item.unit_price
+        return {
+          ...item,
+          unit_price: unitPrice,
+          total_price: unitPrice * item.quantity,
+        }
+      })
+    )
+  }, [formData.type])
 
   const [newCustomerData, setNewCustomerData] = useState<NewCustomerData>({
     name: "",
@@ -347,7 +350,7 @@ export default function CreateBookingPage() {
     const search = productSearch.toLowerCase()
     const matchesSearch =
       product.name.toLowerCase().includes(search) ||
-      (product.barcode ? String(product.barcode).toLowerCase().includes(search) : false) ||
+      ((product as any).barcode ? String((product as any).barcode).toLowerCase().includes(search) : false) ||
       (product.product_code ? String(product.product_code).toLowerCase().includes(search) : false)
     const matchesCategory = selectedCategory === "all" || product.category === selectedCategory
     return matchesSearch && matchesCategory
@@ -938,7 +941,7 @@ export default function CreateBookingPage() {
                       <div className="flex justify-between items-start">
                         <div className="flex-1">
                           <h3 className="font-medium text-sm">{product.name}</h3>
-                          <p className="text-xs text-gray-500">{product.barcode || product.product_code}</p>
+                          <p className="text-xs text-gray-500">{(product as any).barcode || product.product_code}</p>
                           <Badge variant="outline" className="text-xs">
                             {product.category}
                           </Badge>
@@ -987,7 +990,7 @@ export default function CreateBookingPage() {
                             <TableCell>
                               <div>
                                 <p className="font-medium">{item.product?.name}</p>
-                                <p className="text-sm text-gray-500">{item.product?.barcode || item.product?.product_code}</p>
+                                <p className="text-sm text-gray-500">{(item.product as any)?.barcode || item.product?.product_code}</p>
                               </div>
                             </TableCell>
                             <TableCell>₹{item.unit_price}</TableCell>

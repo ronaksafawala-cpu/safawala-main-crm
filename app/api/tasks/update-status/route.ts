@@ -5,31 +5,13 @@ import { ApiResponseBuilder } from "@/lib/api-response"
 
 export async function POST(request: NextRequest) {
   try {
-    let user: any = null
-    const authResult = await authenticateRequest(request).catch(() => ({ authorized: false }))
-    
-    if (authResult.authorized && authResult.user) {
-      user = authResult.user
-    } else {
-      // Fallback: Query first active user in the database
-      const { data: dbUsers } = await supabaseServer
-        .from("users")
-        .select("*")
-        .eq("is_active", true)
-        .limit(1)
-      
-      if (dbUsers && dbUsers.length > 0) {
-        user = dbUsers[0]
-      } else {
-        user = {
-          id: "system",
-          name: "System Administrator",
-          email: "admin@safawala.com",
-          role: "super_admin",
-          franchise_id: null
-        }
-      }
+    const authResult = await authenticateRequest(request).catch(() => ({ authorized: false, user: null }))
+
+    if (!authResult.authorized || !authResult.user) {
+      return NextResponse.json(ApiResponseBuilder.authError("Authentication required to update tasks"), { status: 401 })
     }
+
+    const user = authResult.user
     const body = await request.json()
     const { taskId, status, priority, title, description, due_date } = body
 

@@ -106,7 +106,6 @@ export function CustomerFormDialog({
       }
 
       if (mode === "edit" && customer) {
-        console.log("[CustomerFormDialog] Updating customer:", customer.id, payload)
         const response = await fetch(`/api/customers`, {
           method: "PUT",
           headers: {
@@ -131,7 +130,6 @@ export function CustomerFormDialog({
           onCustomerCreated(result.data)
         }
       } else {
-        console.log("[CustomerFormDialog] Creating customer:", payload)
         const response = await fetch("/api/customers", {
           method: "POST",
           headers: {
@@ -160,7 +158,6 @@ export function CustomerFormDialog({
       // Close dialog
       onOpenChange(false)
     } catch (error) {
-      console.error(`Error ${mode === "edit" ? "updating" : "creating"} customer:`, error)
       toast.error(error instanceof Error ? error.message : String(error))
     } finally {
       setLoading(false)

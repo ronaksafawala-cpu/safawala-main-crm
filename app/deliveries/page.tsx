@@ -77,6 +77,10 @@ interface Delivery {
   assigned_staff_id?: string
   // Link to a booking, so we can show and reschedule return
   booking_id?: string
+  booking_number?: string
+  booking?: {
+    booking_number?: string
+  }
   booking_source?: "product_order" | "package_booking"
   // If rescheduled, store the new time (ISO string). If not, UI falls back to booking's return_date
   rescheduled_return_at?: string
@@ -126,6 +130,8 @@ export default function DeliveriesPage() {
   const [selectedDelivery, setSelectedDelivery] = useState<Delivery | null>(null)
   
   const [currentUser, setCurrentUser] = useState<any | null>(null)
+  const [authResolved, setAuthResolved] = useState(false)
+  const [authError, setAuthError] = useState<string | null>(null)
   const [returns, setReturns] = useState<any[]>([])
   const [selectedReturn, setSelectedReturn] = useState<any | null>(null)
   const [showReturnProcessingDialog, setShowReturnProcessingDialog] = useState(false)
@@ -190,12 +196,13 @@ export default function DeliveriesPage() {
 
   const fetchCurrentUser = async () => {
     try {
+      setAuthError(null)
       const userStr = localStorage.getItem("safawala_user")
       if (userStr) {
         const user = JSON.parse(userStr)
         if (user && user.id) {
-          console.log("Loaded user from localStorage:", user)
           setCurrentUser(user)
+          setAuthResolved(true)
           return
         }
       }
@@ -212,28 +219,20 @@ export default function DeliveriesPage() {
           .single()
 
         if (!error && userData) {
-          console.log("Loaded user from Supabase auth:", userData)
           setCurrentUser(userData)
           localStorage.setItem("safawala_user", JSON.stringify(userData))
+          setAuthResolved(true)
           return
         }
       }
 
-      console.log("No active session found. Querying first active user as fallback...")
-      const { data: fallbackUsers, error: fallbackError } = await supabase
-        .from("users")
-        .select("*")
-        .eq("is_active", true)
-        .limit(1)
-
-      if (!fallbackError && fallbackUsers && fallbackUsers.length > 0) {
-        const fallbackUser = fallbackUsers[0]
-        console.log("Using database fallback user:", fallbackUser)
-        setCurrentUser(fallbackUser)
-        localStorage.setItem("safawala_user", JSON.stringify(fallbackUser))
-      }
-    } catch (error) {
-      console.error("Error fetching current user:", error)
+      setCurrentUser(null)
+      setAuthError("Please log in to access deliveries.")
+    } catch {
+      setCurrentUser(null)
+      setAuthError("Failed to load your session. Please sign in again.")
+    } finally {
+      setAuthResolved(true)
     }
   }
 
@@ -255,11 +254,9 @@ export default function DeliveriesPage() {
           const json = await res.json()
           setCustomers(json?.data || [])
         } else {
-          console.warn("Error fetching customers from API:", res.status)
           setCustomers([])
         }
-      } catch (e) {
-        console.warn("Error fetching customers:", e)
+      } catch {
         setCustomers([])
       }
 
@@ -269,8 +266,7 @@ export default function DeliveriesPage() {
         if (!res.ok) throw new Error(`Bookings API error: ${res.status}`)
         const json = await res.json()
         setBookings(json?.data || [])
-      } catch (e) {
-        console.warn("Error fetching unified bookings:", e)
+      } catch {
         setBookings([])
       }
 
@@ -281,7 +277,6 @@ export default function DeliveriesPage() {
           const staffJson = await staffRes.json()
           setStaff(staffJson?.data || [])
         } else {
-          console.warn("Staff API error:", staffRes.status)
           // Fallback: try direct query to users table
           const { data: staffData, error: staffError } = await supabase
             .from("users")
@@ -290,14 +285,12 @@ export default function DeliveriesPage() {
             .order("name")
 
           if (staffError) {
-            console.warn("Staff query error:", staffError.message)
             setStaff([])
           } else {
             setStaff(staffData || [])
           }
         }
-      } catch (e) {
-        console.warn("Staff feature not available:", e)
+      } catch {
         setStaff([])
       }
 
@@ -306,8 +299,7 @@ export default function DeliveriesPage() {
         const deliveriesRes = await fetch("/api/deliveries", { cache: "no-store" })
         
         if (!deliveriesRes.ok) {
-          const errorData = await deliveriesRes.json().catch(() => ({}))
-          console.warn("Deliveries API error:", errorData.error || deliveriesRes.statusText)
+          await deliveriesRes.json().catch(() => ({}))
           setDeliveries([])
         } else {
           setTableNotFound(false)
@@ -353,8 +345,7 @@ export default function DeliveriesPage() {
           
           setDeliveries(mappedDeliveries)
         }
-      } catch (e: any) {
-        console.warn("Error fetching deliveries:", e.message)
+      } catch {
         setDeliveries([])
       }
 
@@ -365,15 +356,12 @@ export default function DeliveriesPage() {
           const returnsJson = await returnsRes.json()
           setReturns(returnsJson?.returns || [])
         } else {
-          console.warn("Returns API error:", returnsRes.status)
           setReturns([])
         }
-      } catch (e: any) {
-        console.warn("Error fetching returns:", e.message || e)
+      } catch {
         setReturns([])
       }
-    } catch (error) {
-      console.error("Error in fetchData:", error)
+    } catch {
       toast({
         title: "Error",
         description: "Failed to fetch data. Please try again.",
@@ -427,7 +415,6 @@ export default function DeliveriesPage() {
 
       await fetchData()
     } catch (error: any) {
-      console.error("Start transit error:", error)
       toast({
         title: "Error",
         description: error.message || "Failed to start transit",
@@ -535,27 +522,15 @@ export default function DeliveriesPage() {
           // If delivery address still not filled, fetch from customer profile
           if (!deliveryAddress && d.customer_id) {
             try {
-              console.log('📍 Fetching customer address for customer_id:', d.customer_id)
               const res = await fetch(`/api/customers/${d.customer_id}`)
-              console.log('📍 Customer API response status:', res.status)
               if (res.ok) {
                 const json = await res.json()
-                console.log('📍 Customer API response:', json)
                 const customer = json.data || json
-                console.log('📍 Extracted customer object:', customer)
                 if (customer?.address) {
                   deliveryAddress = customer.address
-                  console.log('✓ Fetched delivery address from customer:', deliveryAddress)
-                } else {
-                  console.log('⚠ Customer has no address - address value:', customer?.address)
                 }
-              } else {
-                console.log('⚠ Failed to fetch customer, status:', res.status)
-                const errorBody = await res.text()
-                console.log('⚠ Error response:', errorBody)
               }
-            } catch (error) {
-              console.log('⚠ Error fetching customer:', error)
+            } catch {
             }
           }
           
@@ -591,8 +566,7 @@ export default function DeliveriesPage() {
                 }
               }
             }
-          } catch (e) {
-            console.warn("Could not fetch staff assignments:", e)
+          } catch {
           }
           if (d.customer_id) {
             setLoadingAddresses(true)
@@ -686,7 +660,6 @@ export default function DeliveriesPage() {
 
       await fetchData()
     } catch (error: any) {
-      console.error("Cancel delivery error:", error)
       toast({
         title: "Error",
         description: error.message || "Failed to cancel delivery",
@@ -759,7 +732,6 @@ export default function DeliveriesPage() {
           .single()
 
         if (!packageError && packageData) {
-          console.log("[DeliveryDetails] Loaded package:", packageData.name)
           setDeliveryPackage(packageData)
         } else {
           setDeliveryPackage(null)
@@ -775,14 +747,11 @@ export default function DeliveriesPage() {
         .eq(foreignKey, delivery.booking_id)
 
       if (error) {
-        console.error("[DeliveryDetails] Error fetching items:", error)
         setDeliveryItems([])
       } else {
-        console.log("[DeliveryDetails] Loaded items:", data)
         setDeliveryItems(data || [])
       }
     } catch (err) {
-      console.error("[DeliveryDetails] Exception fetching items:", err)
       setDeliveryItems([])
       setDeliveryPackage(null)
     } finally {
@@ -836,26 +805,6 @@ export default function DeliveriesPage() {
     }
   }, [showViewDialog, selectedDelivery?.id])
 
-  // Mock drivers data (since we don't have a drivers table)
-  const mockDrivers = [
-    { id: "1", name: "Rajesh Kumar", vehicle: "MH01AB1234", phone: "+91 9876543210" },
-    { id: "2", name: "Amit Singh", vehicle: "MH02CD5678", phone: "+91 9876543211" },
-    { id: "3", name: "Suresh Patil", vehicle: "MH03EF9012", phone: "+91 9876543212" },
-  ]
-
-  const displayStaff =
-    staff.length > 0
-      ? staff
-      : [
-          { id: "staff-1", name: "Manager 1", role: "Manager", is_active: true },
-          { id: "staff-2", name: "Staff 1", role: "Staff", is_active: true },
-        ]
-
-  const displayCustomers =
-    customers.length > 0
-      ? customers
-      : [{ id: "cust-1", name: "John Doe", phone: "+91 9876543210", email: "john@example.com", address: "123 Main St" }]
-
   // Map bookings by id for quick lookup
   const bookingsById = useMemo(() => {
     const map = new Map<string, any>()
@@ -903,21 +852,40 @@ export default function DeliveriesPage() {
   }
 
   const handleBack = () => {
-    console.log("[v0] Back button clicked")
     try {
-      // Try to go back in browser history
       if (window.history.length > 1) {
-        console.log("[v0] Going back in history")
         router.back()
       } else {
-        console.log("[v0] No history, navigating to dashboard")
         router.push("/")
       }
-    } catch (error) {
-      console.error("[v0] Error with back navigation:", error)
-      // Fallback to dashboard
+    } catch {
       router.push("/")
     }
+  }
+
+  if (!authResolved) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-muted-foreground animate-pulse">Loading Deliveries...</div>
+      </div>
+    )
+  }
+
+  if (!currentUser) {
+    return (
+      <div className="flex items-center justify-center min-h-screen p-6">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle>Authentication required</CardTitle>
+            <CardDescription>{authError || "Please sign in to continue."}</CardDescription>
+          </CardHeader>
+          <CardContent className="flex gap-3">
+            <Button onClick={() => router.push("/auth/login")}>Go to Login</Button>
+            <Button variant="outline" onClick={fetchCurrentUser}>Retry</Button>
+          </CardContent>
+        </Card>
+      </div>
+    )
   }
 
   if (currentUser?.role === 'staff') {
@@ -1113,13 +1081,6 @@ export default function DeliveriesPage() {
                           deliveryTime = String(firstBooking.delivery_time).substring(0, 5) // Take first 5 chars for HH:MM
                         }
                         
-                        console.log('📍 Customer selected:', value)
-                        console.log('📍 First booking:', firstBooking)
-                        console.log('📍 Delivery date from booking (raw):', firstBooking?.delivery_date)
-                        console.log('📍 Delivery date converted:', deliveryDate)
-                        console.log('📍 Delivery time from booking (raw):', firstBooking?.delivery_time)
-                        console.log('📍 Delivery time converted:', deliveryTime)
-                        
                         setScheduleForm({
                           ...scheduleForm,
                           customer_id: value,
@@ -1137,7 +1098,7 @@ export default function DeliveriesPage() {
                         <SelectValue placeholder="Select customer" />
                       </SelectTrigger>
                       <SelectContent position="popper" side="top" align="start" className="max-h-[240px] z-[100] bg-white border border-gray-200 shadow-lg rounded-md p-1">
-                        {displayCustomers.map((customer) => (
+                        {customers.map((customer) => (
                           <SelectItem 
                             key={customer.id} 
                             value={customer.id}
@@ -1149,6 +1110,11 @@ export default function DeliveriesPage() {
                             </div>
                           </SelectItem>
                         ))}
+                        {customers.length === 0 && (
+                          <div className="px-3 py-2 text-sm text-gray-500 text-center">
+                            No customers available
+                          </div>
+                        )}
                       </SelectContent>
                     </Select>
                   </div>
@@ -1276,7 +1242,7 @@ export default function DeliveriesPage() {
                         <SelectValue placeholder="Select staff member" />
                       </SelectTrigger>
                       <SelectContent position="popper" side="top" align="start" className="max-h-[240px] z-[100] bg-white border border-gray-200 shadow-lg rounded-md p-1">
-                        {displayStaff.map((member) => (
+                        {staff.map((member) => (
                           <SelectItem 
                             key={member.id} 
                             value={member.id}
@@ -1288,6 +1254,11 @@ export default function DeliveriesPage() {
                             </div>
                           </SelectItem>
                         ))}
+                        {staff.length === 0 && (
+                          <div className="px-3 py-2 text-sm text-gray-500 text-center">
+                            No staff members available
+                          </div>
+                        )}
                       </SelectContent>
                     </Select>
                   </div>
@@ -1537,11 +1508,9 @@ export default function DeliveriesPage() {
                             })
                           })
                           if (!res.ok) {
-                            const error = await res.json()
-                            console.warn('Could not save pickup address:', error)
+                            await res.json().catch(() => ({}))
                           }
-                        } catch (e) {
-                          console.warn('Could not save pickup address:', e)
+                        } catch {
                         }
                       }
 
@@ -1573,7 +1542,6 @@ export default function DeliveriesPage() {
                       // Refresh deliveries list
                       await fetchData()
                     } catch (error: any) {
-                      console.error("Error scheduling delivery:", error)
                       toast({
                         title: "Error",
                         description: error.message || "Failed to schedule delivery. Please try again.",
@@ -1976,8 +1944,7 @@ export default function DeliveriesPage() {
                               if (!error && data) {
                                 setSavedAddresses(data)
                               }
-                            } catch (e) {
-                              console.warn('Saved addresses not available yet')
+                            } catch {
                             } finally {
                               setLoadingAddresses(false)
                             }
@@ -2624,9 +2591,6 @@ export default function DeliveriesPage() {
 
                 setLoading(true)
                 try {
-                  console.log('[Update Delivery] Sending update for:', selectedDelivery.id)
-                  console.log('[Update Delivery] Staff IDs:', Array.from(editAssignedStaffIds))
-                  
                   const response = await fetch(`/api/deliveries/update`, {
                     method: "PATCH",
                     headers: { "Content-Type": "application/json" },
@@ -2648,7 +2612,6 @@ export default function DeliveriesPage() {
 
                   if (!response.ok) {
                     const errorData = await response.json().catch(() => ({}))
-                    console.error('[Update Delivery] Error:', errorData)
                     throw new Error(errorData.error || "Failed to update delivery")
                   }
 
@@ -2666,11 +2629,9 @@ export default function DeliveriesPage() {
                         })
                       })
                       if (!res.ok) {
-                        const error = await res.json()
-                        console.warn('Could not save pickup address:', error)
+                        await res.json().catch(() => ({}))
                       }
-                    } catch (e) {
-                      console.warn('Could not save pickup address:', e)
+                    } catch {
                     }
                   }
 
@@ -2686,7 +2647,6 @@ export default function DeliveriesPage() {
                     description: "Delivery order updated successfully",
                   })
                 } catch (error: any) {
-                  console.error('[Update Delivery] Failed:', error)
                   toast({
                     title: "Error",
                     description: error.message || "Failed to update delivery",
@@ -2798,7 +2758,6 @@ export default function DeliveriesPage() {
                   // Refresh server data to keep everything in sync (IDs, related fields, badges)
                   void fetchData()
                 } catch (e: any) {
-                  console.error("Reschedule failed:", e)
                   toast({ title: "Error", description: e?.message || "Failed to reschedule", variant: "destructive" })
                 }
               }}

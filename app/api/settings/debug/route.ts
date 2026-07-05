@@ -1,10 +1,23 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { supabaseServer as supabase } from "@/lib/supabase-server-simple"
+import { authenticateRequest, AuthMiddleware } from "@/lib/auth-middleware"
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
+    const auth = await authenticateRequest(request, { minRole: "super_admin" })
+    if (!auth.authorized) {
+      return NextResponse.json(auth.error, { status: auth.statusCode || 401 })
+    }
+
     const { searchParams } = new URL(request.url)
     const franchiseId = searchParams.get('franchise_id')
+
+    if (franchiseId && !AuthMiddleware.canAccessFranchise(auth.user!, franchiseId)) {
+      return NextResponse.json(
+        { error: "Access denied to this franchise" },
+        { status: 403 }
+      )
+    }
 
     console.log('🔍 [Settings Debug API] Checking data for franchise:', franchiseId)
 

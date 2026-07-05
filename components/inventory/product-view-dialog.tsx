@@ -117,8 +117,7 @@ export function ProductViewDialog({ product, open, onOpenChange }: ProductViewDi
         }
       }
       setVariationBarcodeImages(images)
-    } catch (error) {
-      console.error("Error loading variations:", error)
+    } catch {
     } finally {
       setLoadingVariations(false)
     }
@@ -142,8 +141,7 @@ export function ProductViewDialog({ product, open, onOpenChange }: ProductViewDi
         title: "Success",
         description: "Barcode sent to printer",
       })
-    } catch (error) {
-      console.error("Error printing barcode:", error)
+    } catch {
       toast({
         title: "Error",
         description: "Failed to print barcode",
@@ -174,8 +172,7 @@ export function ProductViewDialog({ product, open, onOpenChange }: ProductViewDi
         title: "Success",
   description: `Barcode downloaded: ${product.name} (${product.barcode ?? ""})`,
       })
-    } catch (error) {
-      console.error("Error downloading barcode:", error)
+    } catch {
       toast({
         title: "Error",
         description: "Failed to download barcode",
@@ -194,8 +191,7 @@ export function ProductViewDialog({ product, open, onOpenChange }: ProductViewDi
         title: "Success",
         description: "Barcode image generated for printing/downloading.",
       })
-    } catch (error) {
-      console.error("Error generating barcode:", error)
+    } catch {
       toast({
         title: "Error",
         description: "Failed to generate barcode",
@@ -217,8 +213,7 @@ export function ProductViewDialog({ product, open, onOpenChange }: ProductViewDi
               ...item,
               barcode: barcodeDataUrl,
             }
-          } catch (error) {
-            console.error(`Error generating barcode for ${item.item_code}:`, error)
+          } catch {
             return {
               ...item,
               barcode: "", // Will fallback to placeholder
@@ -227,8 +222,7 @@ export function ProductViewDialog({ product, open, onOpenChange }: ProductViewDi
         }),
       )
       setItemBarcodes(itemsWithBarcodes)
-    } catch (error) {
-      console.error("Error loading item barcodes:", error)
+    } catch {
       toast({
         title: "Error",
         description: "Failed to load item barcodes",
@@ -300,8 +294,7 @@ export function ProductViewDialog({ product, open, onOpenChange }: ProductViewDi
         if (item.barcode && item.barcode.startsWith("data:image")) {
           try {
             pdf.addImage(item.barcode, "PNG", xPosition, currentYPosition, barcodeWidth, barcodeHeight)
-          } catch (error) {
-            console.error(`Error adding barcode image for ${item.item_code}:`, error)
+          } catch {
             // Draw a placeholder rectangle if image fails
             pdf.rect(xPosition, currentYPosition, barcodeWidth, barcodeHeight)
             pdf.text("Barcode Error", xPosition + 5, currentYPosition + 10)
@@ -339,8 +332,7 @@ export function ProductViewDialog({ product, open, onOpenChange }: ProductViewDi
         title: "Success",
         description: `PDF downloaded: ${itemBarcodes.length} barcodes`,
       })
-    } catch (error) {
-      console.error("Error generating PDF:", error)
+    } catch {
       toast({
         title: "Error",
         description: "Failed to generate PDF. Please try again.",

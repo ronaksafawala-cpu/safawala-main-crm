@@ -3,9 +3,27 @@ import { createClient } from "@/lib/supabase/server"
 import type { UserPermissions } from "@/lib/types"
 import bcrypt from "bcryptjs"
 import { authenticateRequest } from "@/lib/auth-middleware"
+import { createClient as createServiceClient } from "@supabase/supabase-js"
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
+
+const SAFE_STAFF_SELECT = `
+  id,
+  name,
+  email,
+  role,
+  department,
+  franchise_id,
+  is_active,
+  base_salary,
+  permissions,
+  created_at,
+  updated_at,
+  franchise:franchises(name, code)
+`
+
+const ALLOWED_STAFF_ROLES = new Set(["super_admin", "franchise_admin", "staff", "readonly"])
 
 /**
  * Hash password using bcrypt
@@ -109,6 +127,18 @@ function sanitizePermissions(input: any, role: string): UserPermissions {
   return out as UserPermissions
 }
 
+function normalizeRole(role: unknown): string | null {
+  if (typeof role !== "string") return null
+  const normalized = role.trim()
+  return ALLOWED_STAFF_ROLES.has(normalized) ? normalized : null
+}
+
+function parseOptionalNumber(value: unknown): number | undefined {
+  if (value === undefined || value === null || value === "") return undefined
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : undefined
+}
+
 /**
  * GET /api/staff
  * Fetch all staff members with optional filtering (franchise-isolated)
@@ -131,10 +161,7 @@ export async function GET(request: NextRequest) {
     // Start building the query
     let query = supabase
       .from("users")
-      .select(`
-        *,
-        franchise:franchises(name, code)
-      `)
+      .select(SAFE_STAFF_SELECT)
       .order("created_at", { ascending: false })
     
     // 🔒 FRANCHISE ISOLATION: Super admin sees all, others see only their franchise
@@ -158,7 +185,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "Failed to fetch staff members" }, { status: 500 })
     }
     
-    return NextResponse.json({ staff: data })
+    return NextResponse.json({ staff: data || [] })
   } catch (error) {
     console.error("Error in staff GET route:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
@@ -178,10 +205,11 @@ export async function POST(request: NextRequest) {
     const { user } = auth
 
   const body = await request.json()
-  const { name, email, password, role, permissions, is_active = true, department, base_salary } = body
+    const { name, email, password, role, permissions, is_active = true, department, base_salary } = body
+    const normalizedRole = normalizeRole(role)
     
     // 🔒 RBAC: Franchise admins cannot create super admins
-    if (!user!.is_super_admin && role === 'super_admin') {
+    if (!user!.is_super_admin && normalizedRole === 'super_admin') {
       return NextResponse.json(
         { error: "Unauthorized: Franchise admins cannot create super admin accounts" }, 
         { status: 403 }
@@ -202,7 +230,7 @@ export async function POST(request: NextRequest) {
     }
     
     // Basic validation
-    if (!name || !email || !password || !role) {
+    if (!name || !email || !password || !normalizedRole) {
       return NextResponse.json({ error: "Missing required fields" }, { status: 400 })
     }
     
@@ -217,9 +245,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Password must be at least 8 characters long" }, { status: 400 })
     }
     
-    // Hash the password using bcrypt
-    const password_hash = await hashPassword(password)
-    
     const supabase = createClient()
     
     // Check if email already exists
@@ -233,76 +258,71 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Email already exists" }, { status: 409 })
     }
     
-    // Build permissions safely (defaults by role, then override with provided)
-    const safePermissions = sanitizePermissions(permissions, role)
+    const safePermissions = sanitizePermissions(permissions, normalizedRole)
+    const password_hash = await hashPassword(password)
+    const parsedSalary = parseOptionalNumber(base_salary)
 
-    // Insert new user in database
-    const insertData: any = {
-      name,
-      email,
-      password_hash,
-      role,
-      franchise_id: staffFranchiseId,
-      permissions: safePermissions,
-      is_active,
-    }
-    if (department) insertData.department = department
-    if (base_salary) insertData.base_salary = parseFloat(base_salary)
-
-    const { data, error } = await supabase
-      .from("users")
-      .insert([insertData])
-      .select(`
-        *,
-        franchise:franchises(name, code)
-      `)
-      .single()
-    
-    if (error) {
-      console.error("Error creating staff member:", error)
-      return NextResponse.json({ error: "Failed to create staff member", details: error.message }, { status: 500 })
-    }
-
-    // SYNC: Also create user in Supabase Auth so they can log in immediately
-    // This ensures the user can log in with their password
+    // Create user in Supabase Auth first so DB and Auth share one stable id.
+    let authUserId: string | null = null
     try {
-      const { createClient: createServiceClient } = await import("@supabase/supabase-js")
       const supabaseAdmin = createServiceClient(
         process.env.NEXT_PUBLIC_SUPABASE_URL!,
         process.env.SUPABASE_SERVICE_ROLE_KEY!
       )
 
-      // Create user in Supabase Auth (avoid duplicate error if already exists)
-      try {
-        await supabaseAdmin.auth.admin.createUser({
-          email,
-          password,
-          email_confirm: true, // Auto-confirm email so user can login immediately
-          user_metadata: {
-            app_user_id: data.id,
-            role,
-            franchise_id: staffFranchiseId
-          }
-        })
-        console.log(`[Staff API] Synced new staff member to Supabase Auth: ${email}`)
-      } catch (authErr: any) {
-        // If user already exists in auth, that's ok (happens if fallback path already created them)
-        if (authErr?.message?.includes('already exists')) {
-          console.log(`[Staff API] User ${email} already exists in Supabase Auth (this is ok)`)
-        } else {
-          // Log but don't fail - user can still login via legacy password hash fallback
-          console.warn(`[Staff API] Warning: Could not sync ${email} to Supabase Auth:`, authErr?.message)
-        }
+      const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+        email,
+        password,
+        email_confirm: true,
+        app_metadata: {
+          role: normalizedRole,
+          franchise_id: staffFranchiseId,
+        },
+        user_metadata: {
+          name,
+        },
+      })
+
+      if (authError || !authData.user?.id) {
+        const message = authError?.message || "Failed to create auth user"
+        const isDuplicate = /already exists/i.test(message)
+        return NextResponse.json({ error: isDuplicate ? "Email already exists" : message }, { status: isDuplicate ? 409 : 500 })
       }
+      authUserId = authData.user.id
+
+      const insertData: any = {
+        id: authUserId,
+        name,
+        email,
+        password_hash,
+        role: normalizedRole,
+        franchise_id: staffFranchiseId,
+        permissions: safePermissions,
+        is_active,
+      }
+      if (department) insertData.department = department
+      if (parsedSalary !== undefined) insertData.base_salary = parsedSalary
+
+      const { data, error } = await supabase
+        .from("users")
+        .insert([insertData])
+        .select(SAFE_STAFF_SELECT)
+        .single()
+
+      if (error) {
+        await supabaseAdmin.auth.admin.deleteUser(authUserId)
+        console.error("Error creating staff member:", error)
+        return NextResponse.json({ error: "Failed to create staff member", details: error.message }, { status: 500 })
+      }
+
+      return NextResponse.json({
+        message: "Staff member created successfully",
+        user: data,
+      }, { status: 201 })
     } catch (syncErr) {
-      // Log but don't fail - user can still login via legacy password hash fallback
-      console.warn(`[Staff API] Warning: Could not sync to Supabase Auth:`, syncErr)
+      console.warn(`[Staff API] Failed to create synced staff account:`, syncErr)
+      return NextResponse.json({ error: "Failed to create staff member" }, { status: 500 })
     }
-    
-    return NextResponse.json({ 
-      message: "Staff member created successfully", 
-      user: data 
-    }, { status: 201 })
   } catch (error) {
     console.error("Error in staff POST route:", error)
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
@@ -341,6 +361,27 @@ export async function PUT(request: NextRequest) {
         continue
       }
       
+      const { data: existingUser, error: existingError } = await supabase
+        .from("users")
+        .select("id, role, franchise_id")
+        .eq("id", id)
+        .single()
+
+      if (existingError || !existingUser) {
+        results.push({ success: false, error: "Staff member not found", id })
+        continue
+      }
+
+      if (!user!.is_super_admin && existingUser.role === "super_admin") {
+        results.push({ success: false, error: "Unauthorized to modify super admin account", id })
+        continue
+      }
+
+      if (!user!.is_super_admin && existingUser.franchise_id !== user!.franchise_id) {
+        results.push({ success: false, error: "Unauthorized: different franchise", id })
+        continue
+      }
+
       // Remove password if empty
       if (updateData.password === '') {
         delete updateData.password
@@ -356,44 +397,59 @@ export async function PUT(request: NextRequest) {
         delete updateData.password
       }
       
-      // If updating permissions, sanitize using existing role if not provided
-      let effectiveUpdate = { ...updateData }
-      if (updateData && Object.prototype.hasOwnProperty.call(updateData, 'permissions')) {
-        const roleToUse = typeof updateData.role === 'string' ? updateData.role : undefined
-        // Fetch current role and franchise if not provided in payload
-        let currentRole = roleToUse
-        let currentFranchise: string | undefined
-        if (!currentRole) {
-          const { data: existing } = await supabase.from('users').select('role, franchise_id').eq('id', id).single()
-          currentRole = existing?.role
-          currentFranchise = existing?.franchise_id
-        }
-        effectiveUpdate.permissions = sanitizePermissions(updateData.permissions, currentRole || 'staff')
+      const effectiveUpdate: Record<string, any> = {}
 
-        // RBAC: Non-super-admins cannot escalate role to super_admin
-        if (!user!.is_super_admin && typeof effectiveUpdate.role === 'string' && effectiveUpdate.role === 'super_admin') {
-          results.push({ success: false, error: 'Unauthorized to assign role super_admin', id })
+      if (typeof updateData.name === "string") effectiveUpdate.name = updateData.name
+      if (typeof updateData.email === "string") effectiveUpdate.email = updateData.email
+      if (typeof updateData.department === "string") effectiveUpdate.department = updateData.department
+      if (typeof updateData.is_active === "boolean") effectiveUpdate.is_active = updateData.is_active
+
+      if (updateData.base_salary !== undefined) {
+        const parsedSalary = parseOptionalNumber(updateData.base_salary)
+        if (parsedSalary === undefined && updateData.base_salary !== "" && updateData.base_salary !== null) {
+          results.push({ success: false, error: "Invalid salary amount", id })
           continue
         }
+        effectiveUpdate.base_salary = parsedSalary ?? null
+      }
 
-        // Franchise isolation: Non-super-admins can only update within their franchise
-        const targetFranchise = typeof effectiveUpdate.franchise_id === 'string' ? effectiveUpdate.franchise_id : (currentFranchise || '')
-        if (!user!.is_super_admin && targetFranchise && targetFranchise !== user!.franchise_id) {
-          results.push({ success: false, error: 'Unauthorized: different franchise', id })
+      if (updateData.role !== undefined) {
+        const normalizedUpdateRole = normalizeRole(updateData.role)
+        if (!normalizedUpdateRole) {
+          results.push({ success: false, error: "Invalid role", id })
           continue
         }
+        if (!user!.is_super_admin && normalizedUpdateRole === "super_admin") {
+          results.push({ success: false, error: "Unauthorized to assign role super_admin", id })
+          continue
+        }
+        effectiveUpdate.role = normalizedUpdateRole
+      }
+
+      if (updateData.franchise_id !== undefined) {
+        if (!user!.is_super_admin && updateData.franchise_id !== user!.franchise_id) {
+          results.push({ success: false, error: "Unauthorized: different franchise", id })
+          continue
+        }
+        effectiveUpdate.franchise_id = updateData.franchise_id
+      }
+
+      if (Object.prototype.hasOwnProperty.call(updateData, "permissions")) {
+        const roleForPermissions = effectiveUpdate.role || existingUser.role || "staff"
+        effectiveUpdate.permissions = sanitizePermissions(updateData.permissions, roleForPermissions)
       }
 
       const { data, error } = await supabase
         .from("users")
         .update(effectiveUpdate)
         .eq("id", id)
-        .select()
+        .select(SAFE_STAFF_SELECT)
+        .single()
       
       if (error) {
         results.push({ success: false, error: error.message, id })
       } else {
-        results.push({ success: true, user: data[0], id })
+        results.push({ success: true, user: data, id })
       }
     }
     

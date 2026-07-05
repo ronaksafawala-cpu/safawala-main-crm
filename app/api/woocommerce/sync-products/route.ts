@@ -1,9 +1,15 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { supabase } from "@/lib/supabase"
 import { wooCommerceService } from "@/lib/woocommerce-service"
+import { authenticateRequest } from "@/lib/auth-middleware"
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await authenticateRequest(request, { minRole: 'franchise_admin' })
+    if (!auth.authorized) {
+      return NextResponse.json(auth.error, { status: auth.statusCode })
+    }
+
     const { productIds, syncAll } = await request.json()
 
     // Get WooCommerce configuration

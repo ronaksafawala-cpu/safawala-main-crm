@@ -1,8 +1,14 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { supabase } from "@/lib/supabase"
+import { authenticateRequest } from "@/lib/auth-middleware"
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await authenticateRequest(request, { minRole: 'franchise_admin' })
+    if (!auth.authorized) {
+      return NextResponse.json(auth.error, { status: auth.statusCode })
+    }
+
     console.log("[v0] WooCommerce config API called")
     const { storeUrl, consumerKey, consumerSecret, testConnection } = await request.json()
     console.log("[v0] Request data received:", {
@@ -82,8 +88,13 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
+    const auth = await authenticateRequest(request, { minRole: 'franchise_admin' })
+    if (!auth.authorized) {
+      return NextResponse.json(auth.error, { status: auth.statusCode })
+    }
+
     const { data, error } = await supabase
       .from("integration_settings")
       .select("*")

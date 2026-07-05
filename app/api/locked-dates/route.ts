@@ -59,6 +59,28 @@ export async function POST(req: NextRequest) {
   return NextResponse.json({ data })
 }
 
+// PATCH /api/locked-dates?id=xxx — update a locked date
+export async function PATCH(req: NextRequest) {
+  const auth = await requireAuth(req)
+  if (!auth.success) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+
+  const id = req.nextUrl.searchParams.get("id")
+  if (!id) return NextResponse.json({ error: "id required" }, { status: 400 })
+
+  const body = await req.json()
+  const { whatsapp_number, notes } = body
+
+  const { data, error } = await supabase
+    .from("locked_dates")
+    .update({ whatsapp_number: whatsapp_number ?? null, notes: notes ?? null })
+    .eq("id", id)
+    .select()
+    .single()
+
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ data })
+}
+
 // DELETE /api/locked-dates?id=xxx — remove a locked date
 export async function DELETE(req: NextRequest) {
   const auth = await requireAuth(req)

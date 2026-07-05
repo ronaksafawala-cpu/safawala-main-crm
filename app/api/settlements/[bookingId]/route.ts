@@ -1,8 +1,9 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import AuditLogger from "@/lib/audit-logger"
 import { generateSettlementInvoicePDF } from "@/lib/settlement-invoice"
 import { uploadToR2 } from "@/lib/r2-storage"
+import { authenticateRequest } from "@/lib/auth-middleware"
 
 // Input JSON:
 // {
@@ -12,7 +13,11 @@ import { uploadToR2 } from "@/lib/r2-storage"
 //   user?: { id?: string, email?: string }
 // }
 
-export async function POST(request: Request, { params }: { params: { bookingId: string } }) {
+export async function POST(request: NextRequest, { params }: { params: { bookingId: string } }) {
+  const auth = await authenticateRequest(request, { minRole: 'franchise_admin' })
+  if (!auth.authorized) {
+    return NextResponse.json(auth.error, { status: auth.statusCode })
+  }
   const supabase = createClient()
   try {
     const bookingId = params.bookingId

@@ -1,45 +1,34 @@
-import { NextResponse } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase-server-simple'
+import { authenticateRequest, AuthMiddleware } from '@/lib/auth-middleware'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-async function getUserFromSession(cookies: any) {
+export async function POST(request: NextRequest) {
   try {
-    const cookieHeader = cookies.get('safawala_session')
-    if (!cookieHeader?.value) throw new Error('No session')
-    const sessionData = JSON.parse(cookieHeader.value)
-    const { data: user, error } = await supabaseServer
-      .from('users')
-      .select('id, franchise_id, role')
-      .eq('id', sessionData.id)
-      .eq('is_active', true)
-      .single()
-    if (error || !user) throw new Error('Auth failed')
-    return { userId: user.id, franchiseId: user.franchise_id, isSuperAdmin: user.role === 'super_admin' }
-  } catch {
-    throw new Error('Authentication required')
-  }
-}
+    const auth = await authenticateRequest(request, { minRole: 'staff' })
+    if (!auth.authorized) {
+      return NextResponse.json(auth.error, { status: auth.statusCode || 401 })
+    }
 
-export async function POST(request: Request) {
-  try {
-    // @ts-ignore - NextRequest-like cookies API
-    const { franchiseId, isSuperAdmin } = await getUserFromSession((request as any).cookies)
+    const user = auth.user!
     const body = await request.json()
     const { id, ...updates } = body
     if (!id) return NextResponse.json({ error: 'Missing package id' }, { status: 400 })
 
-    // If not super admin, force franchise constraint
-    if (!isSuperAdmin && franchiseId) {
-      const { data: pkg, error: fetchErr } = await supabaseServer
-        .from('package_sets')
-        .select('id, franchise_id')
-        .eq('id', id)
-        .single()
-      if (fetchErr || !pkg || pkg.franchise_id !== franchiseId) {
-        return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-      }
+    const { data: pkg, error: fetchErr } = await supabaseServer
+      .from('package_sets')
+      .select('id, franchise_id')
+      .eq('id', id)
+      .single()
+
+    if (fetchErr || !pkg) {
+      return NextResponse.json({ error: 'Package not found' }, { status: 404 })
+    }
+
+    if (!AuthMiddleware.canAccessFranchise(user, pkg.franchise_id)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     const { data, error } = await supabaseServer

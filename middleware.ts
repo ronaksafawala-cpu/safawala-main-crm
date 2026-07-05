@@ -7,6 +7,8 @@ const PUBLIC_PATH_PREFIXES = [
   "/auth/logout",
   "/auth/forgot-password",
   "/auth/reset-password",
+  "/auth/portals",
+  "/login",
   "/franchise-enquiry",
   "/_next",
   "/favicon",
@@ -27,7 +29,7 @@ function hasSupabaseCookie(req: NextRequest): boolean {
 }
 
 function isAuthDisabled() {
-  return true
+  return false
 }
 
 export function middleware(request: NextRequest) {

@@ -106,7 +106,7 @@ export default function AdminProfilePage() {
           </div>
           
           <div style={{ width: "100%", borderTop: "1px solid rgba(201,168,76,0.1)", paddingTop: 14, marginTop: 6, fontSize: 12, color: BROWN, display: "flex", flexDirection: "column", gap: 8 }}>
-            <div><strong>Email Address:</strong> {user?.email || "superadmin@safawala.com"}</div>
+            <div><strong>Email Address:</strong> {user?.email || "—"}</div>
             <div><strong>Allowed Privileges:</strong> Full System Override Access</div>
             <div><strong>Status:</strong> Active</div>
           </div>

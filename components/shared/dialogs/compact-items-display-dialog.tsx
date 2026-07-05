@@ -138,7 +138,6 @@ export function CompactItemsDisplayDialog({
                         className="h-6 w-6 text-red-500 hover:text-red-700 hover:bg-red-50"
                         onClick={(e) => {
                           e.stopPropagation()
-                          console.log('[Compact Dialog] Removing item:', item.id)
                           onRemoveItem(item.id)
                         }}
                         type="button"

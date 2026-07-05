@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { authenticateRequest } from "@/lib/auth-middleware"
 
 export const dynamic = 'force-dynamic'
 
@@ -12,6 +13,11 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const auth = await authenticateRequest(request, { minRole: 'staff' })
+    if (!auth.authorized) {
+      return NextResponse.json(auth.error, { status: auth.statusCode })
+    }
+
     const { id } = await params
     const { searchParams } = new URL(request.url)
     const bookingType = searchParams.get('type') || 'package'
@@ -125,6 +131,11 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
+    const auth = await authenticateRequest(request, { minRole: 'staff' })
+    if (!auth.authorized) {
+      return NextResponse.json(auth.error, { status: auth.statusCode })
+    }
+
     const { id: bookingId } = params
     const body = await request.json()
     const { barcodes, product_id, booking_type = 'package', user_id, franchise_id } = body
@@ -234,6 +245,11 @@ export async function DELETE(
   { params }: { params: { id: string } }
 ) {
   try {
+    const auth = await authenticateRequest(request, { minRole: 'staff' })
+    if (!auth.authorized) {
+      return NextResponse.json(auth.error, { status: auth.statusCode })
+    }
+
     const { id: bookingId } = params
     const body = await request.json()
     const { assignment_ids } = body

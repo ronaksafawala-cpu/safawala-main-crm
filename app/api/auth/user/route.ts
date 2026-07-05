@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
-import { cookies } from "next/headers"
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs"
 import { supabaseServer as supabase } from "@/lib/supabase-server-simple"
+import { authenticateRequest } from "@/lib/auth-middleware"
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -117,31 +116,9 @@ function getDefaultPermissions(role: string): Record<string, boolean> {
  */
 export async function GET(request: NextRequest) {
   try {
-    // Validate Supabase Auth session
-    const cookieStore = cookies()
-    const auth = createRouteHandlerClient({ cookies: () => cookieStore })
-    const { data: { user: authUser }, error: authError } = await auth.auth.getUser()
-
-    let authUserEmail = authUser?.email
-
-    if (authError || !authUserEmail) {
-      // Fallback: Read from httpOnly safawala_user cookie
-      const userCookie = cookieStore.get("safawala_user")?.value
-      if (userCookie) {
-        try {
-          const parsed = JSON.parse(userCookie)
-          if (parsed?.email) {
-            authUserEmail = parsed.email
-            console.log("[Auth User API] Found authenticated user email in safawala_user cookie fallback:", authUserEmail)
-          }
-        } catch (e) {
-          console.warn("[Auth User API] Failed to parse safawala_user cookie:", e)
-        }
-      }
-    }
-
-    if (!authUserEmail) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 })
+    const auth = await authenticateRequest(request, { minRole: "readonly" })
+    if (!auth.authorized || !auth.user) {
+      return NextResponse.json(auth.error || { error: "Not authenticated" }, { status: auth.statusCode || 401 })
     }
 
     // Fetch fresh user data from database
@@ -164,7 +141,7 @@ export async function GET(request: NextRequest) {
           city
         )
       `)
-      .ilike("email", authUserEmail as string)
+      .eq("id", auth.user.id)
       .eq("is_active", true)
       .single()
 

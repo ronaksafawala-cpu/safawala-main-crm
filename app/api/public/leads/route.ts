@@ -3,9 +3,10 @@ import { createClient } from "@/lib/supabase/server"
 
 export const dynamic = "force-dynamic"
 
-const ADMIN_PASSWORD = process.env.PACKAGES_ADMIN_PASSWORD || "Safawala@5678"
+const ADMIN_PASSWORD = process.env.PACKAGES_ADMIN_PASSWORD || null
 
 function checkPassword(req: NextRequest): boolean {
+  if (!ADMIN_PASSWORD) return false
   const pw = req.headers.get("x-admin-password") || new URL(req.url).searchParams.get("pw")
   return pw === ADMIN_PASSWORD
 }

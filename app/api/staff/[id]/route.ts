@@ -8,6 +8,23 @@ import bcrypt from "bcryptjs"
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
+const SAFE_STAFF_SELECT = `
+  id,
+  name,
+  email,
+  role,
+  department,
+  franchise_id,
+  is_active,
+  base_salary,
+  permissions,
+  created_at,
+  updated_at,
+  franchise:franchises(name, code)
+`
+
+const ALLOWED_STAFF_ROLES = new Set(["super_admin", "franchise_admin", "staff", "readonly"])
+
 /**
  * Hash password using bcrypt
  */
@@ -53,6 +70,18 @@ function sanitizePermissions(input: any, role: string): UserPermissions {
   return out as UserPermissions
 }
 
+function normalizeRole(role: unknown): string | null {
+  if (typeof role !== "string") return null
+  const normalized = role.trim()
+  return ALLOWED_STAFF_ROLES.has(normalized) ? normalized : null
+}
+
+function parseOptionalNumber(value: unknown): number | undefined {
+  if (value === undefined || value === null || value === "") return undefined
+  const parsed = Number(value)
+  return Number.isFinite(parsed) ? parsed : undefined
+}
+
 /**
  * GET /api/staff/[id]
  * Fetch a specific staff member by ID
@@ -62,6 +91,16 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
+    const auth = await authenticateRequest(request, {
+      minRole: 'franchise_admin',
+      requirePermission: 'staff'
+    })
+
+    if (!auth.authorized) {
+      return NextResponse.json(auth.error, { status: auth.statusCode || 401 })
+    }
+
+    const { user } = auth
     const id = params.id
     
     if (!id) {
@@ -70,10 +109,7 @@ export async function GET(
     
     const { data, error } = await supabaseServer
       .from("users")
-      .select(`
-        *,
-        franchise:franchises(name, code)
-      `)
+      .select(SAFE_STAFF_SELECT)
       .eq("id", id)
       .single()
     
@@ -84,9 +120,8 @@ export async function GET(
       return NextResponse.json({ error: "Failed to fetch staff member" }, { status: 500 })
     }
     
-    // Remove sensitive data
-    if (data) {
-      delete data.password_hash
+    if (!user!.is_super_admin && data?.franchise_id !== user!.franchise_id) {
+      return NextResponse.json({ error: "Unauthorized: Can only access staff in your own franchise" }, { status: 403 })
     }
     
     return NextResponse.json({ user: data })
@@ -125,18 +160,46 @@ export async function PATCH(
       return NextResponse.json({ error: "Staff ID is required" }, { status: 400 })
     }
     
-  const body = await request.json()
-  const { name, email, password, role, franchise_id, permissions, is_active } = body
+    const body = await request.json()
+    const { name, email, password, role, franchise_id, permissions, is_active, department, base_salary } = body
+    const normalizedRole = role !== undefined ? normalizeRole(role) : undefined
     
     // 🔒 RBAC: Franchise admins cannot set role to super_admin
-    if (user!.role !== 'super_admin' && role === 'super_admin') {
+    if (role !== undefined && !normalizedRole) {
+      return NextResponse.json({ error: "Invalid role" }, { status: 400 })
+    }
+
+    if (user!.role !== 'super_admin' && normalizedRole === 'super_admin') {
       return NextResponse.json(
         { error: "Unauthorized: Franchise admins cannot create or modify super admin accounts" }, 
         { status: 403 }
       )
     }
-    
-    // 🔒 RBAC: Franchise admins can only update staff in their own franchise
+
+    const { data: existingUser, error: existingError } = await supabaseServer
+      .from("users")
+      .select("id, role, franchise_id")
+      .eq("id", id)
+      .single()
+
+    if (existingError || !existingUser) {
+      return NextResponse.json({ error: "Staff member not found" }, { status: 404 })
+    }
+
+    if (user!.role !== 'super_admin' && existingUser.role === 'super_admin') {
+      return NextResponse.json(
+        { error: "Unauthorized: Cannot modify super admin accounts" },
+        { status: 403 }
+      )
+    }
+
+    if (user!.role !== 'super_admin' && existingUser.franchise_id !== user!.franchise_id) {
+      return NextResponse.json(
+        { error: "Unauthorized: Can only modify staff in your own franchise" },
+        { status: 403 }
+      )
+    }
+
     if (user!.role !== 'super_admin' && franchise_id && franchise_id !== user!.franchise_id) {
       return NextResponse.json(
         { error: "Unauthorized: Can only modify staff in your own franchise" }, 
@@ -149,18 +212,21 @@ export async function PATCH(
     
     if (name !== undefined) updateData.name = name
     if (email !== undefined) updateData.email = email
-    if (role !== undefined) updateData.role = role
+    if (normalizedRole !== undefined) updateData.role = normalizedRole
     if (franchise_id !== undefined) updateData.franchise_id = franchise_id
+    if (department !== undefined) updateData.department = department
     if (permissions !== undefined) {
-      const roleForPerms = typeof role === 'string' ? role : undefined
-      let currentRole = roleForPerms
-      if (!currentRole) {
-        const { data: existing } = await supabaseServer.from('users').select('role').eq('id', id).single()
-        currentRole = existing?.role || 'staff'
-      }
-      updateData.permissions = sanitizePermissions(permissions, currentRole || 'staff')
+      const roleForPerms = normalizedRole || existingUser.role || 'staff'
+      updateData.permissions = sanitizePermissions(permissions, roleForPerms)
     }
     if (is_active !== undefined) updateData.is_active = is_active
+    if (base_salary !== undefined) {
+      const parsedSalary = parseOptionalNumber(base_salary)
+      if (parsedSalary === undefined && base_salary !== "" && base_salary !== null) {
+        return NextResponse.json({ error: "Invalid salary amount" }, { status: 400 })
+      }
+      updateData.base_salary = parsedSalary ?? null
+    }
     
     // Hash password if provided (with validation)
     if (password && password.length > 0) {
@@ -192,10 +258,7 @@ export async function PATCH(
       .from("users")
       .update(updateData)
       .eq("id", id)
-      .select(`
-        *,
-        franchise:franchises(name, code)
-      `)
+      .select(SAFE_STAFF_SELECT)
       .single()
     
     if (error) {
@@ -282,6 +345,13 @@ export async function DELETE(
     if (user!.role !== 'super_admin' && existingUser.franchise_id !== user!.franchise_id) {
       return NextResponse.json(
         { error: "Unauthorized: Can only delete staff in your own franchise" }, 
+        { status: 403 }
+      )
+    }
+
+    if (user!.role !== 'super_admin' && existingUser.role === 'super_admin') {
+      return NextResponse.json(
+        { error: "Unauthorized: Cannot delete super admin accounts" },
         { status: 403 }
       )
     }

@@ -1,5 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
+import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { authenticateRequest } from '@/lib/auth-middleware'
 
 type ResponseData = {
   success?: boolean
@@ -46,7 +48,12 @@ async function generateUniqueBarcode(supabase: any): Promise<string> {
   throw new Error('Failed to generate unique barcode after 100 attempts')
 }
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
+  const auth = await authenticateRequest(request, { minRole: 'staff' })
+  if (!auth.authorized) {
+    return NextResponse.json(auth.error, { status: auth.statusCode || 401 })
+  }
+
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL || '',
     process.env.SUPABASE_SERVICE_ROLE_KEY || ''
@@ -72,7 +79,12 @@ export async function GET(request: Request) {
   }
 }
 
-export async function POST(request: Request) {
+export async function POST(request: NextRequest) {
+  const auth = await authenticateRequest(request, { minRole: 'staff' })
+  if (!auth.authorized) {
+    return NextResponse.json(auth.error, { status: auth.statusCode || 401 })
+  }
+
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL || '',
     process.env.SUPABASE_SERVICE_ROLE_KEY || ''

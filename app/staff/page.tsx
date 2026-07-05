@@ -295,8 +295,6 @@ export default function StaffPage() {
   // Sync franchise_id when selectedUser changes (for edit dialog)
   useEffect(() => {
     if (selectedUser && showEditDialog) {
-      console.log('Selected user:', selectedUser)
-      console.log('User franchise_id:', selectedUser.franchise_id)
       setNewUserData(prev => ({
         ...prev,
         franchise_id: selectedUser.franchise_id || ''
@@ -321,8 +319,8 @@ export default function StaffPage() {
         const data = await response.json()
         setCurrentUser(data)
       }
-    } catch (error) {
-      console.error('Error fetching current user:', error)
+    } catch {
+      return
     }
   }
 
@@ -337,7 +335,6 @@ export default function StaffPage() {
       const { staff } = await response.json()
       setUsers(staff || [])
     } catch (error) {
-      console.error('Error fetching users:', error)
       toast.error('Failed to load staff members')
     } finally {
       setLoading(false)
@@ -346,7 +343,6 @@ export default function StaffPage() {
 
   const fetchFranchises = async () => {
     try {
-      console.log('Fetching franchises via API...')
       const response = await fetch('/api/franchises')
       
       if (!response.ok) {
@@ -355,21 +351,17 @@ export default function StaffPage() {
 
       const result = await response.json()
       const data = result.data || []
-      
-      console.log('Franchises fetched:', data)
+
       setFranchises(data.map((f: any) => ({
         id: f.id,
         name: f.name,
         code: f.code
       })))
     } catch (error) {
-      console.error('Error fetching franchises:', error)
-      // Set a default franchise for testing if none exist
-      setFranchises([{
-        id: 'default-franchise-id',
-        name: 'Default Franchise',
-        code: 'DEFAULT'
-      }])
+      setFranchises([])
+      if (isSuperAdmin) {
+        toast.error('Unable to load franchises. Please refresh and try again.')
+      }
     }
   }
 
@@ -473,7 +465,6 @@ export default function StaffPage() {
       toast.success('Staff member added successfully!')
       fetchUsers()
     } catch (error: any) {
-      console.error('Error adding user:', error)
       if (error.message.includes('Email already exists')) {
         toast.error('Email already exists. Please use a different email.')
       } else {
@@ -526,14 +517,10 @@ export default function StaffPage() {
         const contentType = response.headers.get('content-type')
         if (!contentType || !contentType.includes('application/json') || response.status === 404) {
           shouldFallback = true
-          try {
-            const preview = await response.text()
-            console.error('[Staff] Edit got non-JSON response:', preview.substring(0, 200))
-          } catch {}
+          await response.text().catch(() => '')
         }
 
         if (shouldFallback) {
-          console.warn('[Staff] Falling back to stable endpoint /api/staff/update')
           response = await fetch('/api/staff/update', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -548,8 +535,7 @@ export default function StaffPage() {
             const errorData = await response.json()
             throw new Error(errorData.error || 'Failed to update staff member')
           } else {
-            const html = await response.text()
-            console.error('[Staff] Edit error HTML:', html.substring(0, 200))
+            await response.text().catch(() => '')
             throw new Error('Server error: Invalid response format. Please refresh and try again.')
           }
         }
@@ -570,7 +556,6 @@ export default function StaffPage() {
       toast.success('Staff member updated successfully!')
       fetchUsers()
     } catch (error: any) {
-      console.error('Error updating user:', error)
       if (error.message.includes('Email already in use')) {
         toast.error('Email already exists. Please use a different email.')
       } else {
@@ -583,15 +568,12 @@ export default function StaffPage() {
 
   const handleToggleStatus = async (user: User) => {
     try {
-      console.log('[Staff] Toggling status for user:', user.id)
       const dynamicUrl = `/api/staff/${user.id}/toggle-status`
       let response = await fetch(dynamicUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include'
       })
-
-      console.log('[Staff] Toggle response status:', response.status)
 
       // If dynamic route fails (404 or HTML), fallback to stable route
       if (!response.ok) {
@@ -600,14 +582,12 @@ export default function StaffPage() {
         if (!contentType || !contentType.includes('application/json')) {
           // Likely an HTML 404 page
           shouldFallback = true
-          const htmlText = await response.text()
-          console.error('[Staff] Got HTML response instead of JSON:', htmlText.substring(0, 200))
+          await response.text()
         } else if (response.status === 404) {
           shouldFallback = true
         }
 
         if (shouldFallback) {
-          console.warn('[Staff] Falling back to stable endpoint /api/staff/toggle-status')
           response = await fetch('/api/staff/toggle-status', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -624,22 +604,17 @@ export default function StaffPage() {
           const errorData = await response.json()
           throw new Error(errorData.error || 'Failed to update staff status')
         } else {
-          const htmlText = await response.text()
-          console.error('[Staff] Error HTML:', htmlText.substring(0, 200))
+          await response.text().catch(() => '')
           throw new Error('Server error: Invalid response format. Please refresh and try again.')
         }
       }
 
-  const handler = response.headers.get('x-route') || 'unknown'
-  const result = await response.json()
-  console.log('[Staff] Toggle handled by:', handler)
-  console.log('[Staff] Toggle result:', result)
+      const result = await response.json()
       const updatedUser = result.user
 
       setUsers(prev => prev.map(u => (u.id === user.id ? updatedUser : u)))
       toast.success(`Staff member ${user.is_active ? 'deactivated' : 'activated'} successfully!`)
     } catch (error: any) {
-      console.error('[Staff] Error toggling user status:', error)
       toast.error(error.message || 'Failed to update staff member status')
     }
   }
@@ -658,10 +633,7 @@ export default function StaffPage() {
         // If response is HTML (e.g., 404 page), fallback to stable endpoint
         const contentType = response.headers.get('content-type')
         if (!contentType || !contentType.includes('application/json') || response.status === 404) {
-          try {
-            const html = await response.text()
-            console.error('[Staff] Delete got HTML instead of JSON (likely 404):', html.substring(0, 200))
-          } catch {}
+          await response.text().catch(() => '')
           // Fallback to stable endpoint
           response = await fetch('/api/staff/delete', {
             method: 'POST',
@@ -678,8 +650,7 @@ export default function StaffPage() {
           const errorData = await response.json()
           throw new Error(errorData.error || 'Failed to delete staff member')
         } else {
-          const html = await response.text().catch(() => '')
-          console.error('[Staff] Delete error (non-JSON):', html.substring(0, 200))
+          await response.text().catch(() => '')
           throw new Error('Server error: Invalid response format. Please refresh and try again.')
         }
       }
@@ -689,7 +660,6 @@ export default function StaffPage() {
       setSelectedUser(null)
       toast.success('Staff member deleted successfully!')
     } catch (error) {
-      console.error('Error deleting user:', error)
       toast.error(error instanceof Error ? error.message : 'Failed to delete staff member')
     }
   }

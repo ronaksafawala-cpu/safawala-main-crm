@@ -372,6 +372,7 @@ export default function CreateProductOrderPage() {
         payment_type: quote.payment_type || "full",
         payment_method: quote.payment_method || "Cash / Offline Payment",
         custom_amount: quote.custom_amount || 0,
+        custom_subtotal: quote.custom_subtotal || 0,
         deposit_amount: quote.deposit_amount || 0,
         discount_amount: quote.discount_amount || 0,
         coupon_code: quote.coupon_code || "",

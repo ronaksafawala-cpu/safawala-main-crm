@@ -1,8 +1,13 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs"
 import { cookies } from "next/headers"
+import { authenticateRequest } from "@/lib/auth-middleware"
 
-export async function GET(request: Request, { params }: { params: { userId: string } }) {
+export async function GET(request: NextRequest, { params }: { params: { userId: string } }) {
+  const auth = await authenticateRequest(request, { minRole: 'franchise_admin' })
+  if (!auth.authorized) {
+    return NextResponse.json(auth.error, { status: auth.statusCode })
+  }
   try {
     const supabase = createRouteHandlerClient({ cookies })
     const { userId } = params

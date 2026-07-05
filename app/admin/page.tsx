@@ -167,64 +167,38 @@ export default function AdminDashboard() {
     if (raw) { try { setUser(JSON.parse(raw)) } catch {} }
 
     Promise.allSettled([
-      fetch("/api/bookings?limit=500").then(r => r.json()),
-      fetch("/api/payments?limit=500").then(r => r.json()),
-      fetch("/api/customers?limit=200").then(r => r.json()),
+      fetch("/api/dashboard/stats", { cache: "no-store" }).then(r => r.json()),
       fetch("/api/franchises?limit=50").then(r => r.json()),
       fetch("/api/users?limit=200").then(r => r.json()),
       fetch("/api/franchise-enquiries?limit=200").then(r => r.json()),
-    ]).then(([bRes, pRes, cRes, fRes, uRes, eRes]) => {
-      const bookings = bRes.status === "fulfilled" ? (bRes.value.data ?? bRes.value ?? []) : []
-      const payments = pRes.status === "fulfilled" ? (pRes.value.data ?? pRes.value ?? []) : []
-      const customers = cRes.status === "fulfilled" ? (cRes.value.data ?? cRes.value ?? []) : []
+    ]).then(([statsRes, fRes, uRes, eRes]) => {
+      const dashboardStats = statsRes.status === "fulfilled" ? (statsRes.value.data ?? {}) : {}
       const fData = fRes.status === "fulfilled" ? (fRes.value.data ?? fRes.value ?? []) : []
       const users = uRes.status === "fulfilled" ? (uRes.value.data ?? uRes.value ?? []) : []
       const enq = eRes.status === "fulfilled" ? (eRes.value.data ?? []) : []
 
-      const totalRevenue = payments.reduce((s: number, p: any) => s + (Number(p.amount) || 0), 0)
-      const now = new Date()
-      const monthPayments = payments.filter((p: any) => {
-        const d = new Date(p.payment_date || p.created_at)
-        return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
-      })
-      const monthRevenue = monthPayments.reduce((s: number, p: any) => s + (Number(p.amount) || 0), 0)
-      const todayStr = now.toISOString().split("T")[0]
-      const todayBookings = bookings.filter((b: any) => (b.created_at || "").startsWith(todayStr)).length
-
-      const recent = [...bookings].sort((a: any, b: any) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()).slice(0, 5)
-
       setStats({
-        totalRevenue,
-        monthRevenue,
+        totalRevenue: Number(dashboardStats.totalRevenue) || 0,
+        monthRevenue: Number(dashboardStats.monthRevenue) || 0,
         totalFranchises: fData.length,
         activeFranchises: fData.filter((f: any) => f.is_active !== false).length,
-        totalCustomers: customers.length,
-        totalOrders: bookings.length,
-        pendingOrders: bookings.filter((b: any) => b.status === "confirmed" || b.status === "pending").length,
-        completedOrders: bookings.filter((b: any) => b.status === "order_complete").length,
+        totalCustomers: Number(dashboardStats.totalCustomers) || 0,
+        totalOrders: Number(dashboardStats.totalBookings) || 0,
+        pendingOrders: Number(dashboardStats.activeBookings) || 0,
+        completedOrders: Number(dashboardStats.completedBookings) || 0,
         totalEmployees: users.length,
-        todayBookings,
-        pendingPayments: bookings.filter((b: any) => (b.total_amount || 0) > (b.amount_paid || 0)).length,
+        todayBookings: Number(dashboardStats.todayBookings) || 0,
+        pendingPayments: Number(dashboardStats.pendingPaymentCount) || 0,
         totalLeads: enq.length,
       })
       setFranchises(fData.slice(0, 5))
       setEnquiries(enq.slice(0, 5))
-      setRecentOrders(recent)
+      setRecentOrders((dashboardStats.recentOrders || []).slice(0, 5))
 
-      // Compute last 6 months of real payment revenue
-      const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"]
-      const salesData = []
-      for (let i = 5; i >= 0; i--) {
-        const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
-        const m = d.getMonth()
-        const y = d.getFullYear()
-        const total = payments.reduce((s: number, p: any) => {
-          const pd = new Date(p.payment_date || p.created_at)
-          return pd.getMonth() === m && pd.getFullYear() === y ? s + (Number(p.amount) || 0) : s
-        }, 0)
-        salesData.push({ name: MONTHS[m], sales: total })
-      }
-      setMonthlySales(salesData)
+      setMonthlySales((dashboardStats.revenueByMonth || []).map((row: any) => ({
+        name: row.month,
+        sales: Number(row.revenue) || 0,
+      })))
 
       // Compute enquiry status breakdown
       const statusMap: Record<string, { color: string }> = {
@@ -293,9 +267,9 @@ export default function AdminDashboard() {
 
         {/* Row 1: 5 primary stat cards */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(5, 1fr)", gap: 12 }}>
-          <StatCard icon={ICONS.rupee} value={loading ? "—" : fmt(stats.totalRevenue)} label="Total Revenue" sub={`${fmt(stats.monthRevenue)} this month`} subColor="#16a34a" accent={GOLD} />
+          <StatCard icon={ICONS.rupee} value={loading ? "—" : fmt(stats.totalRevenue)} label="Gross Order Value" sub={`${fmt(stats.monthRevenue)} booked this month`} subColor="#16a34a" accent={GOLD} />
           <StatCard icon={ICONS.building} value={loading ? "—" : String(stats.totalFranchises)} label="Franchises" sub={`${stats.activeFranchises} active`} subColor="#16a34a" accent="#22c55e" />
-          <StatCard icon={ICONS.cart} value={loading ? "—" : String(stats.totalOrders)} label="Total Orders" sub={`${stats.pendingOrders} pending`} subColor="#f97316" accent="#f97316" />
+          <StatCard icon={ICONS.cart} value={loading ? "—" : String(stats.totalOrders)} label="Total Orders" sub={`${stats.pendingOrders} active`} subColor="#f97316" accent="#f97316" />
           <StatCard icon={ICONS.users} value={loading ? "—" : String(stats.totalCustomers)} label="Customers" sub="All franchises" accent="#3b82f6" />
           <StatCard icon={ICONS.user} value={loading ? "—" : String(stats.totalEmployees)} label="Employees" sub="Across all branches" accent="#a855f7" />
         </div>
@@ -527,16 +501,16 @@ export default function AdminDashboard() {
               ))}
             </div>
 
-            {/* System health pill */}
-            <div style={{
+            {/* System health link */}
+            <Link href="/admin/system-health" style={{
               marginTop: 14, padding: "10px 14px", borderRadius: 10,
-              background: "#f0fdf4", border: "1px solid #bbf7d0",
-              display: "flex", alignItems: "center", gap: 8,
+              background: "#f8fafc", border: "1px solid #e2e8f0",
+              display: "flex", alignItems: "center", gap: 8, textDecoration: "none",
             }}>
-              <div style={{ width: 8, height: 8, borderRadius: "50%", background: "#22c55e", flexShrink: 0 }} />
-              <div style={{ fontSize: 11, fontWeight: 600, color: "#16a34a" }}>All systems operational</div>
-              <div style={{ marginLeft: "auto", fontSize: 10, color: "#16a34a" }}>Just now</div>
-            </div>
+              <div style={{ width: 8, height: 8, borderRadius: "50%", background: GOLD, flexShrink: 0 }} />
+              <div style={{ fontSize: 11, fontWeight: 600, color: BROWN }}>Open System Health</div>
+              <div style={{ marginLeft: "auto", fontSize: 10, color: "#64748b" }}>Check now →</div>
+            </Link>
           </div>
         </div>
 

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer as supabase } from '@/lib/supabase-server-simple'
+import { authenticateRequest, AuthMiddleware } from '@/lib/auth-middleware'
 
 // Validation schemas (removed ACCOUNT_TYPES)
 const IFSC_PATTERN = /^[A-Z]{4}0[A-Z0-9]{6}$/
@@ -50,9 +51,22 @@ function validateBankAccount(data: Partial<BankAccount>) {
 
 // GET /api/banks - List all banks for organization
 export async function GET(request: NextRequest) {
+  const auth = await authenticateRequest(request, { minRole: 'franchise_admin' })
+  if (!auth.authorized) {
+    return NextResponse.json(auth.error, { status: auth.statusCode })
+  }
   try {
+    const user = auth.user!
     const { searchParams } = new URL(request.url)
-    const orgId = searchParams.get('org_id') || '00000000-0000-0000-0000-000000000001'
+    const requestedOrgId = searchParams.get('org_id')
+    const orgId = user.is_super_admin ? requestedOrgId : (user.franchise_id || null)
+
+    if (!orgId) {
+      return NextResponse.json({ error: 'Organization context is required' }, { status: 400 })
+    }
+    if (!AuthMiddleware.canAccessFranchise(user, orgId)) {
+      return NextResponse.json({ error: 'Access denied to this organization' }, { status: 403 })
+    }
 
     const { data, error } = await supabase
       .from('banks')
@@ -83,10 +97,15 @@ export async function GET(request: NextRequest) {
 
 // POST /api/banks - Create new bank account
 export async function POST(request: NextRequest) {
+  const auth = await authenticateRequest(request, { minRole: 'franchise_admin' })
+  if (!auth.authorized) {
+    return NextResponse.json(auth.error, { status: auth.statusCode })
+  }
   try {
+    const user = auth.user!
     const body = await request.json()
     const {
-      org_id = '00000000-0000-0000-0000-000000000001',
+      org_id,
       bank_name,
       account_holder,
       account_number,
@@ -100,6 +119,14 @@ export async function POST(request: NextRequest) {
       created_by
     } = body
 
+    const effectiveOrgId = user.is_super_admin ? (org_id || null) : (user.franchise_id || null)
+    if (!effectiveOrgId) {
+      return NextResponse.json({ error: 'Organization context is required' }, { status: 400 })
+    }
+    if (!AuthMiddleware.canAccessFranchise(user, effectiveOrgId)) {
+      return NextResponse.json({ error: 'Access denied to this organization' }, { status: 403 })
+    }
+
     // Validate input
     const validationErrors = validateBankAccount(body)
     if (validationErrors.length > 0) {
@@ -111,7 +138,7 @@ export async function POST(request: NextRequest) {
 
     // Prepare data for insertion (removed account_type)
     const bankData = {
-      org_id,
+      org_id: effectiveOrgId,
       bank_name: bank_name.trim(),
       account_holder: account_holder.trim(),
       account_number: account_number.trim(),
@@ -122,7 +149,7 @@ export async function POST(request: NextRequest) {
       is_primary,
       show_on_invoices,
       show_on_quotes,
-      created_by: created_by || null
+      created_by: created_by || user.id || null
     }
 
     const { data, error } = await supabase

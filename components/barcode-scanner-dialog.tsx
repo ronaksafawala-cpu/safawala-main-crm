@@ -72,7 +72,6 @@ export function BarcodeScannerDialog({
             aspectRatio: 1.777778
           },
           (decodedText) => {
-            console.log("[BarcodeScannerDialog] Scanned:", decodedText)
             handleScan(decodedText)
           },
           () => {
@@ -80,7 +79,6 @@ export function BarcodeScannerDialog({
           }
         )
       } catch (error: any) {
-        console.error("Camera error:", error)
         setCameraError(error?.message || "Failed to start camera")
       }
     }, 250)
@@ -92,7 +90,7 @@ export function BarcodeScannerDialog({
       if (scanner.isScanning) {
         scanner.stop()
           .then(() => scanner.clear())
-          .catch((err: any) => console.error("Error stopping camera scanner:", err))
+          .catch(() => undefined)
       }
       html5QrCodeRef.current = null
     }

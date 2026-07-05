@@ -1,14 +1,18 @@
 import { NextRequest, NextResponse } from "next/server"
 import { supabaseServer } from "@/lib/supabase-server-simple"
+import { authenticateRequest } from "@/lib/auth-middleware"
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
 /**
  * PATCH /api/deliveries/update
- * Simpler delivery update endpoint (no auth middleware)
  */
 export async function PATCH(request: NextRequest) {
+  const auth = await authenticateRequest(request, { minRole: 'staff' })
+  if (!auth.authorized) {
+    return NextResponse.json(auth.error, { status: auth.statusCode })
+  }
   try {
     const body = await request.json()
     const { id: deliveryId, ...updates } = body

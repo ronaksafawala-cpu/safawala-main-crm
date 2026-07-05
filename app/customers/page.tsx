@@ -149,22 +149,16 @@ export default function CustomersPage() {
   }
 
   const handleCustomerUpdated = async (updatedCustomer: any) => {
-    console.log('[CustomersPage] handleCustomerUpdated called with:', updatedCustomer)
-    
     // Refresh the customer list immediately
-    console.log('[CustomersPage] Calling refresh...')
     await refresh()
-    console.log('[CustomersPage] Refresh completed')
     
     // Update the selected customer in view dialog if it's open
     if (selectedCustomer && updatedCustomer && selectedCustomer.id === updatedCustomer.id) {
-      console.log('[CustomersPage] Updating selectedCustomer in view dialog')
       setSelectedCustomer(updatedCustomer)
     }
     
     // Clear edit state
     setCustomerToEdit(null)
-    console.log('[CustomersPage] handleCustomerUpdated completed')
   }
 
   const handleDeleteClick = (customer: Customer) => {
@@ -187,12 +181,6 @@ export default function CustomersPage() {
       return
     }
 
-    console.log('[Delete Customer] Starting deletion for:', {
-      id: customerId,
-      name: customerToDelete.name,
-      code: customerToDelete.customer_code
-    })
-
     try {
       // intentional Raw fetch
       const response = await fetch(`/api/delete`, {
@@ -203,8 +191,6 @@ export default function CustomersPage() {
         credentials: "include",
         body: JSON.stringify({ entity: 'customer', id: customerId, hard: true })
       })
-
-      console.log('[Delete Customer] Response status:', response.status)
 
       // Handle non-OK responses
       if (!response.ok) {
@@ -226,7 +212,6 @@ export default function CustomersPage() {
               errorMessage = "You don't have permission to delete this customer."
             }
           } catch (parseError) {
-            console.error('[Delete Customer] Failed to parse error response:', parseError)
             errorMessage = `Server error: ${response.status} ${response.statusText}`
           }
         } else {
@@ -244,11 +229,9 @@ export default function CustomersPage() {
           responseData = await response.json()
         }
       } catch (parseError) {
-        console.warn('[Delete Customer] Could not parse success response:', parseError)
       }
 
       // Success!
-      console.log('[Delete Customer] Successfully deleted:', responseData)
       toast.success(`Customer "${customerToDelete.name}" permanently deleted`)
       
       // Update local state immediately for instant feedback
@@ -260,8 +243,6 @@ export default function CustomersPage() {
       refresh()
 
     } catch (error: any) {
-      console.error('[Delete Customer] Error:', error)
-      
       // Show user-friendly error message
       const errorMessage = error.message || "Failed to delete customer. Please try again."
       toast.error(errorMessage)

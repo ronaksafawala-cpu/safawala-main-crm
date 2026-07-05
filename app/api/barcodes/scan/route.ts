@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { authenticateRequest } from "@/lib/auth-middleware"
 
 export const dynamic = 'force-dynamic'
 
@@ -16,9 +17,14 @@ export const dynamic = 'force-dynamic'
  */
 export async function POST(request: NextRequest) {
   try {
+    const auth = await authenticateRequest(request, { minRole: 'staff' })
+    if (!auth.authorized) {
+      return NextResponse.json(auth.error, { status: auth.statusCode })
+    }
+
     const body = await request.json()
-    let { 
-      barcode, 
+    let {
+      barcode,
       action, 
       booking_id, 
       booking_type = 'package',
@@ -229,6 +235,11 @@ export async function POST(request: NextRequest) {
  */
 export async function GET(request: NextRequest) {
   try {
+    const auth = await authenticateRequest(request, { minRole: 'staff' })
+    if (!auth.authorized) {
+      return NextResponse.json(auth.error, { status: auth.statusCode })
+    }
+
     const { searchParams } = new URL(request.url)
     const barcode = searchParams.get('barcode')
     

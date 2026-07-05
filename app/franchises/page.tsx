@@ -80,7 +80,6 @@ export default function FranchisesPage() {
   const loadFranchises = async () => {
     try {
       setLoading(true)
-      console.log("[Franchises] Starting to fetch franchises via API...")
 
       // Use API route instead of direct Supabase to bypass RLS
       const response = await fetch("/api/franchises", {
@@ -96,7 +95,6 @@ export default function FranchisesPage() {
       const { data: franchiseData } = await response.json()
 
       if (!franchiseData) {
-        console.error("[Franchises] ❌ No data returned from API")
         toast({
           title: "Error",
           description: "No franchise data returned",
@@ -106,11 +104,7 @@ export default function FranchisesPage() {
         return
       }
 
-      console.log("[Franchises] ✅ Raw franchise data:", franchiseData)
-      console.log("[Franchises] Number of franchises:", franchiseData?.length || 0)
-
       if (!franchiseData || franchiseData.length === 0) {
-        console.log("[Franchises] No franchises found in database")
         setFranchises([])
         setLoading(false)
         return
@@ -133,11 +127,9 @@ export default function FranchisesPage() {
         total_inventory: 0,
       }))
 
-      console.log("[Franchises] ✅ Transformed franchises:", transformedFranchises)
       setFranchises(transformedFranchises)
       setLoading(false)
     } catch (error) {
-      console.error("[Franchises] ❌ Catch block error:", error)
       toast({
         title: "Error",
         description: "Failed to load franchises",
@@ -153,8 +145,6 @@ export default function FranchisesPage() {
     setIsSubmitting(true)
 
     try {
-      console.log("[v0] Creating new franchise via API...")
-
       const response = await fetch("/api/franchises", {
         method: "POST",
         headers: {
@@ -179,11 +169,8 @@ export default function FranchisesPage() {
       const result = await response.json()
 
       if (!response.ok) {
-        console.error("[v0] Error creating franchise:", result.error)
         throw new Error(result.error || "Failed to create franchise")
       }
-
-      console.log("[v0] Franchise created successfully:", result.data)
 
       toast({
         title: "Success",
@@ -205,7 +192,6 @@ export default function FranchisesPage() {
 
       loadFranchises()
     } catch (error: any) {
-      console.error("Error creating franchise:", error)
       toast({
         title: "Error",
         description: error.message || "Failed to create franchise",
@@ -244,8 +230,6 @@ export default function FranchisesPage() {
     setIsSubmitting(true)
 
     try {
-      console.log("[v0] Updating franchise via API...")
-
       const response = await fetch("/api/franchises", {
         method: "PUT",
         headers: {
@@ -271,11 +255,8 @@ export default function FranchisesPage() {
       const result = await response.json()
 
       if (!response.ok) {
-        console.error("[v0] Error updating franchise:", result.error)
         throw new Error(result.error || "Failed to update franchise")
       }
-
-      console.log("[v0] Franchise updated successfully:", result.data)
 
       toast({
         title: "Success",
@@ -298,7 +279,6 @@ export default function FranchisesPage() {
 
       loadFranchises()
     } catch (error: any) {
-      console.error("Error updating franchise:", error)
       toast({
         title: "Error",
         description: error.message || "Failed to update franchise",

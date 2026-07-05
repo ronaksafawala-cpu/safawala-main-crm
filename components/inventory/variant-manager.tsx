@@ -228,7 +228,6 @@ export function VariantManager({
       }
       setEditingIdx(null)
     } catch (error) {
-      console.error("Variant save error:", error)
       toast.error(error instanceof Error ? error.message : "Failed to save variant")
     } finally {
       setSaving(false)

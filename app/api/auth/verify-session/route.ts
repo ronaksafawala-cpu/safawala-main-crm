@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { cookies } from "next/headers"
 import { createClient as createServiceClient } from "@supabase/supabase-js"
 
 export const dynamic = "force-dynamic"
@@ -11,8 +12,12 @@ export const runtime = "nodejs"
  */
 export async function GET(request: NextRequest) {
   try {
-    // Bypassed/disabled single-device login enforcement
-    return NextResponse.json({ valid: true })
+    const cookieStore = cookies()
+    const cookieRaw = cookieStore.get("safawala_user")?.value
+
+    if (!cookieRaw) {
+      return NextResponse.json({ valid: false, reason: "missing_cookie" })
+    }
 
     let parsed: any
     try {
@@ -24,8 +29,7 @@ export async function GET(request: NextRequest) {
     const { id: userId, session_token: cookieToken } = parsed
 
     if (!userId || !cookieToken) {
-      // Old session without token — still valid (no enforcement yet)
-      return NextResponse.json({ valid: true, reason: "legacy_session" })
+      return NextResponse.json({ valid: false, reason: "legacy_session_missing_token" })
     }
 
     const serviceAdmin = createServiceClient(
@@ -50,8 +54,11 @@ export async function GET(request: NextRequest) {
     }
 
     if (!user.session_token) {
-      // No session token in DB yet — valid (backward compat)
-      return NextResponse.json({ valid: true, reason: "no_db_token" })
+      return NextResponse.json({
+        valid: false,
+        reason: "missing_db_session_token",
+        message: "Your session is incomplete. Please sign in again.",
+      })
     }
 
     const [dbDevice, dbUuid] = user.session_token.includes(":") ? user.session_token.split(":") : ["legacy", user.session_token]
@@ -84,6 +91,6 @@ export async function GET(request: NextRequest) {
     })
   } catch (err) {
     console.error("[verify-session]", err)
-    return NextResponse.json({ valid: true }) // Fail open to avoid locking users out on transient errors
+    return NextResponse.json({ valid: false, reason: "verification_error" }, { status: 500 })
   }
 }

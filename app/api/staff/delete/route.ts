@@ -46,6 +46,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Staff member not found' }, { status: 404 })
     }
 
+    if (user!.role !== 'super_admin' && existingUser.role === 'super_admin') {
+      return NextResponse.json({ error: 'Unauthorized: Cannot delete super admin accounts' }, { status: 403 })
+    }
+
     // Prevent deleting last active franchise admin
     if (existingUser.role === 'franchise_admin' && existingUser.is_active) {
       const { data: admins } = await supabaseServer

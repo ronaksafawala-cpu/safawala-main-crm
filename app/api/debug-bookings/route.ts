@@ -1,11 +1,28 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { supabaseServer } from "@/lib/supabase-server-simple"
+import { authenticateRequest } from "@/lib/auth-middleware"
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
+function isLocalDevRequest(request: NextRequest) {
+  const host = request.nextUrl.hostname
+  return process.env.NODE_ENV !== "production" && (
+    host === "localhost" || host === "127.0.0.1" || host === "::1"
+  )
+}
+
 export async function GET(request: NextRequest) {
   try {
+    if (!isLocalDevRequest(request)) {
+      return NextResponse.json({ error: "This endpoint is only available in local development" }, { status: 403 })
+    }
+
+    const auth = await authenticateRequest(request, { minRole: 'super_admin' })
+    if (!auth.authorized) {
+      return NextResponse.json(auth.error, { status: auth.statusCode || 401 })
+    }
+
     console.log('[DEBUG] Starting debug bookings check...')
 
     // Check product_orders count

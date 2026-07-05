@@ -100,10 +100,8 @@ export function StockMovementDialog({
       if (data.success) {
         setTransactions(data.data || [])
       } else {
-        console.error("Failed to fetch transactions:", data.error)
       }
     } catch (error) {
-      console.error("Error fetching transactions:", error)
     } finally {
       setLoadingTransactions(false)
     }
@@ -177,7 +175,6 @@ export function StockMovementDialog({
         await ToastService.handleApiError(response, 'record stock movement')
       }
     } catch (error: any) {
-      console.error("Error recording stock movement:", error)
       ToastService.operations.inventoryUpdateFailed('Unable to connect to server. Please check your internet connection.')
     } finally {
       setLoading(false)

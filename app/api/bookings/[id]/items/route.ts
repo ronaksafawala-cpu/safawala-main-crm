@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { authenticateRequest } from "@/lib/auth-middleware"
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
@@ -14,8 +15,13 @@ export async function GET(
 ) {
   const startTime = Date.now()
   try {
+    const auth = await authenticateRequest(request, { minRole: 'staff' })
+    if (!auth.authorized) {
+      return NextResponse.json(auth.error, { status: auth.statusCode })
+    }
+
     const { id } = params
-    
+
     const { searchParams } = new URL(request.url)
     const sourceParam = searchParams.get('source') || 'product_order'
     
@@ -201,8 +207,13 @@ export async function POST(
   { params }: { params: { id: string } }
 ) {
   try {
+    const auth = await authenticateRequest(request, { minRole: 'staff' })
+    if (!auth.authorized) {
+      return NextResponse.json(auth.error, { status: auth.statusCode })
+    }
+
     const { id } = params
-    
+
     const body = await request.json()
     const { items, source } = body
 

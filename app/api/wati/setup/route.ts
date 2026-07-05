@@ -1,8 +1,13 @@
 import { supabaseServer as supabase } from "@/lib/supabase-server-simple"
 import { invalidateWATIConfigCache } from "@/lib/services/wati-service"
 import type { NextRequest } from "next/server"
+import { authenticateRequest } from "@/lib/auth-middleware"
 
 export async function POST(request: NextRequest) {
+  const auth = await authenticateRequest(request, { minRole: 'franchise_admin' })
+  if (!auth.authorized) {
+    return Response.json(auth.error, { status: auth.statusCode })
+  }
   try {
     console.log("[v0] Setting up WATI integration...")
 
@@ -59,7 +64,11 @@ export async function POST(request: NextRequest) {
   }
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const auth = await authenticateRequest(request, { minRole: 'franchise_admin' })
+  if (!auth.authorized) {
+    return Response.json(auth.error, { status: auth.statusCode })
+  }
   try {
     const { data, error } = await supabase
       .from("integration_settings")

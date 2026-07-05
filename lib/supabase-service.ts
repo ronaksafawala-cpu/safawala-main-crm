@@ -411,13 +411,8 @@ export const bookingService = {
       throw new Error("franchise_id is required. All bookings must be assigned to a specific franchise.")
     }
 
-    // Get the first user if none specified
     if (!booking.created_by) {
-      const { data: user } = await supabase.from("users").select("id").limit(1).single()
-
-      if (user) {
-        booking.created_by = user.id
-      }
+      throw new Error("created_by is required. Bookings must be created by an authenticated user.")
     }
 
     // Generate booking number if not provided

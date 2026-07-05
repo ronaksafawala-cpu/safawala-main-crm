@@ -16,9 +16,15 @@
 import { createServerComponentClient } from "@supabase/auth-helpers-nextjs"
 import { cookies } from "next/headers"
 import { NextRequest, NextResponse } from "next/server"
+import { authenticateRequest } from "@/lib/auth-middleware"
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await authenticateRequest(request, { minRole: 'staff' })
+    if (!auth.authorized) {
+      return NextResponse.json(auth.error, { status: auth.statusCode })
+    }
+
     const body = await request.json()
     const barcode = body.barcode?.trim()
 

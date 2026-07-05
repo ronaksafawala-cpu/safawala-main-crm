@@ -185,7 +185,6 @@ export function useAvailabilityCheck() {
 
       setData(availabilityResults)
     } catch (err: any) {
-      console.error('Error checking availability:', err)
       setError(err.message || 'Failed to check availability')
     } finally {
       setLoading(false)

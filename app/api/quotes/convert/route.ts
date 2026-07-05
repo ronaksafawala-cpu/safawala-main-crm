@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { authenticateRequest } from "@/lib/auth-middleware"
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await authenticateRequest(request, { minRole: 'staff' })
+    if (!auth.authorized) {
+      return NextResponse.json(auth.error, { status: auth.statusCode })
+    }
+
     const supabase = createClient()
     const { quote_id, booking_type } = await request.json()
 

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 
 export const dynamic = "force-dynamic"
 
-const ACCESS_PASSWORD = process.env.PACKAGES_ACCESS_PASSWORD || "Safawala@5678"
+const ACCESS_PASSWORD = process.env.PACKAGES_ACCESS_PASSWORD || null
 
 export async function POST(request: NextRequest) {
   const body = await request.json()
@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, error: "Password required" }, { status: 400 })
   }
 
-  if (password === ACCESS_PASSWORD) {
+  if (ACCESS_PASSWORD && password === ACCESS_PASSWORD) {
     return NextResponse.json({ success: true })
   }
 

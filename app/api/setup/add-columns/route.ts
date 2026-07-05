@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from "next/server"
 import { supabaseServer } from "@/lib/supabase-server-simple"
+import { authenticateRequest } from "@/lib/auth-middleware"
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await authenticateRequest(request, { minRole: 'super_admin' })
+    if (!auth.authorized) {
+      return NextResponse.json(auth.error, { status: auth.statusCode })
+    }
+
     console.log("Adding city and state columns to company_settings table...")
     
     // First, try to add city column

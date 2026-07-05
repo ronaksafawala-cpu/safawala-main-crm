@@ -11,6 +11,7 @@ export default function CleanupPage() {
   const [isCleaningLogs, setIsCleaningLogs] = useState(false)
 
   const handleCleanupChats = async () => {
+    if (!window.confirm("Delete team chat messages older than 30 days? This cannot be undone.")) return
     setIsCleaningChats(true)
     try {
       const response = await fetch("/api/admin/cleanup-chats", {
@@ -38,6 +39,7 @@ export default function CleanupPage() {
   }
 
   const handleCleanupLogs = async () => {
+    if (!window.confirm("Delete expired activity and integration logs? This cannot be undone.")) return
     setIsCleaningLogs(true)
     try {
       const response = await fetch("/api/admin/cleanup-logs", {

@@ -1988,7 +1988,9 @@ export default function CreateInvoicePage() {
         body: JSON.stringify({
           code: invoiceData.coupon_code,
           invoice_type: invoiceData.invoice_type,
-          subtotal: baseSubtotal
+          subtotal: baseSubtotal,
+          orderValue: baseSubtotal,
+          franchise_id: franchiseId,
         })
       })
 
@@ -3717,9 +3719,14 @@ export default function CreateInvoicePage() {
                     <Input
                       value={invoiceData.coupon_code}
                       onChange={(e) => {
-                        setInvoiceData({ ...invoiceData, coupon_code: e.target.value.toUpperCase() })
+                        const nextCode = e.target.value.toUpperCase()
+                        setInvoiceData((prev) => ({
+                          ...prev,
+                          coupon_code: nextCode,
+                          coupon_discount: appliedCoupon && appliedCoupon !== nextCode ? 0 : prev.coupon_discount,
+                        }))
                         setCouponError(null)
-                        if (appliedCoupon !== invoiceData.coupon_code) {
+                        if (appliedCoupon && appliedCoupon !== nextCode) {
                           setAppliedCoupon(null)
                         }
                       }}

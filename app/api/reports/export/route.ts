@@ -2,34 +2,10 @@ import { NextRequest, NextResponse } from 'next/server'
 import jsPDF from 'jspdf'
 import 'jspdf-autotable'
 import { createClient } from '@/lib/supabase/server'
+import { authenticateRequest, AuthMiddleware } from '@/lib/auth-middleware'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
-
-async function getUserFromSession(request: NextRequest) {
-  try {
-    const cookieHeader = request.cookies.get('safawala_session')
-    if (!cookieHeader?.value) throw new Error('No session found')
-    const sessionData = JSON.parse(cookieHeader.value)
-    if (!sessionData.id) throw new Error('Invalid session')
-    const supabase = createClient()
-    const { data: user, error } = await supabase
-      .from('users')
-      .select('id, franchise_id, role')
-      .eq('id', sessionData.id)
-      .eq('is_active', true)
-      .single()
-    if (error || !user) throw new Error('User not found')
-    return {
-      userId: user.id as string,
-      franchiseId: user.franchise_id as string | null,
-      role: user.role as string,
-      isSuperAdmin: user.role === 'super_admin',
-    }
-  } catch {
-    throw new Error('Authentication required')
-  }
-}
 
 async function computeInventorySummary(franchiseId?: string | null) {
   const supabase = createClient()
@@ -83,11 +59,18 @@ async function computeInventorySummary(franchiseId?: string | null) {
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await authenticateRequest(request, { minRole: 'readonly' })
+    if (!auth.authorized) {
+      return NextResponse.json(auth.error, { status: auth.statusCode || 401 })
+    }
+
+    const user = auth.user!
     const { format, dateRange, franchiseFilter, reportData } = await request.json()
-    const { franchiseId: userFranchiseId, isSuperAdmin } = await getUserFromSession(request)
+    const userFranchiseId = user.franchise_id
+    const isSuperAdmin = user.is_super_admin
     // Enforce franchise isolation: non-super-admins can only export their own franchise
     const effectiveFranchise = isSuperAdmin ? (franchiseFilter || null) : userFranchiseId
-    if (!isSuperAdmin && franchiseFilter && franchiseFilter !== userFranchiseId) {
+    if (franchiseFilter && !AuthMiddleware.canAccessFranchise(user, franchiseFilter)) {
       return NextResponse.json({ error: 'Forbidden: franchise mismatch' }, { status: 403 })
     }
 

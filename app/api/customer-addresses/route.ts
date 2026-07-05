@@ -1,7 +1,12 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { supabaseServer } from "@/lib/supabase-server-simple"
+import { authenticateRequest } from "@/lib/auth-middleware"
 
 export async function GET(request: NextRequest) {
+  const auth = await authenticateRequest(request, { minRole: 'staff' })
+  if (!auth.authorized) {
+    return NextResponse.json(auth.error, { status: auth.statusCode })
+  }
   try {
     const searchParams = request.nextUrl.searchParams
     const customerId = searchParams.get('customer_id')
@@ -30,6 +35,10 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const auth = await authenticateRequest(request, { minRole: 'staff' })
+  if (!auth.authorized) {
+    return NextResponse.json(auth.error, { status: auth.statusCode })
+  }
   try {
     const body = await request.json()
 

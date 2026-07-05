@@ -236,7 +236,7 @@ export default function NewBookingPage() {
         name: newCustomerData.name,
         phone: newCustomerData.phone,
         whatsapp: newCustomerData.whatsapp || null,
-        email: newCustomerData.email || null,
+        email: newCustomerData.email || undefined,
         address: newCustomerData.address,
         city: newCustomerData.city || "Delhi",
         pincode: newCustomerData.pincode || "110001",
@@ -249,7 +249,7 @@ export default function NewBookingPage() {
         franchise_id: "", // Will be set by service
       }
 
-      const newCustomer = await customerService.create(customerData)
+      const newCustomer = await customerService.create(customerData as any)
       setCustomers((prev) => [...prev, newCustomer])
       setFormData((prev) => ({ ...prev, customer_id: newCustomer.id }))
       setShowNewCustomerDialog(false)
@@ -487,6 +487,9 @@ export default function NewBookingPage() {
         venue_name: formData.venue_name || null,
         venue_address: formData.venue_address || null,
         special_instructions: formData.special_instructions || null,
+        booking_date: new Date().toISOString().split("T")[0],
+        paid_amount: 0,
+        payment_status: "unpaid",
         invoice_generated: false,
         whatsapp_sent: false,
         created_by: "", // Will be set by service
@@ -494,7 +497,7 @@ export default function NewBookingPage() {
 
       console.log("Booking data to create:", bookingData)
 
-      const booking = await bookingService.create(bookingData)
+      const booking = await bookingService.create(bookingData as any)
       console.log("Booking created successfully:", booking)
 
       // Create booking items

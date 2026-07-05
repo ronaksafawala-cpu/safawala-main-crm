@@ -1,17 +1,27 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { supabaseServer as supabase } from "@/lib/supabase-server-simple"
+import { authenticateRequest } from "@/lib/auth-middleware"
 
 interface HealthCheck {
   name: string
   status: "healthy" | "warning" | "error" | "checking"
   message: string
   details?: string
-  lastChecked?: Date
+  lastChecked?: string
   responseTime?: number
+}
+
+function checkedAt() {
+  return new Date().toISOString()
 }
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await authenticateRequest(request, { minRole: "super_admin" })
+    if (!auth.authorized) {
+      return NextResponse.json(auth.error, { status: auth.statusCode || 401 })
+    }
+
     const startTime = Date.now()
 
     // Initialize health checks
@@ -31,7 +41,7 @@ export async function POST(request: NextRequest) {
     await checkIntegrations(health.integrations)
 
     // API Health Checks
-    await checkAPIs(health.apis)
+    await checkAPIs(health.apis, request)
 
     // Authentication Health Checks
     await checkAuthentication(health.authentication)
@@ -67,7 +77,7 @@ async function checkDatabase(checks: HealthCheck[]) {
         status: "error",
         message: "Missing Supabase environment variables",
         details: `URL: ${supabaseUrl ? "Set" : "Missing"}, Key: ${supabaseKey ? "Set" : "Missing"}`,
-        lastChecked: new Date(),
+        lastChecked: checkedAt(),
       })
       return
     }
@@ -81,7 +91,7 @@ async function checkDatabase(checks: HealthCheck[]) {
         status: "error",
         message: "Database connection failed",
         details: error.message,
-        lastChecked: new Date(),
+        lastChecked: checkedAt(),
         responseTime: Date.now() - startTime,
       })
     } else {
@@ -89,7 +99,7 @@ async function checkDatabase(checks: HealthCheck[]) {
         name: "Supabase Connection",
         status: "healthy",
         message: "Database connection successful",
-        lastChecked: new Date(),
+        lastChecked: checkedAt(),
         responseTime: Date.now() - startTime,
       })
     }
@@ -104,7 +114,7 @@ async function checkDatabase(checks: HealthCheck[]) {
           name: `Table: ${table}`,
           status: error ? "error" : "healthy",
           message: error ? `Table access failed: ${error.message}` : "Table accessible",
-          lastChecked: new Date(),
+          lastChecked: checkedAt(),
           responseTime: Date.now() - tableStartTime,
         })
       } catch (err) {
@@ -113,7 +123,7 @@ async function checkDatabase(checks: HealthCheck[]) {
           status: "error",
           message: "Table check failed",
           details: err instanceof Error ? err.message : "Unknown error",
-          lastChecked: new Date(),
+          lastChecked: checkedAt(),
           responseTime: Date.now() - tableStartTime,
         })
       }
@@ -124,7 +134,7 @@ async function checkDatabase(checks: HealthCheck[]) {
       status: "error",
       message: "Database health check failed",
       details: error instanceof Error ? error.message : "Unknown error",
-      lastChecked: new Date(),
+      lastChecked: checkedAt(),
       responseTime: Date.now() - startTime,
     })
   }
@@ -140,7 +150,7 @@ async function checkIntegrations(checks: HealthCheck[]) {
     status: watiUrl && watiToken ? "healthy" : "warning",
     message: watiUrl && watiToken ? "WATI credentials configured" : "WATI credentials missing",
     details: `URL: ${watiUrl ? "Set" : "Missing"}, Token: ${watiToken ? "Set" : "Missing"}`,
-    lastChecked: new Date(),
+    lastChecked: checkedAt(),
   })
 
   // Check Blob Storage
@@ -150,26 +160,29 @@ async function checkIntegrations(checks: HealthCheck[]) {
     name: "Vercel Blob Storage",
     status: blobToken ? "healthy" : "warning",
     message: blobToken ? "Blob storage configured" : "Blob storage not configured",
-    lastChecked: new Date(),
+    lastChecked: checkedAt(),
   })
 }
 
-async function checkAPIs(checks: HealthCheck[]) {
+async function checkAPIs(checks: HealthCheck[], request: NextRequest) {
   const apiEndpoints = ["/api/customers", "/api/bookings", "/api/products", "/api/quotes", "/api/invoices"]
+  const origin = new URL(request.url).origin
+  const cookie = request.headers.get("cookie") || ""
 
   for (const endpoint of apiEndpoints) {
     const startTime = Date.now()
     try {
-      const response = await fetch(`${process.env.NEXTAUTH_URL || "http://localhost:3000"}${endpoint}`, {
+      const response = await fetch(`${origin}${endpoint}`, {
         method: "GET",
-        headers: { "Content-Type": "application/json" },
+        headers: { "Content-Type": "application/json", cookie },
+        cache: "no-store",
       })
 
       checks.push({
         name: `API: ${endpoint}`,
         status: response.ok ? "healthy" : "error",
         message: response.ok ? "API endpoint responsive" : `API returned ${response.status}`,
-        lastChecked: new Date(),
+        lastChecked: checkedAt(),
         responseTime: Date.now() - startTime,
       })
     } catch (error) {
@@ -178,7 +191,7 @@ async function checkAPIs(checks: HealthCheck[]) {
         status: "error",
         message: "API endpoint unreachable",
         details: error instanceof Error ? error.message : "Unknown error",
-        lastChecked: new Date(),
+        lastChecked: checkedAt(),
         responseTime: Date.now() - startTime,
       })
     }
@@ -191,41 +204,28 @@ async function checkAuthentication(checks: HealthCheck[]) {
     name: "Authentication System",
     status: "healthy",
     message: "Authentication system operational",
-    details: "Custom authentication with localStorage",
-    lastChecked: new Date(),
+    details: "Supabase auth plus app-level role and franchise checks",
+    lastChecked: checkedAt(),
   })
 }
 
 async function checkStorage(checks: HealthCheck[]) {
-  // Check localStorage availability
-  try {
-    if (typeof window !== "undefined") {
-      localStorage.setItem("health-check", "test")
-      localStorage.removeItem("health-check")
+  const uploadsBucket = process.env.NEXT_PUBLIC_STORAGE_BUCKET || "uploads"
 
-      checks.push({
-        name: "Local Storage",
-        status: "healthy",
-        message: "Local storage accessible",
-        lastChecked: new Date(),
-      })
-    } else {
-      checks.push({
-        name: "Local Storage",
-        status: "warning",
-        message: "Running in server environment",
-        lastChecked: new Date(),
-      })
-    }
-  } catch (error) {
-    checks.push({
-      name: "Local Storage",
-      status: "error",
-      message: "Local storage not available",
-      details: error instanceof Error ? error.message : "Unknown error",
-      lastChecked: new Date(),
-    })
-  }
+  checks.push({
+    name: "Upload Storage Configuration",
+    status: uploadsBucket ? "healthy" : "warning",
+    message: uploadsBucket ? `Primary upload bucket configured: ${uploadsBucket}` : "Upload bucket not configured",
+    lastChecked: checkedAt(),
+  })
+
+  checks.push({
+    name: "Runtime Storage Check",
+    status: "warning",
+    message: "Storage write/read probe not executed by health check",
+    details: "Use a dedicated protected storage smoke test for end-to-end verification",
+    lastChecked: checkedAt(),
+  })
 }
 
 async function checkPerformance(checks: HealthCheck[], startTime: number) {
@@ -236,7 +236,7 @@ async function checkPerformance(checks: HealthCheck[], startTime: number) {
     status: totalTime < 5000 ? "healthy" : totalTime < 10000 ? "warning" : "error",
     message: `Health check completed in ${totalTime}ms`,
     details: totalTime < 5000 ? "Good performance" : totalTime < 10000 ? "Slow performance" : "Poor performance",
-    lastChecked: new Date(),
+    lastChecked: checkedAt(),
     responseTime: totalTime,
   })
 
@@ -250,7 +250,7 @@ async function checkPerformance(checks: HealthCheck[], startTime: number) {
       status: memUsageMB < 100 ? "healthy" : memUsageMB < 200 ? "warning" : "error",
       message: `Using ${memUsageMB}MB of memory`,
       details: `Heap: ${memUsageMB}MB, Total: ${Math.round(memUsage.heapTotal / 1024 / 1024)}MB`,
-      lastChecked: new Date(),
+      lastChecked: checkedAt(),
     })
   }
 }

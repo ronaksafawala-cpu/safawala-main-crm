@@ -12,9 +12,7 @@ export class SectionErrorBoundary extends Component<Props, State> {
     return { hasError: true, error: err.message }
   }
 
-  componentDidCatch(error: Error) {
-    console.error('[SectionErrorBoundary]', this.props.sectionName, error)
-  }
+  componentDidCatch(error: Error) {}
 
   handleReset = () => this.setState({ hasError: false, error: null })
 

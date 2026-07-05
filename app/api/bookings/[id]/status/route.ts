@@ -1,34 +1,22 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { supabase } from "@/lib/supabase"
 import { NotificationService } from "@/lib/notification-service"
+import { authenticateRequest, AuthMiddleware } from "@/lib/auth-middleware"
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-async function getUserFromSession(request: NextRequest) {
-  try {
-    const cookieHeader = request.cookies.get("safawala_session")
-    if (!cookieHeader?.value) throw new Error("No session")
-    const sessionData = JSON.parse(cookieHeader.value)
-    const { data: user, error } = await supabase
-      .from('users')
-      .select('id, franchise_id, role')
-      .eq('id', sessionData.id)
-      .eq('is_active', true)
-      .single()
-    if (error || !user) throw new Error('Auth failed')
-    return { userId: user.id, franchiseId: user.franchise_id, isSuperAdmin: user.role === 'super_admin' }
-  } catch {
-    throw new Error('Authentication required')
-  }
-}
-
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const auth = await authenticateRequest(request, { minRole: 'staff' })
+    if (!auth.authorized) {
+      return NextResponse.json(auth.error, { status: auth.statusCode || 401 })
+    }
+
+    const user = auth.user!
     const { id } = await params
     const body = await request.json()
     const { status } = body
-    const { franchiseId, isSuperAdmin } = await getUserFromSession(request)
 
     const validStatuses = [
       "pending_payment",
@@ -58,13 +46,13 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       `)
       .eq("id", id)
       .single()
-    // Enforce franchise isolation
-    if (!isSuperAdmin && existingBooking.franchise_id !== franchiseId) {
-      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
-    }
 
     if (fetchError || !existingBooking) {
       return NextResponse.json({ error: "Booking not found" }, { status: 404 })
+    }
+
+    if (!AuthMiddleware.canAccessFranchise(user, existingBooking.franchise_id)) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     const currentStatus = existingBooking.status as string
@@ -115,9 +103,6 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       data: updatedBooking,
     })
   } catch (error) {
-    if (error instanceof Error && error.message === 'Authentication required') {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
-    }
     return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }

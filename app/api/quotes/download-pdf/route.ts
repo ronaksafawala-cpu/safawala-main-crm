@@ -4,23 +4,20 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
-import { createClient } from '@supabase/supabase-js'
+import { requireAuth, AuthMiddleware } from '@/lib/auth-middleware'
+import { supabaseServer } from '@/lib/supabase-server-simple'
 import { generateProfessionalQuotePDF } from '@/lib/pdf/generate-quote-pdf-professional'
 
 export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-  if (!url || !key) {
-    return NextResponse.json(
-      { error: 'Supabase environment variables are not configured' },
-      { status: 500 }
-    )
+  const auth = await requireAuth(request, 'staff')
+  if (!auth.success || !auth.authContext?.user) {
+    return NextResponse.json(auth.response, { status: 401 })
   }
 
-  const supabase = createClient(url, key)
+  const user = auth.authContext.user
+  const supabase = supabaseServer
   try {
     const searchParams = request.nextUrl.searchParams
     const quoteId = searchParams.get('id')
@@ -43,6 +40,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         { error: 'Quote not found' },
         { status: 404 }
+      )
+    }
+
+    if (!AuthMiddleware.canAccessFranchise(user, quote.franchise_id)) {
+      return NextResponse.json(
+        { error: 'Access denied to this quote' },
+        { status: 403 }
       )
     }
 
@@ -83,6 +87,7 @@ export async function GET(request: NextRequest) {
       .from('customers')
       .select('*')
       .eq('id', quote.customer_id)
+      .eq('franchise_id', quote.franchise_id)
       .single()
 
     // Format items for PDF - include extra_safas info

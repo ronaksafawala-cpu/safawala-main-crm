@@ -1,16 +1,27 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { supabaseServer as supabase } from "@/lib/supabase-server-simple"
+import { authenticateRequest, AuthMiddleware } from "@/lib/auth-middleware"
 
-export async function GET(request: Request) {
+export async function GET(request: NextRequest) {
   try {
-    // Get franchise_id from query parameters
+    const auth = await authenticateRequest(request, { minRole: "readonly" })
+    if (!auth.authorized) {
+      return NextResponse.json(auth.error, { status: auth.statusCode || 401 })
+    }
+
+    const authUser = auth.user!
     const { searchParams } = new URL(request.url)
-    const franchiseId = searchParams.get('franchise_id')
+    const requestedFranchiseId = searchParams.get('franchise_id')
+    const franchiseId = requestedFranchiseId || authUser.franchise_id || null
 
-    console.log('🔍 [Settings API] Request received')
-    console.log('📋 [Settings API] Franchise ID:', franchiseId)
+    if (franchiseId && !AuthMiddleware.canAccessFranchise(authUser, franchiseId)) {
+      return NextResponse.json(
+        { error: "Access denied to this franchise" },
+        { status: 403 }
+      )
+    }
 
-    // Fetch all settings tables with optional franchise_id filter
+    // Fetch all settings tables with franchise scoping when available.
     const [companyResult, brandingResult, documentResult] = await Promise.all([
       franchiseId
         ? supabase.from('company_settings').select('*').eq('franchise_id', franchiseId).single()
@@ -63,14 +74,6 @@ export async function GET(request: Request) {
     const brandingSettings = brandingResult.data || defaultBranding
     const documentSettings = documentResult.data || defaultDocument
 
-    console.log('🔍 DEBUG API: Settings Merge')
-    console.log('Company Settings:', companySettings)
-    console.log('Branding Settings:', brandingSettings)
-    console.log('Document Settings:', documentSettings)
-    console.log('📋 Terms from document_settings:', documentSettings.default_terms_conditions)
-    console.log('Company logo_url:', companySettings.logo_url)
-    console.log('Branding logo_url:', brandingSettings.logo_url)
-
     // Return combined settings with proper logo_url priority
     const merged = {
       ...companySettings,
@@ -80,10 +83,8 @@ export async function GET(request: Request) {
       logo_url: brandingSettings.logo_url || companySettings.logo_url
     }
 
-    console.log('Merged logo_url:', merged.logo_url)
-    console.log('✅ Merged Terms & Conditions:', merged.default_terms_conditions)
-
     return NextResponse.json({
+      franchise_id: franchiseId,
       company: companySettings,
       branding: brandingSettings,
       document: documentSettings,

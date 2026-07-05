@@ -1,12 +1,23 @@
 import { NextRequest, NextResponse } from "next/server"
 import { supabaseServer as supabase } from "@/lib/supabase-server-simple"
+import { authenticateRequest } from "@/lib/auth-middleware"
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const auth = await authenticateRequest(request, { minRole: 'staff' })
+  if (!auth.authorized) {
+    return NextResponse.json(auth.error, { status: auth.statusCode })
+  }
   try {
+    const user = auth.user!
+    const franchiseId = user.franchise_id
+    if (!franchiseId) {
+      return NextResponse.json({ error: 'Franchise context is required' }, { status: 400 })
+    }
     // Get company settings
     const { data: settings, error } = await supabase
       .from('company_settings')
       .select('*')
+      .eq('franchise_id', franchiseId)
       .single()
 
     if (error && error.code !== 'PGRST116') { // PGRST116 = no rows found
@@ -20,6 +31,7 @@ export async function GET() {
     // Return settings or default values
     const defaultSettings = {
       id: 1,
+      franchise_id: franchiseId,
       company_name: '',
       email: '',
       phone: '',
@@ -48,7 +60,16 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const auth = await authenticateRequest(request, { minRole: 'franchise_admin' })
+  if (!auth.authorized) {
+    return NextResponse.json(auth.error, { status: auth.statusCode })
+  }
   try {
+    const user = auth.user!
+    const franchiseId = user.franchise_id
+    if (!franchiseId) {
+      return NextResponse.json({ error: 'Franchise context is required' }, { status: 400 })
+    }
     const body = await request.json()
     const {
       company_name,
@@ -78,9 +99,11 @@ export async function POST(request: NextRequest) {
     const { data: existingSettings } = await supabase
       .from('company_settings')
       .select('id')
+      .eq('franchise_id', franchiseId)
       .single()
 
     const settingsData: any = {
+      franchise_id: franchiseId,
       company_name,
       email,
       phone,
@@ -111,6 +134,7 @@ export async function POST(request: NextRequest) {
         .from('company_settings')
         .update(settingsData)
         .eq('id', existingSettings.id)
+        .eq('franchise_id', franchiseId)
         .select()
         .single()
     } else {

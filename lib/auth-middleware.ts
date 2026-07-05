@@ -55,6 +55,77 @@ export interface AuthOptions {
   allowSuperAdminOverride?: boolean; // Super admin bypasses permission checks
 }
 
+interface CookieIdentity {
+  id: string;
+  email: string;
+  role?: string;
+  department?: string;
+  franchise_id?: string;
+  session_token?: string;
+}
+
+async function getUserFromTrustedCookie(cookieValue?: string): Promise<AuthenticatedUser | null> {
+  if (!cookieValue) return null;
+
+  let parsed: CookieIdentity;
+  try {
+    parsed = JSON.parse(cookieValue);
+  } catch (e) {
+    console.warn("[Auth Middleware] Failed to parse safawala_user cookie:", e);
+    return null;
+  }
+
+  if (!parsed?.id || !parsed?.email || !parsed?.session_token) {
+    return null;
+  }
+
+  const { data: appUser, error } = await supabaseServer
+    .from('users')
+    .select(`
+      id,
+      name,
+      email,
+      role,
+      franchise_id,
+      is_active,
+      permissions,
+      session_token,
+      franchises!left (
+        id,
+        name,
+        code
+      )
+    `)
+    .eq('id', parsed.id)
+    .ilike('email', parsed.email)
+    .eq('is_active', true)
+    .single();
+
+  if (error || !appUser) {
+    console.warn("[Auth Middleware] Cookie fallback user lookup failed:", error?.message);
+    return null;
+  }
+
+  if (!appUser.session_token || appUser.session_token !== parsed.session_token) {
+    console.warn("[Auth Middleware] Cookie fallback session token mismatch for user:", parsed.email);
+    return null;
+  }
+
+  const franchise = Array.isArray(appUser.franchises) ? appUser.franchises[0] : appUser.franchises;
+
+  return {
+    id: appUser.id,
+    email: appUser.email,
+    name: appUser.name,
+    role: appUser.role as AppRole,
+    franchise_id: appUser.franchise_id,
+    franchise_name: franchise?.name,
+    franchise_code: franchise?.code,
+    permissions: ensurePermissions(appUser.permissions, appUser.role as AppRole),
+    is_super_admin: appUser.role === 'super_admin',
+  };
+}
+
 /**
  * Main authentication function - validates Supabase Auth session + app permissions
  */
@@ -74,27 +145,15 @@ export async function authenticateRequest(
     const authClient = createRouteHandlerClient({ cookies: () => cookieStore });
     const { data: { user: authUser }, error: authError } = await authClient.auth.getUser();
 
-    let authUserEmail = authUser?.email;
-    let authUserId = authUser?.id;
-
-    if (authError || !authUserEmail) {
-      // Fallback: Read from httpOnly safawala_user cookie
-      const userCookie = cookieStore.get("safawala_user")?.value;
-      if (userCookie) {
-        try {
-          const parsed = JSON.parse(userCookie);
-          if (parsed?.email) {
-            authUserEmail = parsed.email;
-            authUserId = parsed.id;
-            console.log("[Auth Middleware] Authenticated via safawala_user cookie fallback:", authUserEmail);
-          }
-        } catch (e) {
-          console.warn("[Auth Middleware] Failed to parse safawala_user cookie:", e);
-        }
+    let trustedCookieUser: AuthenticatedUser | null = null;
+    if (authError || !authUser?.email) {
+      trustedCookieUser = await getUserFromTrustedCookie(cookieStore.get("safawala_user")?.value);
+      if (trustedCookieUser) {
+        console.log("[Auth Middleware] Authenticated via trusted safawala_user cookie fallback:", trustedCookieUser.email);
       }
     }
 
-    if (!authUserEmail) {
+    if (!authUser?.email && !trustedCookieUser) {
       return {
         authorized: false,
         error: { error: 'Unauthorized', message: 'Authentication required' },
@@ -102,157 +161,53 @@ export async function authenticateRequest(
       };
     }
 
-    // 2. Fetch app user profile with permissions (case-insensitive email match)
-    let { data: appUser, error: profileError } = await supabaseServer
-      .from('users')
-      .select(`
-        id,
-        name,
-        email,
-        role,
-        franchise_id,
-        is_active,
-        permissions,
-        franchises!left (
+    let user: AuthenticatedUser;
+    if (trustedCookieUser) {
+      user = trustedCookieUser;
+    } else {
+      // 2. Fetch app user profile with permissions (case-insensitive email match)
+      const { data: appUser, error: profileError } = await supabaseServer
+        .from('users')
+        .select(`
           id,
           name,
-          code
-        )
-      `)
-      .ilike('email', authUserEmail)
-      .eq('is_active', true)
-      .single();
-
-    // If user profile doesn't exist, try to create a default one
-    if ((profileError || !appUser) && authUserEmail) {
-      console.warn(`[Auth] User profile not found for ${authUserEmail}, attempting to create default profile`);
-      
-      // Try to get first franchise as default
-      let defaultFranchiseId: string | null = null;
-      try {
-        const { data: franchises } = await supabaseServer
-          .from('franchises')
-          .select('id')
-          .limit(1)
-          .single();
-        defaultFranchiseId = franchises?.id || null;
-      } catch (err) {
-        console.warn('[Auth] Could not fetch default franchise:', err);
-      }
-
-      // Create default user profile
-      try {
-        const { data: newUser } = await supabaseServer
-          .from('users')
-          .insert({
-            id: authUserId || crypto.randomUUID(),
-            email: authUserEmail,
-            name: authUser?.user_metadata?.name || authUserEmail.split('@')[0] || 'User',
-            role: 'staff', // Default role
-            franchise_id: defaultFranchiseId,
-            is_active: true,
-            permissions: null, // Will use defaults based on role
-          })
-          .select(`
+          email,
+          role,
+          franchise_id,
+          is_active,
+          permissions,
+          franchises!left (
             id,
             name,
-            email,
-            role,
-            franchise_id,
-            is_active,
-            permissions,
-            franchises!left (
-              id,
-              name,
-              code
-            )
-          `)
-          .single();
-        
-        if (newUser) {
-          appUser = newUser;
-          console.log(`[Auth] Created default user profile for ${authUserEmail}`);
-        }
-      } catch (createErr: any) {
-        console.error('[Auth] Failed to create user profile:', createErr.message);
-      }
-    }
+            code
+          )
+        `)
+        .ilike('email', authUser.email)
+        .eq('is_active', true)
+        .single();
 
-    if (profileError && !appUser) {
-      // Last-resort fallback for department logins: build user from cookie data
-      // This handles cases where the DB upsert hasn't run yet or failed
-      const cookieStore2 = cookies()
-      const rawCookie2 = cookieStore2.get('safawala_user')?.value
-      if (rawCookie2) {
-        try {
-          const parsed2 = JSON.parse(rawCookie2)
-          const isDeptEmail = /^[a-z]+@safawala\.com$/i.test(parsed2?.email || '')
-          if (isDeptEmail && parsed2?.role) {
-            const cookieRole = parsed2.role as AppRole
-            let cookieFranchiseId = parsed2.franchise_id
-
-            // If the franchise_id looks like a placeholder UUID, look up the real one
-            const placeholderPattern = /^00000000-0000-4000-8001-/
-            if (!cookieFranchiseId || placeholderPattern.test(cookieFranchiseId)) {
-              try {
-                const { data: fData } = await supabaseServer
-                  .from('franchises')
-                  .select('id, name, code')
-                  .order('created_at', { ascending: true })
-                  .limit(1)
-                  .single()
-                if (fData?.id) cookieFranchiseId = fData.id
-              } catch (_) {}
-            }
-
-            const fallbackUser: AuthenticatedUser = {
-              id: parsed2.id || crypto.randomUUID(),
-              email: parsed2.email,
-              name: parsed2.email.split('@')[0].charAt(0).toUpperCase() + parsed2.email.split('@')[0].slice(1) + ' Manager',
-              role: cookieRole,
-              franchise_id: cookieFranchiseId || undefined,
-              permissions: getDefaultPermissions(cookieRole),
-              is_super_admin: cookieRole === 'super_admin',
-            }
-            console.log('[Auth Middleware] Using cookie fallback user:', fallbackUser.email, 'franchise:', cookieFranchiseId)
-
-            // Check role — map all custom roles to levels
-            const userLevel2 = ROLE_LEVELS[fallbackUser.role] ??
-              ((fallbackUser.role as any) === 'manager' || (fallbackUser.role as any) === 'franchise_owner' ? 3 :
-               (fallbackUser.role as any)?.endsWith('_staff') || (fallbackUser.role as any) === 'stylist' ? 2 : 0)
-            const requiredLevel2 = ROLE_LEVELS[minRole] || 0
-            if (userLevel2 < requiredLevel2) {
-              return { authorized: false, error: { error: 'Forbidden', message: `Requires ${minRole} role` }, statusCode: 403 }
-            }
-            if (requirePermission && !fallbackUser.permissions[requirePermission] && !fallbackUser.is_super_admin) {
-              return { authorized: false, error: { error: 'Forbidden', message: `No permission: ${requirePermission}` }, statusCode: 403 }
-            }
-            return { authorized: true, user: fallbackUser }
-          }
-        } catch (_) {}
+      if (profileError || !appUser) {
+        return {
+          authorized: false,
+          error: { error: 'Forbidden', message: 'User profile not found or inactive: ' + profileError?.message },
+          statusCode: 403,
+        };
       }
 
-      return {
-        authorized: false,
-        error: { error: 'Forbidden', message: 'User profile not found or inactive: ' + profileError.message },
-        statusCode: 403,
+      const franchise = Array.isArray(appUser.franchises) ? appUser.franchises[0] : appUser.franchises;
+
+      user = {
+        id: appUser.id,
+        email: appUser.email,
+        name: appUser.name,
+        role: appUser.role as AppRole,
+        franchise_id: appUser.franchise_id,
+        franchise_name: franchise?.name,
+        franchise_code: franchise?.code,
+        permissions: ensurePermissions(appUser.permissions, appUser.role as AppRole),
+        is_super_admin: appUser.role === 'super_admin',
       };
     }
-
-    const franchise = Array.isArray(appUser.franchises) ? appUser.franchises[0] : appUser.franchises;
-
-    // Build authenticated user object
-    const user: AuthenticatedUser = {
-      id: appUser.id,
-      email: appUser.email,
-      name: appUser.name,
-      role: appUser.role as AppRole,
-      franchise_id: appUser.franchise_id,
-      franchise_name: franchise?.name,
-      franchise_code: franchise?.code,
-      permissions: ensurePermissions(appUser.permissions, appUser.role as AppRole),
-      is_super_admin: appUser.role === 'super_admin',
-    };
 
     // 3. Check role hierarchy
     // Department-specific roles mapped to appropriate levels

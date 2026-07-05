@@ -1,8 +1,25 @@
 import { createClient } from "@/lib/supabase/server"
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
+import { authenticateRequest } from "@/lib/auth-middleware"
 
-export async function POST(request: Request) {
+function isLocalDevRequest(request: NextRequest) {
+  const host = request.nextUrl.hostname
+  return process.env.NODE_ENV !== "production" && (
+    host === "localhost" || host === "127.0.0.1" || host === "::1"
+  )
+}
+
+export async function POST(request: NextRequest) {
   try {
+    if (!isLocalDevRequest(request)) {
+      return NextResponse.json({ error: "This endpoint is only available in local development" }, { status: 403 })
+    }
+
+    const auth = await authenticateRequest(request, { minRole: "super_admin" })
+    if (!auth.authorized) {
+      return NextResponse.json(auth.error, { status: auth.statusCode || 401 })
+    }
+
     const { sql } = await request.json()
 
     if (!sql) {
@@ -10,15 +27,6 @@ export async function POST(request: Request) {
     }
 
     const supabase = await createClient()
-
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser()
-
-    if (authError || !user) {
-      return NextResponse.json({ error: "Authentication required" }, { status: 401 })
-    }
 
     const { data, error } = await supabase.rpc("exec_sql", { sql })
 

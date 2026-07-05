@@ -163,7 +163,6 @@ export function ProductVariationManager({
         }))
       )
     } catch (error) {
-      console.error("Error fetching variations:", error)
       toast.error("Failed to load variations")
     } finally {
       setLoading(false)
@@ -264,7 +263,6 @@ export function ProductVariationManager({
       }
       setDialogOpen(false)
     } catch (error: any) {
-      console.error("Error saving variation:", error)
       toast.error(`Failed to save variation: ${error.message}`)
     } finally {
       setSaving(false)
@@ -295,7 +293,6 @@ export function ProductVariationManager({
       toast.success("Variation deleted")
       await fetchVariations()
     } catch (error: any) {
-      console.error("Error deleting variation:", error)
       toast.error(`Failed to delete: ${error.message}`)
     }
   }
@@ -331,7 +328,6 @@ export function ProductVariationManager({
       )
       toast.success("Barcode sent to printer")
     } catch (error) {
-      console.error("Print error:", error)
       toast.error("Print failed")
     }
   }
@@ -361,7 +357,6 @@ export function ProductVariationManager({
       )
       toast.success("Downloaded barcode PNG successfully")
     } catch (error) {
-      console.error("Download error:", error)
       toast.error("Download failed")
     }
   }
@@ -388,7 +383,6 @@ export function ProductVariationManager({
       setFormData((prev) => ({ ...prev, image_url: data.url }))
       toast.success("Image uploaded")
     } catch (error: any) {
-      console.error("Image upload error:", error)
       toast.error(`Upload failed: ${error.message}`)
     } finally {
       setUploadingImage(false)
@@ -407,7 +401,6 @@ export function ProductVariationManager({
       const { data } = await res.json()
       setAllProducts(data || [])
     } catch (error) {
-      console.error("Error fetching products:", error)
       toast.error("Failed to load products for selection")
     } finally {
       setLoadingProducts(false)
@@ -1088,7 +1081,6 @@ export function ProductVariationManager({
                     setMoveDialogOpen(false)
                     fetchVariations()
                   } catch (error: any) {
-                    console.error("Error moving product:", error)
                     toast.error(`Error: ${error.message}`)
                   } finally {
                     setMovingProduct(false)

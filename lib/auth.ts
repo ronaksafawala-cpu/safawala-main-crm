@@ -103,26 +103,24 @@ export async function getCurrentUser(): Promise<User | null> {
     const storedUser = localStorage.getItem("safawala_user")
     if (storedUser) return JSON.parse(storedUser)
 
-    // Fallback: Return mock super_admin profile to bypass front-end authentication redirects
-    const mockAdmin: User = {
-      id: "mock-admin-id",
-      email: "admin@mysafawala.com",
-      name: "Super Admin (Bypassed)",
-      role: "super_admin",
-      permissions: {
-        dashboard: true,
-        bookings: true,
-        customers: true,
-        inventory: true,
-        quotes: true,
-        expenses: true,
-        reports: true,
-        staff: true,
-        settings: true
-      }
+    // Real fallback: ask the server for the authenticated user tied to cookies/session.
+    try {
+      const response = await fetch("/api/auth/user", {
+        method: "GET",
+        credentials: "include",
+        cache: "no-store",
+      })
+
+      if (!response.ok) return null
+
+      const user = await response.json()
+      if (!user?.id || !user?.email) return null
+
+      localStorage.setItem("safawala_user", JSON.stringify(user))
+      return user
+    } catch {
+      return null
     }
-    localStorage.setItem("safawala_user", JSON.stringify(mockAdmin))
-    return mockAdmin
   } catch (error) {
     console.error("[v0] Get current user error:", error)
     return null

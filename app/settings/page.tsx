@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 
 export default function SettingsPage() {
   const [franchiseId, setFranchiseId] = useState<string | null>(null)
-  const [isSuperAdmin, setIsSuperAdmin] = useState<boolean>(false)
+  const [userRole, setUserRole] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const router = useRouter()
@@ -24,22 +24,21 @@ export default function SettingsPage() {
         
         if (response.ok) {
           const userData = await response.json()
-          console.log('[Settings] User data:', userData.name, 'Franchise:', userData.franchise_name)
-          console.log('[Settings] Franchise ID:', userData.franchise_id)
-          setIsSuperAdmin(userData.role === 'super_admin')
+          setUserRole(userData.role)
           
           if (userData.franchise_id) {
             setFranchiseId(userData.franchise_id)
+          } else if (userData.role === 'super_admin') {
+            router.replace('/admin/settings')
+            return
           } else {
-            console.error('[Settings] No franchise_id in user data:', userData)
             setError('No franchise associated with your account')
           }
         } else {
           setError('Authentication required. Please login.')
-          setTimeout(() => router.push('/'), 2000)
+          setTimeout(() => router.push('/auth/login'), 1200)
         }
-      } catch (error) {
-        console.error('Error fetching user franchise ID:', error)
+      } catch {
         setError('Failed to load user data')
       } finally {
         setLoading(false)
@@ -82,27 +81,6 @@ export default function SettingsPage() {
     )
   }
 
-  // Super Admin: render an isolated placeholder panel (does not touch franchise settings)
-  if (isSuperAdmin) {
-    return (
-      <div className="container mx-auto py-6">
-        <Card>
-          <CardContent className="py-6">
-            <div className="space-y-2">
-              <h1 className="text-2xl font-bold">Super Admin Settings</h1>
-              <p className="text-sm text-muted-foreground">
-                This page is isolated from franchise settings. No company/franchise data is shown or editable here.
-              </p>
-            </div>
-            <div className="mt-6 text-sm text-muted-foreground">
-              We can add global platform settings here later (branding defaults, app-level toggles, security policies, etc.).
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    )
-  }
-
   // Don't render if no franchise ID
   if (!franchiseId) {
     return (
@@ -120,6 +98,6 @@ export default function SettingsPage() {
     )
   }
 
-  // Super admin: show aggregated view wrapper
-  return <ComprehensiveSettings franchiseId={franchiseId} />
+  // Render comprehensive settings wrapper
+  return <ComprehensiveSettings franchiseId={franchiseId} userRole={userRole || undefined} />
 }

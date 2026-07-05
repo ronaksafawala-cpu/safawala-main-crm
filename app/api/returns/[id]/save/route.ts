@@ -16,7 +16,7 @@ export async function POST(
 ) {
   try {
     // Authenticate and check permissions
-    const auth = await authenticateRequest(request, { minRole: "staff", requirePermission: "returns" })
+    const auth = await authenticateRequest(request, { minRole: "staff" })
     if (!auth.authorized) {
       return NextResponse.json(auth.error, { status: auth.statusCode || 401 })
     }

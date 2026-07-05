@@ -161,26 +161,16 @@ export const testConnection = async () => {
   }
 }
 
-// Get current user (mock function - replace with actual auth)
+// Legacy helper intentionally fails closed. Callers must pass an explicit authenticated user id.
 const getCurrentUser = async () => {
-  const { data, error } = await supabase.from("users").select("*").eq("email", "admin@safawala.com").single()
-
-  if (error) {
-    console.error("Error getting current user:", error)
-    return null
-  }
-  return data
+  console.warn("getCurrentUser() in lib/supabase.ts no longer provides a fallback user. Pass an explicit userId instead.")
+  return null
 }
 
-// Get current franchise (mock function - replace with actual logic)
+// Legacy helper intentionally fails closed. Callers must pass an explicit franchise id.
 const getCurrentFranchise = async () => {
-  const { data, error } = await supabase.from("franchises").select("*").limit(1).single()
-
-  if (error) {
-    console.error("Error getting current franchise:", error)
-    return null
-  }
-  return data
+  console.warn("getCurrentFranchise() in lib/supabase.ts no longer provides a fallback franchise. Pass an explicit franchiseId instead.")
+  return null
 }
 
 // Helper functions for database operations

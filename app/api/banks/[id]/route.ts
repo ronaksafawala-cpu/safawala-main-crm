@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer as supabase } from '@/lib/supabase-server-simple'
+import { authenticateRequest, AuthMiddleware } from '@/lib/auth-middleware'
 
 // Validation schemas (removed ACCOUNT_TYPES)
 const IFSC_PATTERN = /^[A-Z]{4}0[A-Z0-9]{6}$/
@@ -37,16 +38,28 @@ export async function GET(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const auth = await authenticateRequest(request, { minRole: 'franchise_admin' })
+  if (!auth.authorized) {
+    return NextResponse.json(auth.error, { status: auth.statusCode })
+  }
   try {
+    const user = auth.user!
     const { id } = params
     const { searchParams } = new URL(request.url)
-    const orgId = searchParams.get('org_id') || '00000000-0000-0000-0000-000000000001'
+    const requestedOrgId = searchParams.get('org_id')
+    const orgId = user.is_super_admin ? requestedOrgId : (user.franchise_id || null)
 
     if (!id) {
       return NextResponse.json(
         { error: 'Bank ID is required' },
         { status: 400 }
       )
+    }
+    if (!orgId) {
+      return NextResponse.json({ error: 'Organization context is required' }, { status: 400 })
+    }
+    if (!AuthMiddleware.canAccessFranchise(user, orgId)) {
+      return NextResponse.json({ error: 'Access denied to this organization' }, { status: 403 })
     }
 
     const { data, error } = await supabase
@@ -89,11 +102,16 @@ export async function PUT(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const auth = await authenticateRequest(request, { minRole: 'franchise_admin' })
+  if (!auth.authorized) {
+    return NextResponse.json(auth.error, { status: auth.statusCode })
+  }
   try {
+    const user = auth.user!
     const { id } = params
     const body = await request.json()
     const {
-      org_id = '00000000-0000-0000-0000-000000000001',
+      org_id,
       bank_name,
       account_holder,
       account_number,
@@ -106,11 +124,19 @@ export async function PUT(
       show_on_quotes
     } = body
 
+    const effectiveOrgId = user.is_super_admin ? (org_id || null) : (user.franchise_id || null)
+
     if (!id) {
       return NextResponse.json(
         { error: 'Bank ID is required' },
         { status: 400 }
       )
+    }
+    if (!effectiveOrgId) {
+      return NextResponse.json({ error: 'Organization context is required' }, { status: 400 })
+    }
+    if (!AuthMiddleware.canAccessFranchise(user, effectiveOrgId)) {
+      return NextResponse.json({ error: 'Access denied to this organization' }, { status: 403 })
     }
 
     // Validate input
@@ -127,7 +153,7 @@ export async function PUT(
       .from('banks')
       .select('id')
       .eq('id', id)
-      .eq('org_id', org_id)
+      .eq('org_id', effectiveOrgId)
       .single()
 
     if (fetchError || !existingBank) {
@@ -155,7 +181,7 @@ export async function PUT(
       .from('banks')
       .update(updateData)
       .eq('id', id)
-      .eq('org_id', org_id)
+      .eq('org_id', effectiveOrgId)
       .select()
       .single()
 
@@ -195,16 +221,28 @@ export async function DELETE(
   request: NextRequest,
   { params }: { params: { id: string } }
 ) {
+  const auth = await authenticateRequest(request, { minRole: 'franchise_admin' })
+  if (!auth.authorized) {
+    return NextResponse.json(auth.error, { status: auth.statusCode })
+  }
   try {
+    const user = auth.user!
     const { id } = params
     const { searchParams } = new URL(request.url)
-    const orgId = searchParams.get('org_id') || '00000000-0000-0000-0000-000000000001'
+    const requestedOrgId = searchParams.get('org_id')
+    const orgId = user.is_super_admin ? requestedOrgId : (user.franchise_id || null)
 
     if (!id) {
       return NextResponse.json(
         { error: 'Bank ID is required' },
         { status: 400 }
       )
+    }
+    if (!orgId) {
+      return NextResponse.json({ error: 'Organization context is required' }, { status: 400 })
+    }
+    if (!AuthMiddleware.canAccessFranchise(user, orgId)) {
+      return NextResponse.json({ error: 'Access denied to this organization' }, { status: 403 })
     }
 
     // Get bank details before deletion (for QR file cleanup)

@@ -1,15 +1,30 @@
 import { createClient } from "@/lib/supabase/server"
 import { NextRequest, NextResponse } from "next/server"
+import { requireAuth, AuthMiddleware } from "@/lib/auth-middleware"
 
 export async function GET(request: NextRequest) {
+  const authResult = await requireAuth(request, 'readonly')
+  if (!authResult.success) {
+    return NextResponse.json(authResult.response, { status: 401 })
+  }
+
+  const user = authResult.authContext!.user
   const supabase = createClient()
-  const franchiseId = request.nextUrl.searchParams.get("franchise_id")
+  const requestedFranchiseId = request.nextUrl.searchParams.get("franchise_id")
+  const franchiseId = user.is_super_admin ? requestedFranchiseId : (user.franchise_id || null)
   const type = request.nextUrl.searchParams.get("type") || "rental" // Default to rental
 
   if (!franchiseId) {
     return NextResponse.json(
       { error: "franchise_id is required" },
       { status: 400 }
+    )
+  }
+
+  if (!AuthMiddleware.canAccessFranchise(user, franchiseId)) {
+    return NextResponse.json(
+      { error: "Access denied to this franchise" },
+      { status: 403 }
     )
   }
 
@@ -91,6 +106,12 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const authResult = await requireAuth(request, 'readonly')
+  if (!authResult.success) {
+    return NextResponse.json(authResult.response, { status: 401 })
+  }
+
+  const user = authResult.authContext!.user
   const supabase = createClient()
   const body = await request.json()
 
@@ -100,6 +121,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(
       { error: "franchise_id, type, and invoice_number are required" },
       { status: 400 }
+    )
+  }
+
+  if (!AuthMiddleware.canAccessFranchise(user, franchise_id)) {
+    return NextResponse.json(
+      { error: "Access denied to this franchise" },
+      { status: 403 }
     )
   }
 
@@ -126,6 +154,12 @@ export async function POST(request: NextRequest) {
 }
 
 export async function PUT(request: NextRequest) {
+  const authResult = await requireAuth(request, 'readonly')
+  if (!authResult.success) {
+    return NextResponse.json(authResult.response, { status: 401 })
+  }
+
+  const user = authResult.authContext!.user
   const supabase = createClient()
   const body = await request.json()
 
@@ -135,6 +169,13 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json(
       { error: "franchise_id and type are required" },
       { status: 400 }
+    )
+  }
+
+  if (!AuthMiddleware.canAccessFranchise(user, franchise_id)) {
+    return NextResponse.json(
+      { error: "Access denied to this franchise" },
+      { status: 403 }
     )
   }
 

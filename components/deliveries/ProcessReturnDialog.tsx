@@ -104,16 +104,8 @@ export function ProcessReturnDialog({
         .single()
 
       if (error) {
-        console.warn('[ProcessReturn] Could not load delivery notes/photo:', error)
         return
       }
-
-      console.log('[ProcessReturn] Loaded delivery data from DB:', {
-        notes: data?.return_notes,
-        photo: data?.return_photo_url ? 'YES' : 'NO',
-        confirmation_name: data?.return_confirmation_name,
-        confirmation_phone: data?.return_confirmation_phone,
-      })
 
       // Set the loaded values
       setNotes(data?.return_notes || "")
@@ -123,8 +115,7 @@ export function ProcessReturnDialog({
       setItems([])
       setPhotoFile(null)
       setShowCamera(false)
-    } catch (err) {
-      console.error('[ProcessReturn] Error loading delivery data:', err)
+    } catch {
     }
   }
 
@@ -132,7 +123,6 @@ export function ProcessReturnDialog({
   useEffect(() => {
     if (!open) {
       // Clear state when dialog closes
-      console.log('[ProcessReturn] Dialog closed, cleared all state')
       setItems([])
       setClientName("")
       setClientPhone("")
@@ -154,14 +144,11 @@ export function ProcessReturnDialog({
 
   const loadDeliveryItems = async () => {
     if (!delivery?.booking_id) {
-      console.log('[ProcessReturn] No booking_id')
       return
     }
     
     setLoading(true)
     try {
-      console.log('[ProcessReturn] Loading items for booking_id:', delivery.booking_id, 'source:', delivery.booking_source)
-      
       // Determine table and foreign key based on booking source
       const table = delivery.booking_source === "package_booking" 
         ? "package_booking_product_items" 
@@ -177,8 +164,6 @@ export function ProcessReturnDialog({
         .select("*")
         .eq(foreignKey, delivery.booking_id)
 
-      console.log('[ProcessReturn] Query result:', { table, foreignKey, data, error })
-
       if (error) throw error
 
       // Map items with return quantities (default to 0)
@@ -189,8 +174,6 @@ export function ProcessReturnDialog({
         const fresh = item.return_fresh !== null && item.return_fresh !== undefined 
           ? item.return_fresh 
           : (item.quantity || 1) - lost - used
-        
-        console.log(`[ProcessReturn] Item ${item.id}: return_lost_damaged=${lost}, return_used=${used}, return_fresh=${item.return_fresh}, notes="${item.return_notes}", photo=${item.return_photo_url ? 'YES' : 'NO'}`)
         
         return {
           id: item.id,
@@ -207,10 +190,8 @@ export function ProcessReturnDialog({
         }
       })
 
-      console.log('[ProcessReturn] Mapped items:', mappedItems)
       setItems(mappedItems)
     } catch (err: any) {
-      console.error("Error loading items:", err)
       toast({
         title: "Error",
         description: "Failed to load delivery items",
@@ -258,8 +239,7 @@ export function ProcessReturnDialog({
           videoRef.srcObject = mediaStream
         }
       }, 100)
-    } catch (err) {
-      console.error("Camera error:", err)
+    } catch {
       toast({
         title: "Camera Error",
         description: "Could not access camera. Please check permissions.",
@@ -359,7 +339,6 @@ export function ProcessReturnDialog({
       onSuccess()
       onClose()
     } catch (err: any) {
-      console.error("Process return error:", err)
       toast({
         title: "Error",
         description: err.message || "Failed to process return",

@@ -9,6 +9,7 @@
  */
 
 import { NextRequest, NextResponse } from 'next/server'
+import { requireAuth } from '@/lib/auth-middleware'
 
 // List of all Indian areas and regions (can be expanded)
 // This includes popular areas, sectors, colonies, neighborhoods
@@ -165,6 +166,11 @@ function extractVenueAndArea(address: string): ExtractionResult {
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireAuth(request, 'staff')
+    if (!auth.success) {
+      return NextResponse.json(auth.response, { status: 401 })
+    }
+
     const { address, addresses } = await request.json()
 
     // Handle single address

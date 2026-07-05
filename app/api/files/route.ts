@@ -1,7 +1,13 @@
 import { type NextRequest, NextResponse } from "next/server"
+import { requireAuth } from "@/lib/auth-middleware"
 
 export async function GET(request: NextRequest) {
   try {
+    const auth = await requireAuth(request, "staff")
+    if (!auth.success) {
+      return NextResponse.json(auth.response, { status: 401 })
+    }
+
     const { searchParams } = new URL(request.url)
     const path = searchParams.get("path")
 

@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from "next/server"
 import { supabaseServer as supabase } from "@/lib/supabase-server-simple"
+import { authenticateRequest } from "@/lib/auth-middleware"
 
 export const dynamic = "force-dynamic"
 
 export async function GET(req: NextRequest) {
+  const auth = await authenticateRequest(req, { minRole: 'staff' })
+  if (!auth.authorized) {
+    return NextResponse.json(auth.error, { status: auth.statusCode })
+  }
   try {
     const categoryId = req.nextUrl.searchParams.get("category_id")
 

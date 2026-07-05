@@ -1,45 +1,64 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer as supabase } from '@/lib/supabase-server-simple'
+import { requireAuth, AuthMiddleware } from '@/lib/auth-middleware'
+
+function resolveFranchiseId(requestedFranchiseId: string | null, authUser: { franchise_id?: string; is_super_admin?: boolean }) {
+  if (requestedFranchiseId && requestedFranchiseId !== 'null' && requestedFranchiseId !== 'undefined') {
+    return requestedFranchiseId
+  }
+
+  if (authUser.franchise_id) {
+    return authUser.franchise_id
+  }
+
+  if (authUser.is_super_admin) {
+    return null
+  }
+
+  return null
+}
+
+function canAccessProfileUser(
+  authUser: { id: string; role: string; is_super_admin: boolean },
+  targetUserId?: string | null
+) {
+  if (!targetUserId) return true
+  if (authUser.is_super_admin) return true
+  if (authUser.role === 'franchise_admin') return true
+  return authUser.id === targetUserId
+}
 
 export async function GET(request: NextRequest) {
   try {
+    const authResult = await requireAuth(request, 'readonly')
+    if (!authResult.success) {
+      return NextResponse.json(authResult.response, { status: 401 })
+    }
+
+    const authUser = authResult.authContext!.user
     const { searchParams } = new URL(request.url)
-    let franchiseId = searchParams.get('franchise_id')
+    const requestedFranchiseId = searchParams.get('franchise_id')
     const userId = searchParams.get('user_id')
+    const franchiseId = resolveFranchiseId(requestedFranchiseId, authUser)
 
-    // If no franchise_id provided, try to get user's franchise or default for super admin
-    if (!franchiseId && userId) {
-      console.log('[Profile API] No franchise_id, fetching from user record...')
-      
-      const { data: userData } = await supabase
-        .from('users')
-        .select('franchise_id, role')
-        .eq('id', userId)
-        .single()
-
-      if (userData?.franchise_id) {
-        franchiseId = userData.franchise_id
-        console.log(`[Profile API] Found franchise_id from user: ${franchiseId}`)
-      } else if (userData?.role === 'super_admin') {
-        // Get first franchise as default for super admin
-        const { data: franchises } = await supabase
-          .from('franchises')
-          .select('id')
-          .eq('is_active', true)
-          .order('created_at', { ascending: true })
-          .limit(1)
-        
-        if (franchises && franchises.length > 0) {
-          franchiseId = franchises[0].id
-          console.log(`[Profile API] Using default franchise for super admin: ${franchiseId}`)
-        }
-      }
+    if (userId && !canAccessProfileUser(authUser, userId)) {
+      return NextResponse.json(
+        { error: 'You do not have permission to view this profile' },
+        { status: 403 }
+      )
     }
 
     if (!franchiseId) {
       return NextResponse.json(
-        { error: 'Franchise ID is required' },
+        { error: 'Franchise ID is required for this user context' },
         { status: 400 }
+      )
+    }
+
+    if (!AuthMiddleware.canAccessFranchise(authUser, franchiseId)) {
+      return NextResponse.json(
+        { error: 'Access denied to this franchise' },
+        { status: 403 }
       )
     }
 
@@ -96,6 +115,12 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const authResult = await requireAuth(request, 'readonly')
+    if (!authResult.success) {
+      return NextResponse.json(authResult.response, { status: 401 })
+    }
+
+    const authUser = authResult.authContext!.user
     const body = await request.json()
     const {
       franchise_id,
@@ -120,16 +145,40 @@ export async function POST(request: NextRequest) {
       signature_url
     } = body
 
-    if (!franchise_id || !first_name || !last_name || !email) {
+    const effectiveFranchiseId = resolveFranchiseId(franchise_id || null, authUser)
+    const effectiveUserId = user_id || authUser.id
+
+    if (!effectiveFranchiseId) {
       return NextResponse.json(
-        { error: 'Franchise ID, first name, last name, and email are required' },
+        { error: 'Franchise ID is required for this user context' },
+        { status: 400 }
+      )
+    }
+
+    if (!AuthMiddleware.canAccessFranchise(authUser, effectiveFranchiseId)) {
+      return NextResponse.json(
+        { error: 'Access denied to this franchise' },
+        { status: 403 }
+      )
+    }
+
+    if (!canAccessProfileUser(authUser, effectiveUserId)) {
+      return NextResponse.json(
+        { error: 'You do not have permission to create this profile' },
+        { status: 403 }
+      )
+    }
+
+    if (!first_name || !last_name || !email) {
+      return NextResponse.json(
+        { error: 'First name, last name, and email are required' },
         { status: 400 }
       )
     }
 
     const profileData = {
-      franchise_id,
-      user_id: user_id || null,
+      franchise_id: effectiveFranchiseId,
+      user_id: effectiveUserId,
       first_name,
       last_name,
       email,
@@ -182,6 +231,12 @@ export async function POST(request: NextRequest) {
 
 export async function PUT(request: NextRequest) {
   try {
+    const authResult = await requireAuth(request, 'readonly')
+    if (!authResult.success) {
+      return NextResponse.json(authResult.response, { status: 401 })
+    }
+
+    const authUser = authResult.authContext!.user
     const body = await request.json()
     console.log('[Profile API PUT] Request body:', {
       hasId: !!body.id,
@@ -207,11 +262,48 @@ export async function PUT(request: NextRequest) {
       profile_photo_url
     } = body
 
-    if (!id || !franchise_id) {
+    if (!id) {
       console.error('[Profile API PUT] Missing required fields:', { id, franchise_id })
       return NextResponse.json(
-        { error: 'Profile ID and franchise ID are required' },
+        { error: 'Profile ID is required' },
         { status: 400 }
+      )
+    }
+
+    const { data: existingProfile, error: existingProfileError } = await supabase
+      .from('user_profiles')
+      .select('id, franchise_id, user_id')
+      .eq('id', id)
+      .single()
+
+    if (existingProfileError) {
+      console.error('[Profile API PUT] Failed to load existing profile:', existingProfileError)
+      return NextResponse.json(
+        { error: 'Profile not found' },
+        { status: 404 }
+      )
+    }
+
+    const effectiveFranchiseId = resolveFranchiseId(franchise_id || existingProfile.franchise_id || null, authUser)
+
+    if (!effectiveFranchiseId) {
+      return NextResponse.json(
+        { error: 'Franchise ID is required for this user context' },
+        { status: 400 }
+      )
+    }
+
+    if (!AuthMiddleware.canAccessFranchise(authUser, existingProfile.franchise_id || effectiveFranchiseId)) {
+      return NextResponse.json(
+        { error: 'Access denied to this franchise' },
+        { status: 403 }
+      )
+    }
+
+    if (!canAccessProfileUser(authUser, existingProfile.user_id)) {
+      return NextResponse.json(
+        { error: 'You do not have permission to update this profile' },
+        { status: 403 }
       )
     }
 
@@ -241,7 +333,7 @@ export async function PUT(request: NextRequest) {
       .from('user_profiles')
       .update(updateData)
       .eq('id', id)
-      .eq('franchise_id', franchise_id)
+      .eq('franchise_id', existingProfile.franchise_id || effectiveFranchiseId)
       .select()
       .single()
 
@@ -275,13 +367,48 @@ export async function PUT(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
+    const authResult = await requireAuth(request, 'readonly')
+    if (!authResult.success) {
+      return NextResponse.json(authResult.response, { status: 401 })
+    }
+
+    const authUser = authResult.authContext!.user
     const body = await request.json()
     const { id, franchise_id } = body
 
-    if (!id || !franchise_id) {
+    if (!id) {
       return NextResponse.json(
-        { error: 'Profile ID and franchise ID are required' },
+        { error: 'Profile ID is required' },
         { status: 400 }
+      )
+    }
+
+    const { data: existingProfile, error: existingProfileError } = await supabase
+      .from('user_profiles')
+      .select('id, franchise_id, user_id')
+      .eq('id', id)
+      .single()
+
+    if (existingProfileError) {
+      return NextResponse.json(
+        { error: 'Profile not found' },
+        { status: 404 }
+      )
+    }
+
+    const effectiveFranchiseId = resolveFranchiseId(franchise_id || existingProfile.franchise_id || null, authUser)
+
+    if (!effectiveFranchiseId || !AuthMiddleware.canAccessFranchise(authUser, existingProfile.franchise_id || effectiveFranchiseId)) {
+      return NextResponse.json(
+        { error: 'Access denied to this franchise' },
+        { status: 403 }
+      )
+    }
+
+    if (!canAccessProfileUser(authUser, existingProfile.user_id)) {
+      return NextResponse.json(
+        { error: 'You do not have permission to delete this profile' },
+        { status: 403 }
       )
     }
 
@@ -289,7 +416,7 @@ export async function DELETE(request: NextRequest) {
       .from('user_profiles')
       .delete()
       .eq('id', id)
-      .eq('franchise_id', franchise_id)
+      .eq('franchise_id', existingProfile.franchise_id || effectiveFranchiseId)
 
     if (error) {
       console.error('Error deleting profile:', error)

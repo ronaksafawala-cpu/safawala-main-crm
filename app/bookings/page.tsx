@@ -748,15 +748,15 @@ export default function BookingsPage() {
 
     const matchesStatus = statusFilter === "all" || 
       (statusFilter === "pending_payment" 
-        ? (booking.status === "pending_payment" || hasOutstandingBalance)
+        ? hasOutstandingBalance
         : statusFilter === "pending_selection"
-          ? (!(booking as any).has_items && booking.status !== "cancelled" && booking.status !== "returned")
+          ? !(booking as any).has_items && booking.status !== "cancelled" && booking.status !== "returned"
           : statusFilter === "pending_modification" 
-            ? (booking.has_modifications === true && booking.status !== "cancelled" && booking.status !== "order_complete")
+            ? booking.has_modifications === true && booking.status !== "order_complete"
             : statusFilter === "ready_for_dispatch"
-              ? (booking.status === "confirmed" && booking.status !== "cancelled")
+              ? booking.status === "confirmed"
               : statusFilter === "in_use"
-                ? (booking.status === "delivered" && booking.status !== "cancelled")
+                ? booking.status === "delivered"
                 : booking.status === statusFilter)
 
     // booking.type: 'rental' | 'sale' for product orders, 'package' for packages
@@ -2071,8 +2071,7 @@ export default function BookingsPage() {
                   variant="outline" 
                   className="flex-1"
                   onClick={() => {
-                    // TODO: Implement PDF download
-                    console.log('Download PDF for booking:', selectedBooking.id)
+                    window.open(`/create-invoice?mode=edit&id=${selectedBooking.id}&print=true`, "_blank")
                   }}
                 >
                   <Download className="h-4 w-4 mr-2" />
@@ -2084,7 +2083,10 @@ export default function BookingsPage() {
                   onClick={() => {
                     const bookingNumber = selectedBooking.booking_number || (selectedBooking as any).order_number || (selectedBooking as any).package_number
                     navigator.clipboard.writeText(bookingNumber || '')
-                    // TODO: Add toast notification
+                    toast({
+                      title: "Booking Number Copied",
+                      description: bookingNumber ? `${bookingNumber} copied to clipboard` : "Booking number copied to clipboard",
+                    })
                   }}
                 >
                   <Share2 className="h-4 w-4 mr-2" />

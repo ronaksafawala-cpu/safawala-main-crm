@@ -80,34 +80,23 @@ export function UnifiedHandoverDialog({
       if (!open || !delivery) return
       setLoading(true)
       try {
-        console.log('📦 Loading handover data for delivery:', { 
-          delivery_id: delivery.id, 
-          booking_id: delivery.booking_id, 
-          booking_source: delivery.booking_source 
-        })
-
         // Get booking items
         let productItems: any[] = []
         
         if (!delivery.booking_id || !delivery.booking_source) {
-          console.warn('⚠️ Missing booking_id or booking_source in delivery')
           setItems([])
           setLoading(false)
           return
         }
 
         if (delivery.booking_source === 'product_order') {
-          console.log('📥 Fetching product_order items...')
           const res = await fetch(`/api/product-orders/${delivery.booking_id}`)
           if (res.ok) {
             const json = await res.json()
             productItems = json.items || json.data?.items || []
-            console.log('✅ Product order items:', productItems)
           } else {
-            console.warn('⚠️ Product order API error:', res.status)
           }
         } else if (delivery.booking_source === 'package_booking') {
-          console.log('📥 Fetching package_booking items...')
           const res = await fetch(`/api/package-bookings/${delivery.booking_id}`)
           if (res.ok) {
             const json = await res.json()
@@ -117,14 +106,11 @@ export function UnifiedHandoverDialog({
                 quantity: 1 
               }))
             ) || []
-            console.log('✅ Package booking items:', productItems)
           } else {
-            console.warn('⚠️ Package booking API error:', res.status)
           }
         }
 
         if (productItems.length === 0) {
-          console.warn('⚠️ No items found in booking')
           setItems([])
           setLoading(false)
           return
@@ -150,11 +136,9 @@ export function UnifiedHandoverDialog({
           })
         )
 
-        console.log('✅ Items with details:', withDetails)
         setItems(withDetails)
         setLoading(false)
-      } catch (e) {
-        console.error('❌ Failed loading handover data', e)
+      } catch {
         setItems([])
         setLoading(false)
       }

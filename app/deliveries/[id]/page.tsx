@@ -15,9 +15,6 @@ function useSupabaseClient() {
   return useMemo(() => {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL || ""
     const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""
-    if (!url || !key) {
-      console.warn("Supabase env missing in DeliveryReturnPage; client calls may fail")
-    }
     return createClient(url, key)
   }, [])
 }
@@ -80,8 +77,7 @@ export default function DeliveryReturnPage() {
       } else {
         setItems([])
       }
-    } catch (e) {
-      console.error("Failed loading delivery", e)
+    } catch {
     } finally {
       setLoading(false)
     }

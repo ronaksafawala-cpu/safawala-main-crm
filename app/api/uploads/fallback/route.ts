@@ -1,13 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { requireAuth } from '@/lib/auth-middleware'
 
 // Fallback upload endpoint for development when storage bucket doesn't exist
 export async function PUT(request: NextRequest) {
   try {
+    const auth = await requireAuth(request, 'staff')
+    if (!auth.success) {
+      return NextResponse.json(auth.response, { status: 401 })
+    }
+
     const { searchParams } = new URL(request.url)
     const key = searchParams.get('key')
     
     if (!key) {
       return NextResponse.json({ error: 'Missing key parameter' }, { status: 400 })
+    }
+
+    if (key.includes('..') || key.includes('\\') || key.startsWith('/')) {
+      return NextResponse.json({ error: 'Invalid key parameter' }, { status: 400 })
     }
 
     // Read the file data

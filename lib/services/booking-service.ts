@@ -141,20 +141,7 @@ export class BookingService {
 
       let franchiseId = quote.franchise_id
       if (!franchiseId) {
-        const { data: franchise, error: franchiseError } = await supabase
-          .from("franchises")
-          .select("id")
-          .eq("is_active", true)
-          .limit(1)
-          .single()
-
-        if (franchiseError || !franchise) {
-          console.error("Error fetching franchise:", franchiseError)
-          throw new Error("No active franchise found. Please ensure at least one franchise is active.")
-        }
-
-        franchiseId = franchise.id
-        console.log("Using first active franchise_id:", franchiseId)
+        throw new Error("Quote is missing franchise context. Please refresh the quote and try again.")
       }
 
       let createdBy = quote.created_by
@@ -166,19 +153,7 @@ export class BookingService {
         if (user) {
           createdBy = user.id
         } else {
-          // Fallback: get first admin user or use system user
-          const { data: adminUser } = await supabase
-            .from("users")
-            .select("id")
-            .eq("role", "super_admin")
-            .limit(1)
-            .single()
-
-          if (adminUser) {
-            createdBy = adminUser.id
-          } else {
-            throw new Error("Unable to determine user for booking creation")
-          }
+          throw new Error("Unable to determine authenticated user for booking creation")
         }
       }
 

@@ -1,166 +1,118 @@
-import { supabaseServer as supabase } from '@/lib/supabase-server-simple';
-import { NextRequest, NextResponse } from 'next/server';
+import { supabaseServer as supabase } from '@/lib/supabase-server-simple'
+import { NextRequest, NextResponse } from 'next/server'
+import { authenticateRequest, AuthMiddleware } from '@/lib/auth-middleware'
 
-// Helper to map Postgres error codes for clearer responses
 function mapDbError(e: any, context: string) {
-  if (!e) return { status: 500, error: `${context} failed` };
-  const code = e.code || e.details || '';
-  // Undefined table
+  if (!e) return { status: 500, error: `${context} failed` }
+  const code = e.code || e.details || ''
   if (code === '42P01' || /relation .* does not exist/i.test(e.message || '')) {
-    return { status: 500, error: 'Offers tables missing. Run OFFERS_SYSTEM_MIGRATION.sql on the database.' };
+    return { status: 500, error: 'Offers tables missing. Run OFFERS_SYSTEM_MIGRATION.sql on the database.' }
   }
-  return { status: 500, error: `${context} failed` };
+  return { status: 500, error: `${context} failed` }
 }
 
-class AuthError extends Error {}
-
-export const dynamic = 'force-dynamic';
-
-/**
- * Service-role auth helper
- * Validates session and returns user context
- * No RLS checks - auth is enforced at API layer only
- */
-async function getUserFromSession(request: NextRequest) {
-  try {
-    // Try to get the session cookie (newer format)
-    let sessionCookie = request.cookies.get("safawala_session")
-    
-    // Fallback to safawala_user cookie if session not found (current format)
-    if (!sessionCookie) {
-      sessionCookie = request.cookies.get("safawala_user")
-    }
-    
-    if (!sessionCookie?.value) {
-      console.error('[Auth] No session cookie found (checked safawala_session and safawala_user)');
-      throw new Error("No session found")
-    }
-
-    const sessionData = JSON.parse(sessionCookie.value)
-    if (!sessionData.id) {
-      console.error('[Auth] Invalid session data: missing id');
-      throw new Error("Invalid session data")
-    }
-
-    // Use service role to fetch user details (bypasses RLS)
-    const { data: user, error } = await supabase
-      .from("users")
-      .select("id, franchise_id, role")
-      .eq("id", sessionData.id)
-      .eq("is_active", true)
-      .single()
-
-    if (error) {
-      console.error('[Auth] User query error:', error.message);
-      throw new Error("User not found")
-    }
-
-    if (!user) {
-      console.error('[Auth] User not found in database');
-      throw new Error("User not found")
-    }
-
-    const result = {
-      userId: user.id,
-      franchiseId: user.franchise_id,
-      role: user.role,
-      isSuperAdmin: user.role === "super_admin"
-    };
-
-    console.log('[Auth] User authenticated:', { userId: result.userId, franchiseId: result.franchiseId, role: result.role });
-    return result;
-  } catch (error) {
-    console.error('[Auth] Authentication failed:', error);
-    throw new AuthError((error as Error).message || 'auth_failed');
+function resolveFranchiseId(requestedFranchiseId: string | null | undefined, user: any) {
+  if (requestedFranchiseId && requestedFranchiseId !== 'null' && requestedFranchiseId !== 'undefined') {
+    return requestedFranchiseId
   }
+  return user.franchise_id || null
 }
+
+export const dynamic = 'force-dynamic'
 
 export async function GET(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    const code = searchParams.get('code');
+    const auth = await authenticateRequest(request, { minRole: 'franchise_admin' })
+    if (!auth.authorized) {
+      return NextResponse.json(auth.error, { status: auth.statusCode || 401 })
+    }
 
-    console.log('[Offers][GET] Starting request');
+    const user = auth.user!
+    const { searchParams } = new URL(request.url)
+    const code = searchParams.get('code')
+    const franchiseId = resolveFranchiseId(searchParams.get('franchise_id'), user)
 
-    // Get user from session
-    const userContext = await getUserFromSession(request);
-    console.log('[Offers][GET] User context:', { userId: userContext.userId, franchiseId: userContext.franchiseId });
+    if (!franchiseId) {
+      return NextResponse.json({ error: 'Franchise context is required' }, { status: 400 })
+    }
+
+    if (!AuthMiddleware.canAccessFranchise(user, franchiseId)) {
+      return NextResponse.json({ error: 'Access denied to this franchise' }, { status: 403 })
+    }
 
     let query = supabase
       .from('offers')
       .select('*')
-      .eq('franchise_id', userContext.franchiseId)
-      .eq('is_active', true)
-      .order('created_at', { ascending: false });
+      .eq('franchise_id', franchiseId)
+      .order('created_at', { ascending: false })
 
-    // If code is provided, filter by code
     if (code) {
-      query = query.ilike('code', `%${code}%`);
+      query = query.ilike('code', `%${code}%`)
     }
 
-    const { data: offers, error } = await query;
+    const { data: offers, error } = await query
 
     if (error) {
-      console.error('[Offers][GET] Query error:', error);
-      const mapped = mapDbError(error, 'Fetch offers');
-      return NextResponse.json({ error: mapped.error }, { status: mapped.status });
+      const mapped = mapDbError(error, 'Fetch offers')
+      return NextResponse.json({ error: mapped.error }, { status: mapped.status })
     }
 
-    console.log('[Offers][GET] Success: loaded', offers?.length || 0, 'offers');
-    return NextResponse.json({ offers: offers || [] });
+    return NextResponse.json({ offers: offers || [] })
   } catch (error) {
-    if (error instanceof AuthError) {
-      console.error('[Offers][GET] Auth error:', error.message);
-      return NextResponse.json({ error: 'Unauthorized', details: (error as Error).message }, { status: 401 });
-    }
-    console.error('[Offers][GET] Unexpected error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error('[Offers][GET] Unexpected error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const userContext = await getUserFromSession(request);
+    const auth = await authenticateRequest(request, { minRole: 'franchise_admin' })
+    if (!auth.authorized) {
+      return NextResponse.json(auth.error, { status: auth.statusCode || 401 })
+    }
 
-    const body = await request.json();
-    const { code, name, discount_type, discount_value, is_active = true } = body;
+    const user = auth.user!
+    const body = await request.json()
+    const { code, name, discount_type, discount_value, is_active = true } = body
+    const franchiseId = resolveFranchiseId(body.franchise_id, user)
 
-    // Validation
+    if (!franchiseId) {
+      return NextResponse.json({ error: 'Franchise context is required' }, { status: 400 })
+    }
+
+    if (!AuthMiddleware.canAccessFranchise(user, franchiseId)) {
+      return NextResponse.json({ error: 'Access denied to this franchise' }, { status: 403 })
+    }
+
     if (!code || !name || !discount_type || discount_value === undefined) {
-      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+      return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
     }
-
     if (code.length < 3 || code.length > 20) {
-      return NextResponse.json({ error: 'Code must be 3-20 characters' }, { status: 400 });
+      return NextResponse.json({ error: 'Code must be 3-20 characters' }, { status: 400 })
     }
-
     if (!['percent', 'fixed'].includes(discount_type)) {
-      return NextResponse.json({ error: 'Invalid discount type' }, { status: 400 });
+      return NextResponse.json({ error: 'Invalid discount type' }, { status: 400 })
     }
-
     if (discount_value <= 0) {
-      return NextResponse.json({ error: 'Discount value must be greater than 0' }, { status: 400 });
+      return NextResponse.json({ error: 'Discount value must be greater than 0' }, { status: 400 })
     }
-
     if (discount_type === 'percent' && discount_value > 100) {
-      return NextResponse.json({ error: 'Percentage discount cannot exceed 100%' }, { status: 400 });
+      return NextResponse.json({ error: 'Percentage discount cannot exceed 100%' }, { status: 400 })
     }
 
-    // Check if code already exists for this franchise
     const { data: existingOffer, error: checkError } = await supabase
       .from('offers')
       .select('id')
       .eq('code', code.toUpperCase())
-      .eq('franchise_id', userContext.franchiseId)
-      .single();
-    if (checkError && checkError.code !== 'PGRST116') { // PGRST116 = No rows found (PostgREST)
-      console.error('[Offers][POST] Existence check error:', checkError);
-      const mapped = mapDbError(checkError, 'Offer existence check');
-      return NextResponse.json({ error: mapped.error }, { status: mapped.status });
-    }
-    if (existingOffer) return NextResponse.json({ error: 'Offer code already exists' }, { status: 409 });
+      .eq('franchise_id', franchiseId)
+      .single()
 
-    // Create offer
+    if (checkError && checkError.code !== 'PGRST116') {
+      const mapped = mapDbError(checkError, 'Offer existence check')
+      return NextResponse.json({ error: mapped.error }, { status: mapped.status })
+    }
+    if (existingOffer) return NextResponse.json({ error: 'Offer code already exists' }, { status: 409 })
+
     const { data: offer, error: insertError } = await supabase
       .from('offers')
       .insert({
@@ -169,127 +121,145 @@ export async function POST(request: NextRequest) {
         discount_type,
         discount_value,
         is_active,
-        franchise_id: userContext.franchiseId
+        franchise_id: franchiseId,
       })
       .select()
-      .single();
+      .single()
+
     if (insertError) {
-      console.error('[Offers][POST] Insert error:', insertError);
-      const mapped = mapDbError(insertError, 'Create offer');
-      return NextResponse.json({ error: mapped.error }, { status: mapped.status });
+      const mapped = mapDbError(insertError, 'Create offer')
+      return NextResponse.json({ error: mapped.error }, { status: mapped.status })
     }
 
-    return NextResponse.json({ offer }, { status: 201 });
+    return NextResponse.json({ offer }, { status: 201 })
   } catch (error) {
-    if (error instanceof AuthError) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    console.error('[Offers][POST] Unexpected error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error('[Offers][POST] Unexpected error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 
 export async function PUT(request: NextRequest) {
   try {
-    const userContext = await getUserFromSession(request);
+    const auth = await authenticateRequest(request, { minRole: 'franchise_admin' })
+    if (!auth.authorized) {
+      return NextResponse.json(auth.error, { status: auth.statusCode || 401 })
+    }
 
-    const body = await request.json();
-    const { id, name, discount_value, is_active } = body;
+    const user = auth.user!
+    const body = await request.json()
+    const { id, name, discount_value, is_active } = body
 
     if (!id) {
-      return NextResponse.json({ error: 'Offer ID is required' }, { status: 400 });
+      return NextResponse.json({ error: 'Offer ID is required' }, { status: 400 })
     }
 
-    // Check if offer exists and belongs to user's franchise
     const { data: existingOffer, error: checkError } = await supabase
       .from('offers')
-      .select('id')
+      .select('id, franchise_id')
       .eq('id', id)
-      .eq('franchise_id', userContext.franchiseId)
-      .single();
-    if (checkError) {
-      if (checkError.code === 'PGRST116') return NextResponse.json({ error: 'Offer not found' }, { status: 404 });
-      console.error('[Offers][PUT] Existence check error:', checkError);
-      const mapped = mapDbError(checkError, 'Fetch offer');
-      return NextResponse.json({ error: mapped.error }, { status: mapped.status });
-    }
-    if (!existingOffer) return NextResponse.json({ error: 'Offer not found' }, { status: 404 });
+      .single()
 
-    // Prepare update data
-    const updateData: any = {};
-    if (name !== undefined) updateData.name = name.trim();
+    if (checkError) {
+      if (checkError.code === 'PGRST116') return NextResponse.json({ error: 'Offer not found' }, { status: 404 })
+      const mapped = mapDbError(checkError, 'Fetch offer')
+      return NextResponse.json({ error: mapped.error }, { status: mapped.status })
+    }
+    if (!existingOffer) return NextResponse.json({ error: 'Offer not found' }, { status: 404 })
+
+    if (!AuthMiddleware.canAccessFranchise(user, existingOffer.franchise_id)) {
+      return NextResponse.json({ error: 'Access denied to this franchise' }, { status: 403 })
+    }
+
+    const updateData: any = {}
+    if (name !== undefined) updateData.name = name.trim()
     if (discount_value !== undefined) {
       if (discount_value <= 0) {
-        return NextResponse.json({ error: 'Discount value must be greater than 0' }, { status: 400 });
+        return NextResponse.json({ error: 'Discount value must be greater than 0' }, { status: 400 })
       }
-      updateData.discount_value = discount_value;
+      updateData.discount_value = discount_value
     }
-    if (is_active !== undefined) updateData.is_active = is_active;
+    if (is_active !== undefined) updateData.is_active = is_active
 
-    // Update offer
     const { data: offer, error: updateError } = await supabase
       .from('offers')
       .update(updateData)
       .eq('id', id)
-      .eq('franchise_id', userContext.franchiseId)
+      .eq('franchise_id', existingOffer.franchise_id)
       .select()
-      .single();
+      .single()
+
     if (updateError) {
-      console.error('[Offers][PUT] Update error:', updateError);
-      const mapped = mapDbError(updateError, 'Update offer');
-      return NextResponse.json({ error: mapped.error }, { status: mapped.status });
+      const mapped = mapDbError(updateError, 'Update offer')
+      return NextResponse.json({ error: mapped.error }, { status: mapped.status })
     }
 
-    return NextResponse.json({ offer });
+    return NextResponse.json({ offer })
   } catch (error) {
-    if (error instanceof AuthError) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    console.error('[Offers][PUT] Unexpected error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error('[Offers][PUT] Unexpected error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }
 
 export async function DELETE(request: NextRequest) {
   try {
-    const { searchParams } = new URL(request.url);
-    const id = searchParams.get('id');
-
-    if (!id) {
-      return NextResponse.json({ error: 'Offer ID is required' }, { status: 400 });
+    const auth = await authenticateRequest(request, { minRole: 'franchise_admin' })
+    if (!auth.authorized) {
+      return NextResponse.json(auth.error, { status: auth.statusCode || 401 })
     }
 
-    // Get user from session
-    const userContext = await getUserFromSession(request);
+    const user = auth.user!
+    const { searchParams } = new URL(request.url)
+    const id = searchParams.get('id')
 
-    // Check if offer has redemptions
+    if (!id) {
+      return NextResponse.json({ error: 'Offer ID is required' }, { status: 400 })
+    }
+
+    const { data: existingOffer, error: existingError } = await supabase
+      .from('offers')
+      .select('id, franchise_id')
+      .eq('id', id)
+      .single()
+
+    if (existingError) {
+      if (existingError.code === 'PGRST116') return NextResponse.json({ error: 'Offer not found' }, { status: 404 })
+      const mapped = mapDbError(existingError, 'Fetch offer')
+      return NextResponse.json({ error: mapped.error }, { status: mapped.status })
+    }
+
+    if (!AuthMiddleware.canAccessFranchise(user, existingOffer.franchise_id)) {
+      return NextResponse.json({ error: 'Access denied to this franchise' }, { status: 403 })
+    }
+
     const { data: redemptions, error: redemptionCheckError } = await supabase
       .from('offer_redemptions')
       .select('id')
       .eq('offer_id', id)
-      .limit(1);
+      .limit(1)
+
     if (redemptionCheckError) {
-      console.error('[Offers][DELETE] Redemption check error:', redemptionCheckError);
-      const mapped = mapDbError(redemptionCheckError, 'Redemption check');
-      return NextResponse.json({ error: mapped.error }, { status: mapped.status });
+      const mapped = mapDbError(redemptionCheckError, 'Redemption check')
+      return NextResponse.json({ error: mapped.error }, { status: mapped.status })
     }
 
     if (redemptions && redemptions.length > 0) {
-      return NextResponse.json({ error: 'Cannot delete offer that has been used' }, { status: 409 });
+      return NextResponse.json({ error: 'Cannot delete offer that has been used' }, { status: 409 })
     }
 
-    // Delete offer
     const { error: deleteError } = await supabase
       .from('offers')
       .delete()
       .eq('id', id)
-      .eq('franchise_id', userContext.franchiseId);
+      .eq('franchise_id', existingOffer.franchise_id)
+
     if (deleteError) {
-      console.error('[Offers][DELETE] Delete error:', deleteError);
-      const mapped = mapDbError(deleteError, 'Delete offer');
-      return NextResponse.json({ error: mapped.error }, { status: mapped.status });
+      const mapped = mapDbError(deleteError, 'Delete offer')
+      return NextResponse.json({ error: mapped.error }, { status: mapped.status })
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true })
   } catch (error) {
-    if (error instanceof AuthError) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    console.error('[Offers][DELETE] Unexpected error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    console.error('[Offers][DELETE] Unexpected error:', error)
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
   }
 }

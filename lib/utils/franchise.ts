@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 /**
  * Get the franchise ID for the current user
  * - For regular users: returns their assigned franchise_id
- * - For super_admin: returns the first franchise as default (if no franchise_id set)
+ * - For super_admin: returns their assigned franchise_id only; otherwise explicit selection is required
  */
 export async function getCurrentFranchiseId(): Promise<string | null> {
   const supabase = await createClient()
@@ -33,29 +33,8 @@ export async function getCurrentFranchiseId(): Promise<string | null> {
     return userData.franchise_id
   }
 
-  // If super_admin without franchise_id, get first franchise as default
   if (userData.role === "super_admin") {
-    console.log("[getCurrentFranchiseId] Super admin without franchise_id, fetching default franchise...")
-    
-    const { data: franchises, error: franchiseError } = await supabase
-      .from("franchises")
-      .select("id")
-      .eq("is_active", true)
-      .order("created_at", { ascending: true })
-      .limit(1)
-
-    if (franchiseError) {
-      console.error("[getCurrentFranchiseId] Error fetching default franchise:", franchiseError)
-      return null
-    }
-
-    if (franchises && franchises.length > 0) {
-      const defaultFranchiseId = franchises[0].id
-      console.log(`[getCurrentFranchiseId] ✅ Using default franchise for super admin: ${defaultFranchiseId}`)
-      return defaultFranchiseId
-    }
-
-    console.warn("[getCurrentFranchiseId] ⚠️ No franchises found in database")
+    console.warn("[getCurrentFranchiseId] Super admin has no franchise_id; explicit franchise selection is required")
     return null
   }
 
