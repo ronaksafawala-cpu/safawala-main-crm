@@ -128,12 +128,21 @@ export async function GET(req: NextRequest) {
     const idParam = searchParams.get("id")
     const categoryIdParam = searchParams.get("category_id")
     const activeOnlyParam = searchParams.get("active_only")
+    const franchiseIdParam = searchParams.get("franchise_id")
 
     const supabase = createClient()
     let query = supabase.from("products").select("*").order("name").limit(limitParam)
 
     // Franchise isolation
-    if (!isSuperAdmin && franchiseId) {
+    if (franchiseIdParam) {
+      if (!isSuperAdmin && franchiseIdParam !== franchiseId) {
+        return NextResponse.json(
+          { error: "Access denied to the requested franchise" },
+          { status: 403 }
+        )
+      }
+      query = query.eq("franchise_id", franchiseIdParam)
+    } else if (!isSuperAdmin && franchiseId) {
       query = query.eq("franchise_id", franchiseId)
     }
 
