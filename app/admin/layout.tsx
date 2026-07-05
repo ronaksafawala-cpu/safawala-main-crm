@@ -100,6 +100,8 @@ const NAV_ITEMS = [
   { href: "/admin/legals", label: "Legals", icon: SVGS.legals },
   { href: "/admin/staff", label: "Staff", icon: SVGS.staff },
   { href: "/admin/reports", label: "Reports", icon: SVGS.reports },
+  { href: "/admin/system-health", label: "System Health", icon: SVGS.reports },
+  { href: "/admin/cleanup", label: "Data Cleanup", icon: SVGS.settings },
   { href: "/admin/settings", label: "Settings", icon: SVGS.settings },
 ]
 

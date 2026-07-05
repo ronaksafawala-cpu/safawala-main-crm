@@ -52,19 +52,16 @@ export function DashboardLayout({ children, userRole }: DashboardLayoutProps) {
         })
 
         if (!response.ok) {
-          console.log("[DashboardLayout] Not authenticated, redirecting to login")
           router.push("/")
           return
         }
 
         const userData = await response.json()
-        console.log("[DashboardLayout] User authenticated:", userData.name, "Franchise:", userData.franchise_name)
         
         setUser(userData)
         await fetchNotifications(userData)
         await fetchProfilePhoto(userData)
-      } catch (error) {
-        console.error("[DashboardLayout] Auth error:", error)
+      } catch {
         router.push("/")
       }
     }
@@ -74,7 +71,6 @@ export function DashboardLayout({ children, userRole }: DashboardLayoutProps) {
 
   const fetchNotifications = async (currentUser: User) => {
     try {
-      console.log("[v0] Fetching all notification types from Supabase...")
       const supabase = createClient()
 
       let query = supabase.from("notifications").select("*").order("created_at", { ascending: false }).limit(10)
@@ -86,28 +82,18 @@ export function DashboardLayout({ children, userRole }: DashboardLayoutProps) {
       const { data, error } = await query
 
       if (error) {
-        console.error("[v0] Error fetching notifications:", error)
         return
       }
 
-      console.log(`[v0] Loaded ${data?.length || 0} notifications of all types from Supabase`)
-
-      // Log notification types for debugging
-      if (data && data.length > 0) {
-        const types = data.map((n: any) => n.type).filter((v: any, i: number, a: any[]) => a.indexOf(v) === i)
-        console.log("[v0] Notification types found:", types)
-      }
-
       setNotifications(data || [])
-    } catch (error) {
-      console.error("[v0] Failed to fetch notifications:", error)
+    } catch {
+      return
     }
   }
 
   const fetchProfilePhoto = async (currentUser: User) => {
     try {
       if (!currentUser.franchise_id || !currentUser.id) {
-        console.log("[DashboardLayout] Missing franchise_id or user_id, skipping profile photo fetch")
         return
       }
 
@@ -121,14 +107,11 @@ export function DashboardLayout({ children, userRole }: DashboardLayoutProps) {
       if (response.ok) {
         const result = await response.json()
         if (result.data?.profile_photo_url) {
-          console.log("[DashboardLayout] Profile photo loaded:", result.data.profile_photo_url)
           setProfilePhoto(result.data.profile_photo_url)
-        } else {
-          console.log("[DashboardLayout] No profile photo found")
         }
       }
-    } catch (error) {
-      console.error("[DashboardLayout] Failed to fetch profile photo:", error)
+    } catch {
+      return
     }
   }
 

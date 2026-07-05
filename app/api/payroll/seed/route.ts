@@ -1,12 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabase } from '@/lib/supabase'
-import { getCurrentUser } from '@/lib/auth'
+import { authenticateRequest } from '@/lib/auth-middleware'
 
 // Simple demo seed: creates salary configs & some adjustments and attendance if missing
 export async function POST(req: NextRequest) {
   try {
-    const user = await getCurrentUser()
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const auth = await authenticateRequest(req, { minRole: 'franchise_admin' })
+    if (!auth.authorized) {
+      return NextResponse.json(auth.error, { status: auth.statusCode })
+    }
+    const user = auth.user!
 
     // For demo we scope to user's franchise unless super_admin
     const franchiseId = user.role === 'super_admin' ? user.franchise_id : user.franchise_id

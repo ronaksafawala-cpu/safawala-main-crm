@@ -447,7 +447,9 @@ export default function EditProductPage() {
         console.error("Gallery sync error:", galleryErr)
       }
 
-      router.push("/inventory")
+      // Stay on this product after saving instead of navigating away and losing the
+      // user's position. Use the saved stock total as the baseline for later saves.
+      setOriginalStockTotal(formData.stock_total)
     } catch (error: any) {
       console.error("Error updating product:", error)
       toast.error("Failed to update product. Please try again.")
@@ -621,6 +623,7 @@ export default function EditProductPage() {
                       onValueChange={(value) => {
                         setSelectedMainCategory(value)
                         handleInputChange("category", value)
+                        setSubcategories([])
                         fetchSubcategories(value)
                         setFormData((prev) => ({ ...prev, subcategory: "" }))
                       }}

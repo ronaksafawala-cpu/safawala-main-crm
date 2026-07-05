@@ -1,14 +1,31 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { supabaseServer, getDefaultFranchiseId } from "@/lib/supabase-server-simple"
+import { supabaseServer } from "@/lib/supabase-server-simple"
+import { requireAuth } from "@/lib/auth-middleware"
 
 export async function GET(request: NextRequest) {
   try {
-    // Remove JWT authentication for simplicity
-    const franchiseId = await getDefaultFranchiseId()
+    const authResult = await requireAuth(request, 'readonly')
+    if (!authResult.success) {
+      return NextResponse.json(authResult.response, { status: 401 })
+    }
+
+    const user = authResult.authContext!.user
 
     const { searchParams } = new URL(request.url)
     const product_id = searchParams.get("product_id")
     const transaction_type = searchParams.get("transaction_type")
+    const requestedFranchiseId = searchParams.get("franchise_id")
+    const franchiseId =
+      user.role === "super_admin"
+        ? requestedFranchiseId || user.franchise_id || null
+        : user.franchise_id || null
+
+    if (!franchiseId) {
+      return NextResponse.json(
+        { error: "Franchise context is required to fetch inventory transactions" },
+        { status: 400 }
+      )
+    }
 
     let query = supabaseServer
       .from("inventory_transactions")
@@ -48,8 +65,12 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    // Remove JWT authentication for simplicity
-    const franchiseId = await getDefaultFranchiseId()
+    const authResult = await requireAuth(request, 'staff')
+    if (!authResult.success) {
+      return NextResponse.json(authResult.response, { status: 401 })
+    }
+
+    const user = authResult.authContext!.user
 
     const body = await request.json()
     const {
@@ -59,14 +80,27 @@ export async function POST(request: NextRequest) {
       unit_price,
       reference_type,
       reference_id,
-      notes
+      notes,
+      franchise_id: requestedFranchiseId
     } = body
+
+    const franchiseId =
+      user.role === "super_admin"
+        ? requestedFranchiseId || user.franchise_id || null
+        : user.franchise_id || null
 
     // Validate required fields
     if (!product_id || !transaction_type || !quantity) {
       return NextResponse.json({ 
         error: "Missing required fields: product_id, transaction_type, quantity" 
       }, { status: 400 })
+    }
+
+    if (!franchiseId) {
+      return NextResponse.json(
+        { error: "Franchise context is required to create inventory transactions" },
+        { status: 400 }
+      )
     }
 
     // Calculate total value
@@ -85,7 +119,7 @@ export async function POST(request: NextRequest) {
         reference_type,
         reference_id,
         notes,
-        created_by: "system"
+        created_by: user.id
       })
       .select()
       .single()

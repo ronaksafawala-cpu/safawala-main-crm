@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
+import { requireAuth, AuthMiddleware } from "@/lib/auth-middleware"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -21,6 +22,16 @@ export async function PATCH(
   { params }: { params: { id: string } }
 ) {
   try {
+    const authResult = await requireAuth(req, "staff")
+    if (!authResult.success) {
+      return NextResponse.json(authResult.response, { status: 401 })
+    }
+
+    const authUser = authResult.authContext!.user
+    if (!authUser.permissions.inventory && !authUser.permissions.productArchive) {
+      return NextResponse.json({ error: "You do not have permission to update products" }, { status: 403 })
+    }
+
     const productId = params.id
     if (!productId) {
       return NextResponse.json({ error: "Product ID is required" }, { status: 400 })
@@ -39,6 +50,24 @@ export async function PATCH(
     cleanData.updated_at = new Date().toISOString()
 
     const supabase = getServiceClient()
+
+    const { data: existingProduct, error: existingProductError } = await supabase
+      .from("products")
+      .select("id, franchise_id")
+      .eq("id", productId)
+      .single()
+
+    if (existingProductError || !existingProduct) {
+      return NextResponse.json({ error: "Product not found" }, { status: 404 })
+    }
+
+    if (!AuthMiddleware.canAccessFranchise(authUser, existingProduct.franchise_id)) {
+      return NextResponse.json({ error: "Access denied to this franchise" }, { status: 403 })
+    }
+
+    if (cleanData.franchise_id && !AuthMiddleware.canAccessFranchise(authUser, cleanData.franchise_id)) {
+      return NextResponse.json({ error: "Access denied to the requested franchise" }, { status: 403 })
+    }
 
     const { error: updateError } = await supabase
       .from("products")

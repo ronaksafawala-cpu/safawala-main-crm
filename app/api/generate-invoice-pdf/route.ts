@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { generateAndSaveInvoicePDF } from "@/lib/services/invoice-pdf-service"
 import { supabaseServer } from "@/lib/supabase-server-simple"
+import { requireAuth, AuthMiddleware } from "@/lib/auth-middleware"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -8,6 +9,12 @@ export const maxDuration = 60 // Allow up to 60 seconds for Puppeteer PDF render
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireAuth(request, "staff")
+    if (!auth.success || !auth.authContext?.user) {
+      return NextResponse.json(auth.response, { status: 401 })
+    }
+
+    const user = auth.authContext.user
     const body = await request.json()
     const { orderId, orderType } = body
 
@@ -26,6 +33,34 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const tableName = getTableName(orderType)
+    if (!tableName) {
+      return NextResponse.json(
+        { error: `Unable to resolve table for orderType ${orderType}` },
+        { status: 400 }
+      )
+    }
+
+    const { data: order, error: orderError } = await supabaseServer
+      .from(tableName)
+      .select("id, franchise_id")
+      .eq("id", orderId)
+      .single()
+
+    if (orderError || !order) {
+      return NextResponse.json(
+        { error: "Order not found" },
+        { status: 404 }
+      )
+    }
+
+    if (!AuthMiddleware.canAccessFranchise(user, order.franchise_id)) {
+      return NextResponse.json(
+        { error: "Access denied to this order" },
+        { status: 403 }
+      )
+    }
+
     console.log(`[PDF API] Generating PDF for ${orderType} ${orderId}...`)
     const publicUrl = await generateAndSaveInvoicePDF(orderId, orderType, supabaseServer)
     console.log(`[PDF API] Generation succeeded. URL: ${publicUrl}`)
@@ -40,5 +75,24 @@ export async function POST(request: NextRequest) {
       { error: error.message || "Internal server error" },
       { status: 500 }
     )
+  }
+}
+
+function getTableName(orderType: string): string | null {
+  switch (orderType) {
+    case "product_order":
+    case "product_orders":
+      return "product_orders"
+    case "package_booking":
+    case "package_bookings":
+      return "package_bookings"
+    case "direct_sale":
+    case "direct_sales_orders":
+      return "direct_sales_orders"
+    case "booking":
+    case "bookings":
+      return "bookings"
+    default:
+      return null
   }
 }

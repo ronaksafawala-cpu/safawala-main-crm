@@ -1,7 +1,12 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { SAFAWALA_TEMPLATES } from "@/lib/wati-templates"
+import { authenticateRequest } from "@/lib/auth-middleware"
 
 export async function POST(request: NextRequest) {
+  const auth = await authenticateRequest(request, { minRole: 'franchise_admin' })
+  if (!auth.authorized) {
+    return NextResponse.json(auth.error, { status: auth.statusCode })
+  }
   try {
     const { templateName, bulkSubmit } = await request.json()
 

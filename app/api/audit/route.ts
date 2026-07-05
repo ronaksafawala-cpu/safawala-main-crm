@@ -1,9 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer as supabase } from '@/lib/supabase-server-simple'
+import { authenticateRequest } from '@/lib/auth-middleware'
 
 // POST /api/audit - record an audit entry
 // Body: { entity_type, entity_id, action, changes?, actor_id?, actor_role? }
 export async function POST(req: NextRequest) {
+  const auth = await authenticateRequest(req, { minRole: 'staff' })
+  if (!auth.authorized) {
+    return NextResponse.json(auth.error, { status: auth.statusCode })
+  }
   try {
     const body = await req.json()
     const { entity_type, entity_id, action, changes, actor_id, actor_role } = body || {}

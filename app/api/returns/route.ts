@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import AuditLogger from "@/lib/audit-logger"
-import { requireAuth } from "@/lib/auth-middleware"
+import { requireAuth, AuthMiddleware } from "@/lib/auth-middleware"
 
 export const dynamic = "force-dynamic"
 
@@ -134,13 +134,33 @@ export async function GET(request: NextRequest) {
 
 // Legacy POST endpoint for rental_returns compatibility
 export async function POST(request: Request) {
-  const supabase = createClient()
   try {
+    const auth = await requireAuth(request as NextRequest, 'staff')
+    if (!auth.success) {
+      return NextResponse.json(auth.response, { status: 401 })
+    }
+
+    const userCtx = auth.authContext!.user
+    const supabase = createClient()
     const body = await request.json()
-    const { deliveryId, bookingId, items, notes, user } = body || {}
+    const { deliveryId, bookingId, items, notes } = body || {}
 
     if (!bookingId || !Array.isArray(items) || items.length === 0) {
       return NextResponse.json({ success: false, error: "bookingId and items are required" }, { status: 400 })
+    }
+
+    const { data: bookingRecord, error: bookingError } = await supabase
+      .from("bookings")
+      .select("id, franchise_id")
+      .eq("id", bookingId)
+      .single()
+
+    if (bookingError || !bookingRecord) {
+      return NextResponse.json({ success: false, error: "Booking not found" }, { status: 404 })
+    }
+
+    if (!AuthMiddleware.canAccessFranchise(userCtx, bookingRecord.franchise_id)) {
+      return NextResponse.json({ success: false, error: "Access denied to this franchise" }, { status: 403 })
     }
 
     // Basic validation for each item
@@ -160,7 +180,7 @@ export async function POST(request: Request) {
     // Create rental_returns header
     const { data: ret, error: retErr } = await supabase
       .from("rental_returns")
-      .insert({ booking_id: bookingId, delivery_id: deliveryId || null, processed_by: user?.id || null, notes: notes || null })
+      .insert({ booking_id: bookingId, delivery_id: deliveryId || null, processed_by: userCtx.id, notes: notes || null })
       .select("id")
       .single()
 
@@ -236,8 +256,8 @@ export async function POST(request: Request) {
     // Audit log
     try {
       await AuditLogger.logCreate("rental_returns", returnId, { booking_id: bookingId, delivery_id: deliveryId, totals: { damaged: totalDamaged, lost: totalLost } }, {
-        userId: user?.id,
-        userEmail: user?.email,
+        userId: userCtx.id,
+        userEmail: userCtx.email,
       })
     } catch (e) {
       console.warn("Audit log failed for rental return", e)

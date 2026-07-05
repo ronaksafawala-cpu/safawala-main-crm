@@ -57,7 +57,6 @@ export function NewCustomerDialog({ open, onOpenChange, onCustomerCreated, franc
           setPincodeStatus("error")
         }
       } catch (error) {
-        console.error("Pincode lookup failed:", error)
         setPincodeStatus("error")
         ToastService.warning({
           title: "Pincode lookup failed",
@@ -120,7 +119,6 @@ export function NewCustomerDialog({ open, onOpenChange, onCustomerCreated, franc
         .single()
 
       if (error) {
-        console.error('Database error creating customer:', error)
         if (error.code === '23505') {
           ToastService.operations.customerCreateFailed('A customer with this phone number already exists')
         } else {
@@ -147,7 +145,6 @@ export function NewCustomerDialog({ open, onOpenChange, onCustomerCreated, franc
       })
       setPincodeStatus("idle")
     } catch (error: any) {
-      console.error("Unexpected error creating customer:", error)
       ToastService.operations.customerCreateFailed('Unable to connect to server. Please check your internet connection.')
     } finally {
       setLoading(false)

@@ -1,15 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { authenticateRequest, AuthMiddleware } from '@/lib/auth-middleware'
 
 // GET - Fetch branding settings
 export async function GET(request: NextRequest) {
   try {
+    const auth = await authenticateRequest(request, { minRole: 'franchise_admin', requirePermission: 'settings' })
+    if (!auth.authorized) return NextResponse.json(auth.error, { status: auth.statusCode || 401 })
+
     const supabase = createClient()
     const { searchParams } = new URL(request.url)
     const franchiseId = searchParams.get('franchise_id')
 
     if (!franchiseId) {
       return NextResponse.json({ error: 'Franchise ID required' }, { status: 400 })
+    }
+
+    if (!AuthMiddleware.canAccessFranchise(auth.user!, franchiseId)) {
+      return NextResponse.json({ error: 'Access denied to this franchise' }, { status: 403 })
     }
 
     const { data, error } = await supabase
@@ -32,6 +40,9 @@ export async function GET(request: NextRequest) {
 // POST/PUT - Create or update branding settings
 export async function POST(request: NextRequest) {
   try {
+    const auth = await authenticateRequest(request, { minRole: 'franchise_admin', requirePermission: 'settings' })
+    if (!auth.authorized) return NextResponse.json(auth.error, { status: auth.statusCode || 401 })
+
     const supabase = createClient()
     const body = await request.json()
     const {
@@ -44,6 +55,10 @@ export async function POST(request: NextRequest) {
 
     if (!franchise_id) {
       return NextResponse.json({ error: 'Franchise ID required' }, { status: 400 })
+    }
+
+    if (!AuthMiddleware.canAccessFranchise(auth.user!, franchise_id)) {
+      return NextResponse.json({ error: 'Access denied to this franchise' }, { status: 403 })
     }
 
     // Check if settings exist

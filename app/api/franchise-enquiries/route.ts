@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
+import { authenticateRequest } from "@/lib/auth-middleware"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -11,6 +12,11 @@ const service = () => createClient(
 
 export async function GET(request: NextRequest) {
   try {
+    const auth = await authenticateRequest(request, { minRole: "super_admin" })
+    if (!auth.authorized) {
+      return NextResponse.json(auth.error, { status: auth.statusCode || 401 })
+    }
+
     const { searchParams } = new URL(request.url)
     const status = searchParams.get("status")
     const limit = parseInt(searchParams.get("limit") ?? "100")
@@ -68,6 +74,11 @@ export async function POST(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
+    const auth = await authenticateRequest(request, { minRole: "super_admin" })
+    if (!auth.authorized) {
+      return NextResponse.json(auth.error, { status: auth.statusCode || 401 })
+    }
+
     const { id, status, notes } = await request.json()
     if (!id) return NextResponse.json({ error: "ID required" }, { status: 400 })
 

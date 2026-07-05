@@ -317,16 +317,13 @@ export default function BookPackageWizard() {
     setCustomersLoading(true)
     try {
       // Fetch current user first for franchise filtering
-      console.log("Fetching current user...")
       const userRes = await fetch("/api/auth/user")
       const userData = await userRes.json()
       setCurrentUser(userData)  // ✅ Store user in state for later use
-      console.log("Current user:", userData)
       
       // Fetch company settings to get base pincode
       if (userData.franchise_id) {
         try {
-          console.log("Fetching company settings for franchise:", userData.franchise_id)
           const settingsRes = await fetch(`/api/settings/company?franchise_id=${userData.franchise_id}`)
           if (settingsRes.ok) {
             const settingsData = await settingsRes.json()
@@ -335,16 +332,12 @@ export default function BookPackageWizard() {
             
             if (pincode) {
               setBasePincode(pincode)
-              console.log('✅ Base pincode loaded from company settings:', pincode)
             } else {
-              console.log('⚠️ No pincode in company settings, using default')
             }
             
             if (gst !== undefined && gst !== null) {
               setGstPercentage(Number(gst))
-              console.log('✅ GST percentage loaded from company settings:', gst + '%')
             } else {
-              console.log('⚠️ No GST percentage in company settings, using default 5%')
             }
           } else {
             console.warn('Failed to fetch company settings, using defaults')
@@ -371,7 +364,6 @@ export default function BookPackageWizard() {
       if (customersResponse.ok) {
         const result = await customersResponse.json()
         customersData = result.data || []
-        console.log("✅ Customers loaded from API:", customersData.length)
       } else {
         console.error("Error loading customers from API:", customersResponse.status)
       }
@@ -394,21 +386,13 @@ export default function BookPackageWizard() {
         console.error("Error loading variants:", variantRes.error)
       }
       
-      // 🔍 DEBUG: Log variant fetch results
-      console.log("📦 VARIANTS FETCH DEBUG:")
-      console.log("  Total variants fetched:", variantRes.data?.length || 0)
       if (variantRes.data && variantRes.data.length > 0) {
         const firstVariant = variantRes.data[0]
-        console.log("  Columns:", Object.keys(firstVariant).join(", "))
-        console.log("  Has category_id:", "category_id" in firstVariant)
-        console.log("  Has package_id:", "package_id" in firstVariant)
-        console.log("  Sample variant:", firstVariant.name || firstVariant.variant_name)
       }
       if (staffRes.error) {
         console.error("Error loading staff - Full error object:", JSON.stringify(staffRes.error, null, 2))
         toast.error(`Failed to load staff members`)
       } else {
-        console.log("✅ Staff members loaded successfully:", staffRes.data?.length || 0)
         console.table(staffRes.data)
       }
       
@@ -419,14 +403,11 @@ export default function BookPackageWizard() {
   setAllVariants(variantRes.data || [])
   setStaffMembers(staffRes.data || [])
       
-      console.log("Final staffMembers state:", staffRes.data || [])
-      
       // Auto-select current user as sales staff if they are in the staff list
       if (userData && staffRes.data) {
         const currentUserInStaff = staffRes.data.find((s: any) => s.id === userData.id)
         if (currentUserInStaff) {
           setSelectedStaff(userData.id)
-          console.log('✅ Auto-selected current user as sales staff:', currentUserInStaff.name)
         }
       }
     } catch (e) {
@@ -589,19 +570,6 @@ export default function BookPackageWizard() {
       v.category_id === selectedCategory.id || 
       (v as any).package_id === selectedCategory.id
     )
-    
-    // 🔍 DEBUG: Log filter results
-    console.log("🔍 FILTER DEBUG:")
-    console.log("  Selected category:", selectedCategory.name, selectedCategory.id)
-    console.log("  Total variants in state:", allVariants.length)
-    console.log("  Filtered variants:", filtered.length)
-    if (allVariants.length > 0 && filtered.length === 0) {
-      console.log("  ⚠️ No match! Checking first variant:")
-      const v = allVariants[0]
-      console.log("    variant.category_id:", v.category_id)
-      console.log("    variant.package_id:", (v as any).package_id)
-      console.log("    selectedCategory.id:", selectedCategory.id)
-    }
     
     if (packageSearch) filtered = filtered.filter(v => (v.name || v.variant_name || '').toLowerCase().includes(packageSearch.toLowerCase()))
     return filtered
@@ -931,7 +899,6 @@ export default function BookPackageWizard() {
           .limit(1)
         
         if (!exactError && exactData && exactData.length > 0) {
-          console.log(`Distance from cache: ${exactData[0].distance_km} km (${exactData[0].method})`)
           setDistanceKm(Number(exactData[0].distance_km))
           return
         }
@@ -941,12 +908,10 @@ export default function BookPackageWizard() {
       
       // 2) Distance not in cache - fetch from API and cache it
       try {
-        console.log(`Fetching distance for ${pin} from API...`)
         const response = await fetch(`/api/calculate-distance?from=${basePin}&to=${pin}`)
         if (response.ok) {
           const data = await response.json()
           if (data.success && data.distanceKm) {
-            console.log(`Distance from API: ${data.distanceKm} km (${data.method})`)
             setDistanceKm(data.distanceKm)
             
             // Cache the result in database for future use
@@ -957,8 +922,6 @@ export default function BookPackageWizard() {
               method: data.method || 'api',
               source: data.method === 'geolocation' ? 'OpenStreetMap API' : 'Estimation',
               verified: data.method === 'geolocation'
-            }).then(() => {
-              console.log(`Cached distance ${basePin} → ${pin}: ${data.distanceKm} km`)
             }).catch((err: any) => {
               console.warn('Failed to cache distance:', err)
             })
@@ -1012,6 +975,7 @@ export default function BookPackageWizard() {
           code: formData.coupon_code,
           orderValue: totals.subtotalAfterDiscount || totals.subtotal, // Apply coupon after manual discount
           customerId: selectedCustomer?.id,
+          franchise_id: currentUser?.franchise_id || null,
         }),
       })
 
@@ -1338,14 +1302,11 @@ export default function BookPackageWizard() {
 
       // ✅ Step 1: Insert into package_booking_product_items junction table (proper records)
       if (!itemsError && bookingItems.length > 0) {
-        console.log('[Book Package] Inserting product items into package_booking_product_items table...')
         const productItemsToInsert: any[] = []
         
         for (const item of bookingItems) {
           if (item.selected_products && item.selected_products.length > 0) {
             for (const product of item.selected_products) {
-              console.log(`[Book Package] Preparing product item: ${product.id} qty=${product.qty}`)
-              
               // Fetch product to get rental price (unit_price)
               const { data: productData } = await supabase
                 .from('products')
@@ -1367,7 +1328,6 @@ export default function BookPackageWizard() {
         }
         
         if (productItemsToInsert.length > 0) {
-          console.log(`[Book Package] Inserting ${productItemsToInsert.length} product items into package_booking_product_items...`)
           const { error: productItemsError } = await supabase
             .from('package_booking_product_items')
             .insert(productItemsToInsert)
@@ -1375,22 +1335,16 @@ export default function BookPackageWizard() {
           if (productItemsError) {
             console.warn('[Book Package] Failed to insert product items:', productItemsError)
             // Don't fail the booking if product items insertion fails
-          } else {
-            console.log('[Book Package] ✅ Product items inserted successfully')
           }
         }
       }
 
       // ✅ Step 2: Deduct inventory for selected products
       if (!itemsError) {
-        console.log('[Book Package] Deducting inventory for selected products...')
         try {
           for (const item of bookingItems) {
             if (item.selected_products && item.selected_products.length > 0) {
-              console.log(`[Book Package] Processing ${item.selected_products.length} selected products for item`, item.id)
               for (const product of item.selected_products) {
-                console.log(`[Book Package] Deducting ${product.qty} units from product ${product.id}`)
-                
                 // Get current stock before deduction
                 const { data: productData, error: fetchError } = await supabase
                   .from('products')
@@ -1421,8 +1375,6 @@ export default function BookPackageWizard() {
                   console.warn(`[Book Package] Failed to deduct stock for product ${product.id}:`, deductError)
                   continue
                 }
-                
-                console.log(`[Book Package] ✅ Deducted ${product.qty} units from ${product.id}. New stock: ${newStock}`)
               }
             }
           }
@@ -2364,11 +2316,6 @@ export default function BookPackageWizard() {
                     <Select 
                       value={selectedStaff || "none"} 
                       onValueChange={(val) => setSelectedStaff(val === "none" ? "" : val)}
-                      onOpenChange={(open) => {
-                        if (open) {
-                          console.log("Staff dropdown opened, staffMembers:", staffMembers)
-                        }
-                      }}
                     >
                       <SelectTrigger>
                         <SelectValue placeholder="Select staff member (optional)" />
@@ -2587,7 +2534,7 @@ function VariantDialog({ category, variants, customerPincode, distanceKm, onClos
           <div className="grid grid-cols-1 gap-4 max-h-[60vh] overflow-y-auto">
             {sortedVariants.map((v, index) => {
               const safas = extraSafas[v.id] === '' ? 0 : (extraSafas[v.id] || 0)
-              const distanceAddon = distancePricing[v.id] || 0
+              const distanceAddon = Number(distancePricing[v.id] || 0)
               const defaultInclusions: string[] = Array.isArray(v.inclusions)
                 ? v.inclusions
                 : typeof v.inclusions === 'string'
@@ -2595,8 +2542,8 @@ function VariantDialog({ category, variants, customerPincode, distanceKm, onClos
                   : []
               const currentInclusions = customInclusions[v.id] || defaultInclusions
               const isEditingThis = editingInclusions === v.id
-              const extraSafasCost = safas * (v.extra_safa_price || 0)
-              const totalPrice = v.base_price + extraSafasCost + distanceAddon
+              const extraSafasCost = Number(safas || 0) * Number(v.extra_safa_price || 0)
+              const totalPrice = Number(v.base_price || 0) + extraSafasCost + distanceAddon
 
               return (
                 <div key={v.id} className="border rounded-lg p-4 space-y-3 hover:shadow-sm transition bg-white min-h-[300px] flex flex-col">
@@ -2753,13 +2700,13 @@ function VariantDialog({ category, variants, customerPincode, distanceKm, onClos
                         placeholder="0"
                       />
                       <div className="flex gap-1">
-                        <Button type="button" variant="outline" size="sm" className="h-7 px-2 text-[10px]" onClick={() => setExtraSafas(prev => ({ ...prev, [v.id]: (safas || 0) + 10 }))}>+10</Button>
-                        <Button type="button" variant="outline" size="sm" className="h-7 px-2 text-[10px]" onClick={() => setExtraSafas(prev => ({ ...prev, [v.id]: (safas || 0) + 20 }))}>+20</Button>
+                        <Button type="button" variant="outline" size="sm" className="h-7 px-2 text-[10px]" onClick={() => setExtraSafas(prev => ({ ...prev, [v.id]: Number(safas || 0) + 10 }))}>+10</Button>
+                        <Button type="button" variant="outline" size="sm" className="h-7 px-2 text-[10px]" onClick={() => setExtraSafas(prev => ({ ...prev, [v.id]: Number(safas || 0) + 20 }))}>+20</Button>
                       </div>
                       {(v.extra_safa_price || 0) > 0 && <span className="text-gray-500">{formatCurrency(v.extra_safa_price || 0)}/safa</span>}
                     </div>
 
-                    <Button size="sm" className="w-full" onClick={() => onAdd(v, safas, currentInclusions)}>
+                    <Button size="sm" className="w-full" onClick={() => onAdd(v, Number(safas || 0), currentInclusions)}>
                       <Plus className="h-4 w-4 mr-1" /> Add Variant
                     </Button>
                   </div>
@@ -2959,17 +2906,12 @@ function ProductSelectionDialog({ open, onOpenChange, context }: ProductSelectio
         .map((item: any) => item.order?.id)
         .filter(Boolean)
 
-      console.log('[Book Package Availability] Order IDs:', orderIds)
-
       // Fetch barcode assignments to determine return status
       const { data: barcodeData, error: barcodeError } = await supabase
         .from('booking_barcode_assignments')
         .select('booking_id, status, returned_at')
         .in('booking_id', orderIds)
         .eq('booking_type', 'product')
-
-      console.log('[Book Package Availability] Barcode data:', barcodeData)
-      console.log('[Book Package Availability] Barcode error:', barcodeError)
 
       // Create return status map
       const returnStatusMap = new Map<string, { returned: number; pending: number; returnDate?: string }>()
@@ -2984,8 +2926,6 @@ function ProductSelectionDialog({ open, onOpenChange, context }: ProductSelectio
           stats.pending++
         }
       })
-
-      console.log('[Book Package Availability] Return status map:', Array.from(returnStatusMap.entries()))
 
       const rows: { date: string; kind: 'order' | 'package'; ref?: string; qty: number; returnStatus?: 'returned' | 'in_progress'; returnDate?: string }[] = []
       const within = (iso?: string | null) => iso ? (new Date(iso) >= new Date(startISO) && new Date(iso) <= new Date(endISO)) : false
@@ -3015,8 +2955,6 @@ function ProductSelectionDialog({ open, onOpenChange, context }: ProductSelectio
           }
         }
         
-        console.log('[Book Package Availability] Order:', r.order?.order_number, 'Status:', returnStatus, 'Stats:', barcodeStats)
-        
         rows.push({ 
           date: d || r.order?.delivery_date || r.order?.return_date, 
           kind: 'order', 
@@ -3027,7 +2965,6 @@ function ProductSelectionDialog({ open, onOpenChange, context }: ProductSelectio
         })
       }
       rows.sort((a,b) => new Date(a.date).getTime() - new Date(b.date).getTime())
-      console.log('[Book Package Availability] Final rows:', rows)
       setAvailabilityRows(rows)
     } catch (e) {
       setAvailabilityRows([])
@@ -3115,12 +3052,10 @@ function ProductSelectionDialog({ open, onOpenChange, context }: ProductSelectio
 
       // Upload image to storage if it's a base64 string
       if (imageUrl && imageUrl.startsWith('data:image')) {
-        console.log('[Custom Product] Uploading base64 image to storage...')
         try {
           // Convert base64 to blob
           const response = await fetch(imageUrl)
           const blob = await response.blob()
-          console.log('[Custom Product] Base64 converted to blob:', blob.size, 'bytes, type:', blob.type)
           
           // Generate unique filename
           const timestamp = Date.now()
@@ -3142,15 +3077,12 @@ function ProductSelectionDialog({ open, onOpenChange, context }: ProductSelectio
             throw uploadError
           }
           
-          console.log('[Custom Product] Upload successful:', uploadData)
-          
           // Get public URL
           const { data: { publicUrl } } = supabase.storage
             .from('product-images')
             .getPublicUrl(fileName)
           
           imageUrl = publicUrl
-          console.log('[Custom Product] Public URL generated:', imageUrl)
           toast.success('Image uploaded successfully!')
         } catch (uploadError: any) {
           console.error('[Custom Product] Image upload failed:', uploadError)
@@ -3223,15 +3155,12 @@ function ProductSelectionDialog({ open, onOpenChange, context }: ProductSelectio
         return { data: null as any, error: new Error('Failed to insert product after resolving columns') }
       }
 
-      console.log('[Custom Product] Creating product with payload:', basePayload)
       const { data: product, error } = await insertProductSafely(basePayload)
       
       if (error) {
         console.error('[Custom Product] Product creation error:', error)
         throw error
       }
-      
-      console.log('[Custom Product] Product created successfully:', product)
       
       // Auto-generate barcodes for the custom product (generate 5 barcodes by default)
       try {
@@ -3583,7 +3512,7 @@ function ProductSelectionDialog({ open, onOpenChange, context }: ProductSelectio
                               }}
                               onKeyDown={(e) => {
                                 if (e.key === 'Backspace' && qty === 0) {
-                                  setQty(p.id, '')
+                                  setQty(p.id, 0)
                                 }
                               }}
                               onClick={(e) => e.stopPropagation()}

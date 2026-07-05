@@ -1,19 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { requireAuth } from '@/lib/auth-middleware'
+import { requireAuth, AuthMiddleware } from '@/lib/auth-middleware'
 
 export async function POST(request: NextRequest) {
   try {
-    // Check for admin authentication - either via session or API key
-    const authHeader = request.headers.get('authorization')
-    const hasValidKey = authHeader === `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`
-    
-    if (!hasValidKey) {
-      // Fall back to session-based auth
-      const authResult = await requireAuth(request, 'super_admin')
-      if (!authResult.success) {
-        return NextResponse.json({ error: 'Admin access required' }, { status: 401 })
-      }
+    const authResult = await requireAuth(request, 'staff')
+    if (!authResult.success) {
+      return NextResponse.json(authResult.response, { status: 401 })
+    }
+
+    const user = authResult.authContext!.user
+    if (!user.permissions.inventory && !user.permissions.productArchive) {
+      return NextResponse.json({ error: 'Inventory access required' }, { status: 403 })
     }
 
     const supabase = createClient()
@@ -24,8 +22,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No products provided' }, { status: 400 })
     }
 
-    // Get franchise_id - either directly from franchiseId param or lookup by email
-    let franchise_id = franchiseId
+    let franchise_id = user.is_super_admin ? (franchiseId || null) : (user.franchise_id || null)
     if (!franchise_id && franchiseEmail) {
       const { data: franchise, error: franchiseError } = await supabase
         .from('franchises')
@@ -44,8 +41,15 @@ export async function POST(request: NextRequest) {
 
     if (!franchise_id) {
       return NextResponse.json(
-        { error: 'Either franchiseEmail or franchiseId must be provided' },
+        { error: 'Franchise context is required for product import' },
         { status: 400 }
+      )
+    }
+
+    if (!AuthMiddleware.canAccessFranchise(user, franchise_id)) {
+      return NextResponse.json(
+        { error: 'Access denied to this franchise' },
+        { status: 403 }
       )
     }
 
@@ -77,6 +81,7 @@ export async function POST(request: NextRequest) {
       stock_available: p.stock_available || 100,
       stock_total: p.stock_available || 100,
       created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
     }))
 
     const { data, error } = await supabase

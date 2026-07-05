@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import Tesseract from "tesseract.js"
+import { requireAuth } from "@/lib/auth-middleware"
 
 export const dynamic = "force-dynamic"
 
@@ -186,9 +187,23 @@ function extractPassportDetails(text: string) {
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireAuth(request, "staff")
+    if (!auth.success) {
+      return NextResponse.json(auth.response, { status: 401 })
+    }
+
     const { url, docType } = await request.json()
     if (!url) {
       return NextResponse.json({ error: "Image URL is required" }, { status: 400 })
+    }
+
+    try {
+      const parsedUrl = new URL(url)
+      if (!["http:", "https:"].includes(parsedUrl.protocol)) {
+        return NextResponse.json({ error: "Only http/https URLs are allowed" }, { status: 400 })
+      }
+    } catch {
+      return NextResponse.json({ error: "Invalid document URL" }, { status: 400 })
     }
 
     console.log(`[Backend OCR API] Fetching image from URL: ${url}`)

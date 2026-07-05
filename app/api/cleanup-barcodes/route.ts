@@ -1,14 +1,17 @@
-import type { NextApiRequest, NextApiResponse } from 'next'
+import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { authenticateRequest } from "@/lib/auth-middleware"
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+export async function GET(request: NextRequest) {
+  const auth = await authenticateRequest(request, { minRole: 'franchise_admin' })
+  if (!auth.authorized) {
+    return NextResponse.json(auth.error, { status: auth.statusCode })
+  }
+
   const supabase = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL || '',
     process.env.SUPABASE_SERVICE_ROLE_KEY || ''
   )
-  if (req.method !== 'GET') {
-    return res.status(405).json({ error: 'Method not allowed' })
-  }
 
   try {
     // Get all barcodes
@@ -52,13 +55,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       .from('barcodes')
       .select('id, product_id, barcode_number')
 
-    res.status(200).json({
+    return NextResponse.json({
       totalBefore: allBarcodes.length,
       deleted: toDelete.length,
       totalAfter: finalBarcodes?.length || 0,
       sample: finalBarcodes?.slice(0, 5) || []
     })
   } catch (error: any) {
-    res.status(500).json({ error: error.message })
+    return NextResponse.json({ error: error.message }, { status: 500 })
   }
 }

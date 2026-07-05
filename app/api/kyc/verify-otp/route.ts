@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { requireAuth } from "@/lib/auth-middleware"
 
 export const dynamic = "force-dynamic"
 
@@ -33,6 +34,11 @@ async function getSandboxAccessToken() {
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireAuth(request, "staff")
+    if (!auth.success) {
+      return NextResponse.json(auth.response, { status: 401 })
+    }
+
     const { phone, code: otp } = await request.json()
 
     if (!phone || !phone.trim() || !otp || !otp.trim()) {
@@ -96,40 +102,7 @@ export async function POST(request: NextRequest) {
     if (!verifyResponse.ok) {
       console.error("[Sandbox Aadhaar OTP Verify Error]:", result)
       const errorMsg = result?.message || result?.error || `Aadhaar verification failed with status ${verifyResponse.status}`
-      
-      const isCreditError = errorMsg.toLowerCase().includes("credit") || 
-                           errorMsg.toLowerCase().includes("wallet") || 
-                           errorMsg.toLowerCase().includes("restriction") ||
-                           errorMsg.toLowerCase().includes("restricted") ||
-                           verifyResponse.status === 402;
-                           
-      if (isCreditError) {
-        console.warn("[Aadhaar OTP Verify] Intercepted Sandbox billing/wallet error. Falling back to mock verification for DEMO bypass.")
-        
-        // Consume/delete the database record so it cannot be reused
-        await supabase
-          .from("verification_codes")
-          .delete()
-          .eq("id", record.id)
 
-        return NextResponse.json({
-          success: true,
-          message: "Aadhaar verified successfully (Demo Wallet Bypass)",
-          data: {
-            name: "DEMO USER (Sandbox Wallet Restricted)",
-            date_of_birth: "01-01-1990",
-            gender: "M",
-            address: {
-              house: "Demo House",
-              street: "Demo Street",
-              district: "Mumbai",
-              state: "Maharashtra",
-              pincode: "400001"
-            }
-          }
-        })
-      }
-      
       return NextResponse.json({ success: false, error: errorMsg })
     }
 

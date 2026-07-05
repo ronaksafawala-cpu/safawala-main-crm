@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
   
   try {
     // Require super admin access
-    const authResult = await requireAuth(request, 'superadmin');
+    const authResult = await requireAuth(request, 'super_admin');
     if (!authResult.success) {
       await logService.logWarn(requestId, 'Unauthorized access to log link generation', {
         endpoint: '/internal/logs/link',
@@ -47,9 +47,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Only allow 'full' scope for super admins
-    if (scope === 'full' && authContext!.user.role !== 'superadmin') {
+    if (scope === 'full' && authContext!.user.role !== 'super_admin') {
       return NextResponse.json(
-        ApiResponseBuilder.forbiddenError('Full scope access requires superadmin role'),
+        ApiResponseBuilder.forbiddenError('Full scope access requires super admin role'),
         { status: 403 }
       );
     }

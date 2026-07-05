@@ -1,32 +1,19 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { authenticateRequest, AuthMiddleware } from "@/lib/auth-middleware"
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
-async function getUserFromSession(request: NextRequest) {
-  try {
-    const cookieHeader = request.cookies.get("safawala_session")
-    if (!cookieHeader?.value) throw new Error("No session")
-    const sessionData = JSON.parse(cookieHeader.value)
-    const supabase = createClient()
-    const { data: user, error } = await supabase
-      .from('users')
-      .select('id, franchise_id, role')
-      .eq('id', sessionData.id)
-      .eq('is_active', true)
-      .single()
-    if (error || !user) throw new Error('Auth failed')
-    return { userId: user.id, franchiseId: user.franchise_id, isSuperAdmin: user.role === 'super_admin' }
-  } catch {
-    throw new Error('Authentication required')
-  }
-}
-
 export async function GET(request: NextRequest) {
   try {
+    const auth = await authenticateRequest(request, { minRole: 'readonly' })
+    if (!auth.authorized) {
+      return NextResponse.json(auth.error, { status: auth.statusCode || 401 })
+    }
+
+    const user = auth.user!
     const supabase = createClient()
-    const { franchiseId, isSuperAdmin } = await getUserFromSession(request)
     const id = request.nextUrl.searchParams.get('id')
     const type = request.nextUrl.searchParams.get('type') || 'unified'
     if (!id) return NextResponse.json({ error: 'id is required' }, { status: 400 })
@@ -60,15 +47,12 @@ export async function GET(request: NextRequest) {
     if (error) return NextResponse.json({ error: error.message }, { status: 400 })
     if (!booking) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-    if (!isSuperAdmin && booking.franchise_id && booking.franchise_id !== franchiseId) {
+    if (booking.franchise_id && !AuthMiddleware.canAccessFranchise(user, booking.franchise_id)) {
       return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
     }
 
     return NextResponse.json({ booking })
   } catch (error) {
-    if (error instanceof Error && error.message === 'Authentication required') {
-      return NextResponse.json({ error: 'Authentication required' }, { status: 401 })
-    }
     return NextResponse.json({ error: 'Failed to fetch booking' }, { status: 500 })
   }
 }

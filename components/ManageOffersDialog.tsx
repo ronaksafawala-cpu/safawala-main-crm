@@ -58,7 +58,6 @@ export default function ManageOffersDialog({ open, onOpenChange }: ManageOffersD
   const fetchOffers = async () => {
     try {
       setLoading(true);
-      console.log('[ManageOffers] Fetching offers with credentials: include');
       const response = await fetch('/api/offers', { 
         credentials: 'include',
         headers: {
@@ -66,16 +65,12 @@ export default function ManageOffersDialog({ open, onOpenChange }: ManageOffersD
         }
       });
       const data = await response.json();
-      console.log('[ManageOffers] Response status:', response.status, 'data:', data);
       if (response.ok) {
-        console.log('[ManageOffers] Successfully loaded', data.offers?.length || 0, 'offers');
         setOffers(data.offers || []);
       } else {
-        console.error('[ManageOffers] API error:', data);
         toast.error(data.error || data.details || 'Failed to fetch offers');
       }
-    } catch (error) {
-      console.error('[ManageOffers] Error fetching offers:', error);
+    } catch {
       toast.error('Failed to load offers');
     } finally {
       setLoading(false);
@@ -133,8 +128,7 @@ export default function ManageOffersDialog({ open, onOpenChange }: ManageOffersD
       } else {
         toast.error(data.error || 'Failed to save offer');
       }
-    } catch (error) {
-      console.error('Error saving offer:', error);
+    } catch {
       toast.error('Failed to save offer');
     } finally {
       setLoading(false);
@@ -172,8 +166,7 @@ export default function ManageOffersDialog({ open, onOpenChange }: ManageOffersD
       } else {
         toast.error(data.error || 'Failed to delete offer');
       }
-    } catch (error) {
-      console.error('Error deleting offer:', error);
+    } catch {
       toast.error('Failed to delete offer');
     } finally {
       setLoading(false);
@@ -197,9 +190,8 @@ export default function ManageOffersDialog({ open, onOpenChange }: ManageOffersD
         setOffers((prev) => prev.map((o) => (o.id === offer.id ? { ...o, is_active: offer.is_active } : o)));
         toast.error(data.error || 'Failed to update offer');
       }
-    } catch (error) {
+    } catch {
       setOffers((prev) => prev.map((o) => (o.id === offer.id ? { ...o, is_active: offer.is_active } : o)));
-      console.error('Error toggling offer:', error);
       toast.error('Failed to update offer');
     }
   };

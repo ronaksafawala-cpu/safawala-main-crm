@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const authResult = await requireAuth(request, 'write')
+    const authResult = await requireAuth(request, 'staff')
     if (!authResult.success) return NextResponse.json(authResult.response, { status: 401 })
     const user = authResult.authContext!.user
     const franchiseId = user.franchise_id
@@ -71,10 +71,12 @@ export async function POST(request: NextRequest) {
     if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
     // Update the booking's paid_amount
-    await supabase.rpc('increment_booking_paid_amount', {
+    const { error: rpcError } = await supabase.rpc('increment_booking_paid_amount', {
       p_booking_id: booking_id,
       p_amount: parseFloat(amount),
-    }).catch(() => {
+    })
+
+    if (rpcError) {
       // Fallback: manual update if RPC doesn't exist
       supabase
         .from("bookings")
@@ -86,7 +88,7 @@ export async function POST(request: NextRequest) {
             supabase.from("bookings").update({ paid_amount: (bk.paid_amount ?? 0) + parseFloat(amount) }).eq("id", booking_id)
           }
         })
-    })
+    }
 
     return NextResponse.json({ success: true, data })
   } catch (error: any) {

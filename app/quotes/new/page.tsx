@@ -31,6 +31,18 @@ async function NewQuotePage() {
         </div>
       </div>
 
+      <div className="mb-6 rounded-lg border bg-muted/30 p-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="font-medium">Need a package-based quote?</p>
+          <p className="text-sm text-muted-foreground">
+            Package quotes use the dedicated package builder with variants, inclusions, and package pricing.
+          </p>
+        </div>
+        <Button asChild variant="outline">
+          <Link href="/book-package">Open Package Quote Builder</Link>
+        </Button>
+      </div>
+
       <QuoteForm customers={customers || []} products={products || []} categories={categories || []} />
     </div>
   )

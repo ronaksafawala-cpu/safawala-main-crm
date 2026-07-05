@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { supabaseServer } from "@/lib/supabase-server-simple"
+import { authenticateRequest } from "@/lib/auth-middleware"
 
 // Transaction types and their debit/credit direction
 const TX_SIGN: Record<string, number> = {
@@ -8,6 +9,10 @@ const TX_SIGN: Record<string, number> = {
 }
 
 export async function GET(request: NextRequest, { params }: { params: { userId: string } }) {
+  const auth = await authenticateRequest(request, { minRole: 'franchise_admin' })
+  if (!auth.authorized) {
+    return NextResponse.json(auth.error, { status: auth.statusCode })
+  }
   try {
     const { userId } = params
 
@@ -38,6 +43,10 @@ export async function GET(request: NextRequest, { params }: { params: { userId: 
 }
 
 export async function POST(request: NextRequest, { params }: { params: { userId: string } }) {
+  const auth = await authenticateRequest(request, { minRole: 'franchise_admin' })
+  if (!auth.authorized) {
+    return NextResponse.json(auth.error, { status: auth.statusCode })
+  }
   try {
     const { userId } = params
     const body = await request.json()

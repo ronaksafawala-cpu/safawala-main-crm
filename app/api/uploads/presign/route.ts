@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer as supabase } from '@/lib/supabase-server-simple'
+import { authenticateRequest, AuthMiddleware } from '@/lib/auth-middleware'
 
 // Validation constants
 const ALLOWED_MIME_TYPES = [
@@ -35,10 +36,17 @@ function createFallbackResponse(key: string, mime: string) {
 // POST /api/uploads/presign - Generate presigned URL for file upload
 export async function POST(request: NextRequest) {
   try {
-    const body = await request.json()
-    const { key, mime, size, org_id = '00000000-0000-0000-0000-000000000001' } = body
+    const auth = await authenticateRequest(request, { minRole: 'franchise_admin' })
+    if (!auth.authorized) {
+      return NextResponse.json(auth.error, { status: auth.statusCode || 401 })
+    }
 
-    console.log('Presign request:', { key, mime, size, org_id })
+    const user = auth.user!
+    const body = await request.json()
+    const { key, mime, size, org_id } = body
+    const effectiveOrgId = user.is_super_admin ? (org_id || null) : (user.franchise_id || null)
+
+    console.log('Presign request:', { key, mime, size, org_id: effectiveOrgId })
 
     // Validation
     if (!key || !mime || !size) {
@@ -79,7 +87,28 @@ export async function POST(request: NextRequest) {
 
     // More flexible org_id validation - allow the key to define the org_id
     const keyOrgId = keyParts[1]
-    console.log('Key org_id:', keyOrgId, 'Provided org_id:', org_id)
+    console.log('Key org_id:', keyOrgId, 'Provided org_id:', effectiveOrgId)
+
+    if (!effectiveOrgId) {
+      return NextResponse.json(
+        { error: 'Organization context is required' },
+        { status: 400 }
+      )
+    }
+
+    if (!AuthMiddleware.canAccessFranchise(user, effectiveOrgId)) {
+      return NextResponse.json(
+        { error: 'Access denied to this organization' },
+        { status: 403 }
+      )
+    }
+
+    if (keyOrgId !== effectiveOrgId) {
+      return NextResponse.json(
+        { error: 'Upload key organization does not match authenticated organization' },
+        { status: 403 }
+      )
+    }
 
     // Generate file extension from mime type
     const extMap: Record<string, string> = {

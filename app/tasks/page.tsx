@@ -59,6 +59,8 @@ export default function TasksPage() {
   const [loading, setLoading] = useState(true)
   const [updatingTasks, setUpdatingTasks] = useState<Set<string>>(new Set())
   const [currentUser, setCurrentUser] = useState<UserType | null>(null)
+  const [authResolved, setAuthResolved] = useState(false)
+  const [authError, setAuthError] = useState<string | null>(null)
   
   // Dialog controls
   const [showAssignDialog, setShowAssignDialog] = useState(false)
@@ -86,6 +88,8 @@ export default function TasksPage() {
 
   const fetchCurrentUser = async () => {
     try {
+      setAuthError(null)
+
       // 1. Try to load from localStorage first
       const userStr = localStorage.getItem("safawala_user")
       if (userStr) {
@@ -94,10 +98,12 @@ export default function TasksPage() {
           if (user && user.id) {
             console.log("Loaded user from localStorage:", user)
             setCurrentUser(user)
+            setAuthResolved(true)
             return
           }
         } catch (e) {
           console.error("Failed to parse safawala_user from localStorage:", e)
+          localStorage.removeItem("safawala_user")
         }
       }
 
@@ -118,64 +124,21 @@ export default function TasksPage() {
           console.log("Loaded user from Supabase auth:", userData)
           setCurrentUser(userData)
           localStorage.setItem("safawala_user", JSON.stringify(userData))
+          setAuthResolved(true)
           return
         }
       }
 
-      // 3. Fallback: Query first active user in the database
-      console.log("No active session found. Querying first active user as fallback...")
-      const { data: fallbackUsers, error: fallbackError } = await supabase
-        .from("users")
-        .select("*")
-        .eq("is_active", true)
-        .limit(1)
-
-      if (!fallbackError && fallbackUsers && fallbackUsers.length > 0) {
-        const fallbackUser = fallbackUsers[0]
-        console.log("Using database fallback user:", fallbackUser)
-        setCurrentUser(fallbackUser)
-        localStorage.setItem("safawala_user", JSON.stringify(fallbackUser))
-      } else {
-        // 4. Hardcoded system user as absolute fallback
-        const systemUser: UserType = {
-          id: "system",
-          name: "System Administrator",
-          email: "admin@safawala.com",
-          role: "super_admin",
-          is_active: true,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString(),
-          permissions: {
-            dashboard: true,
-            bookings: true,
-            customers: true,
-            inventory: true,
-            packages: true,
-            vendors: true,
-            quotes: true,
-            invoices: true,
-            invoice_payment_access: true,
-            laundry: true,
-            expenses: true,
-            deliveries: true,
-            productArchive: true,
-            payroll: true,
-            attendance: true,
-            reports: true,
-            financials: true,
-            franchises: true,
-            staff: true,
-            integrations: true,
-            settings: true,
-          }
-        }
-        console.log("Using hardcoded system fallback user:", systemUser)
-        setCurrentUser(systemUser)
-        localStorage.setItem("safawala_user", JSON.stringify(systemUser))
-      }
+      console.warn("Tasks page: no authenticated session found")
+      setCurrentUser(null)
+      setAuthError("Please log in to access Tasks Center.")
     } catch (error) {
       console.error("Error fetching current user:", error)
+      setCurrentUser(null)
+      setAuthError("Failed to load your session. Please sign in again.")
       toast.error("Failed to load user session")
+    } finally {
+      setAuthResolved(true)
     }
   }
 
@@ -358,10 +321,27 @@ export default function TasksPage() {
     setShowDetailsDialog(true)
   }
 
-  if (!currentUser) {
+  if (!authResolved) {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-muted-foreground animate-pulse">Loading Tasks Center...</div>
+      </div>
+    )
+  }
+
+  if (!currentUser) {
+    return (
+      <div className="flex items-center justify-center min-h-screen p-6">
+        <Card className="w-full max-w-md">
+          <CardHeader>
+            <CardTitle>Authentication required</CardTitle>
+            <CardDescription>{authError || "Please sign in to continue."}</CardDescription>
+          </CardHeader>
+          <CardContent className="flex gap-3">
+            <Button onClick={() => router.push("/auth/login")}>Go to Login</Button>
+            <Button variant="outline" onClick={fetchCurrentUser}>Retry</Button>
+          </CardContent>
+        </Card>
       </div>
     )
   }

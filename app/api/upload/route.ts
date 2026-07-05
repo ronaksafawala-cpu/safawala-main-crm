@@ -2,9 +2,15 @@ import { NextRequest, NextResponse } from "next/server"
 import { supabaseServer as supabase } from "@/lib/supabase-server-simple"
 import { v4 as uuidv4 } from "uuid"
 import { uploadToR2 } from "@/lib/r2-storage"
+import { requireAuth } from "@/lib/auth-middleware"
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireAuth(request, 'staff')
+    if (!auth.success) {
+      return NextResponse.json(auth.response, { status: 401 })
+    }
+
     const formData = await request.formData()
     const file = formData.get('file') as File
     const folder = formData.get('folder') as string
@@ -37,10 +43,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: `File type not allowed: ${file.type}` }, { status: 400 })
     }
 
+    const allowedFolders = new Set(["uploads", "products", "company", "hr", "kyc", "vendors", "documents", "logos"])
+    const normalizedFolder = folder?.trim() || "uploads"
+    if (normalizedFolder.includes("..") || normalizedFolder.includes("\\") || normalizedFolder.startsWith("/")) {
+      return NextResponse.json({ error: "Invalid folder path" }, { status: 400 })
+    }
+    if (!allowedFolders.has(normalizedFolder)) {
+      return NextResponse.json({ error: "Upload folder not allowed" }, { status: 403 })
+    }
+
     // Generate unique filename
     const fileExtension = file.name.split('.').pop()
     const fileName = `${uuidv4()}.${fileExtension}`
-    const filePath = folder ? `${folder}/${fileName}` : fileName
+    const filePath = `${normalizedFolder}/${fileName}`
 
     // Convert file to buffer
     const arrayBuffer = await file.arrayBuffer()
@@ -51,7 +66,7 @@ export async function POST(request: NextRequest) {
       Buffer.from(buffer), 
       fileName, 
       file.type, 
-      folder || "uploads"
+      normalizedFolder
     )
 
     console.log('[Upload API] Upload successful:', publicUrl)

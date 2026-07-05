@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { authenticateRequest } from "@/lib/auth-middleware"
 
 /**
  * POST /api/setup/add-gst-percentage
@@ -7,6 +8,11 @@ import { createClient } from '@/lib/supabase/server'
  */
 export async function POST(request: NextRequest) {
   try {
+    const auth = await authenticateRequest(request, { minRole: 'super_admin' })
+    if (!auth.authorized) {
+      return NextResponse.json(auth.error, { status: auth.statusCode })
+    }
+
     const supabase = createClient()
 
     console.log('🚀 Checking gst_percentage column in company_settings...')
@@ -66,6 +72,11 @@ export async function POST(request: NextRequest) {
  */
 export async function GET(request: NextRequest) {
   try {
+    const auth = await authenticateRequest(request, { minRole: 'super_admin' })
+    if (!auth.authorized) {
+      return NextResponse.json(auth.error, { status: auth.statusCode })
+    }
+
     const supabase = createClient()
 
     // Check if column exists

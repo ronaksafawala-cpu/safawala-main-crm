@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { supabaseServer as supabase } from "@/lib/supabase-server-simple"
-import { requireAuth } from "@/lib/auth-middleware"
+import { requireAuth, AuthMiddleware } from "@/lib/auth-middleware"
 
 export const dynamic = 'force-dynamic'
 
@@ -17,6 +17,14 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url)
     const franchiseId = searchParams.get('franchiseId') || authResult.authContext!.user.franchise_id
+
+    if (!franchiseId) {
+      return NextResponse.json({ error: "franchiseId is required for this user context" }, { status: 400 })
+    }
+
+    if (!AuthMiddleware.canAccessFranchise(authResult.authContext!.user, franchiseId)) {
+      return NextResponse.json({ error: "Access denied to this franchise" }, { status: 403 })
+    }
 
     const { data, error } = await supabase
       .from("whatsapp_notification_settings")
@@ -56,7 +64,7 @@ export async function GET(req: NextRequest) {
  */
 export async function POST(req: NextRequest) {
   try {
-    const authResult = await requireAuth(req, 'admin')
+    const authResult = await requireAuth(req, 'franchise_admin')
     if (!authResult.success) {
       return NextResponse.json(authResult.response, { status: 401 })
     }
@@ -66,6 +74,10 @@ export async function POST(req: NextRequest) {
 
     if (!franchiseId) {
       return NextResponse.json({ error: "franchiseId is required" }, { status: 400 })
+    }
+
+    if (!AuthMiddleware.canAccessFranchise(authResult.authContext!.user, franchiseId)) {
+      return NextResponse.json({ error: "Access denied to this franchise" }, { status: 403 })
     }
 
     const { data, error } = await supabase

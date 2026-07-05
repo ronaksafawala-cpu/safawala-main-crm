@@ -77,8 +77,6 @@ export function SimpleBarcodeInput({
     setMessage("")
 
     try {
-      console.log("[SimpleBarcodeScanner] Searching for barcode:", code)
-
       // Use the correct API path
       const response = await fetch("/api/v2/barcode-search", {
         method: "POST",
@@ -86,15 +84,12 @@ export function SimpleBarcodeInput({
         body: JSON.stringify({ barcode: code.trim() }),
       })
 
-      console.log("[SimpleBarcodeScanner] API Response:", response.status)
-
       if (!response.ok) {
         const errorData = await response.json()
         throw new Error(errorData.error || "Barcode not found")
       }
 
       const result: BarcodeSearchResult = await response.json()
-      console.log("[SimpleBarcodeScanner] ✅ Found:", result.product.name)
 
       setStatus("success")
       setMessage(`✅ ${result.product.name}`)
@@ -111,7 +106,6 @@ export function SimpleBarcodeInput({
       }, 2000)
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : "Error searching barcode"
-      console.error("[SimpleBarcodeScanner] Error:", errorMsg)
 
       setStatus("error")
       setMessage(`❌ ${errorMsg}`)

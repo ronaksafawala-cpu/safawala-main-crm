@@ -1,35 +1,35 @@
+import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-import { NextResponse } from "next/server"
+import { authenticateRequest } from "@/lib/auth-middleware"
 
-export async function POST() {
+export async function POST(request: NextRequest) {
+  const auth = await authenticateRequest(request, { minRole: "super_admin" })
+  if (!auth.authorized) {
+    return NextResponse.json(auth.error, { status: auth.statusCode || 401 })
+  }
+
   try {
     const supabase = createClient()
+    const activityCutoff = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
+    const integrationCutoff = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
 
-    // Execute the logs cleanup script
-    const { error } = await supabase.rpc("exec_sql", {
-      sql: `
-        -- Delete old activity logs (older than 90 days)
-        DELETE FROM activity_logs 
-        WHERE created_at < NOW() - INTERVAL '90 days';
+    const [activityResult, integrationResult] = await Promise.all([
+      supabase.from("activity_logs").delete().lt("created_at", activityCutoff).select("id"),
+      supabase.from("integration_logs").delete().lt("created_at", integrationCutoff).select("id"),
+    ])
 
-        -- Delete old integration logs (older than 30 days)
-        DELETE FROM integration_logs 
-        WHERE created_at < NOW() - INTERVAL '30 days';
-
-        -- Vacuum tables to reclaim space
-        VACUUM ANALYZE activity_logs;
-        VACUUM ANALYZE integration_logs;
-      `,
-    })
-
-    if (error) {
-      console.error("Logs cleanup error:", error)
-      return NextResponse.json({ error: "Failed to cleanup log data" }, { status: 500 })
+    const errors = [activityResult.error, integrationResult.error].filter(Boolean)
+    if (errors.length > 0) {
+      console.error("Logs cleanup errors:", errors)
+      return NextResponse.json({ error: "Failed to clean up one or more log tables" }, { status: 500 })
     }
 
+    const activityDeleted = activityResult.data?.length || 0
+    const integrationDeleted = integrationResult.data?.length || 0
     return NextResponse.json({
       success: true,
-      message: "Log data cleanup completed successfully",
+      deleted: { activity_logs: activityDeleted, integration_logs: integrationDeleted },
+      message: `Deleted ${activityDeleted + integrationDeleted} expired log records`,
     })
   } catch (error) {
     console.error("Logs cleanup error:", error)

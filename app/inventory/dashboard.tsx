@@ -39,6 +39,7 @@ interface Product {
   color?: string
   material?: string
   category_id?: string
+  subcategory_id?: string
   category_name?: string
   price: number
   regular_price?: number
@@ -163,7 +164,7 @@ function StatCard({
 export default function InventoryDashboard() {
   const searchParams = useSearchParams()
   const [products, setProducts] = useState<Product[]>([])
-  const [categories, setCategories] = useState<Array<{ id: string; name: string }>>([])
+  const [categories, setCategories] = useState<Array<{ id: string; name: string; parent_id?: string | null }>>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   
@@ -254,6 +255,7 @@ export default function InventoryDashboard() {
     barcode: p.barcode || p.barcode_number || undefined,
     image_url: p.image_url || undefined,
     category_id: p.category_id || undefined,
+    subcategory_id: p.subcategory_id || undefined,
     category_name: p.category_name || undefined,
     is_active: p.is_active !== false,
     product_code: p.product_code || p.id?.slice(0, 8) || "CUST",
@@ -264,28 +266,6 @@ export default function InventoryDashboard() {
   useEffect(() => {
     fetchProducts()
   }, [])
-
-  useEffect(() => {
-    if (categoryFilter === "all") {
-      fetchProducts()
-    } else {
-      fetchProductsByCategory(categoryFilter)
-    }
-  }, [categoryFilter])
-
-  const fetchProductsByCategory = async (catId: string) => {
-    try {
-      setLoading(true)
-      const res = await fetch(`/api/products?category_id=${catId}&active_only=true&limit=3000`, { cache: "no-store" })
-      const json = res.ok ? await res.json() : { data: [] }
-      const data = (json.data || []).filter((p: any) => p.is_active !== false)
-      setProducts(data.map(normalizeProduct))
-    } catch (err) {
-      console.error("Category fetch error:", err)
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const fetchProducts = async () => {
     try {
@@ -352,9 +332,8 @@ export default function InventoryDashboard() {
     try {
       const { data: catData, error: catError } = await supabase
         .from("product_categories")
-        .select("id, name")
+        .select("id, name, parent_id")
         .eq("is_active", true)
-        .is("parent_id", null)
         .order("name", { ascending: true })
 
       if (!catError && catData) {
@@ -372,6 +351,19 @@ export default function InventoryDashboard() {
     }
     return map
   }, [categories])
+
+  const categoryParentMap = useMemo(() => {
+    const map: Record<string, string | null> = {}
+    for (const cat of categories) {
+      map[cat.id] = cat.parent_id ?? null
+    }
+    return map
+  }, [categories])
+
+  const topLevelCategories = useMemo(
+    () => categories.filter((cat) => !cat.parent_id),
+    [categories]
+  )
 
   const handleRefresh = async () => {
     setRefreshing(true)
@@ -488,6 +480,10 @@ export default function InventoryDashboard() {
     }
 
     if (variants && variants.length > 0 && productId) {
+      if (!activeFranchiseId) {
+        throw new Error("Franchise context is required before saving product variations")
+      }
+
       for (const variant of variants) {
         if (variant.id) continue
         let imageUrl = variant.image_url
@@ -496,7 +492,8 @@ export default function InventoryDashboard() {
           try {
             const base64Data = imageUrl.split(",")[1]
             const buffer = Buffer.from(base64Data, "base64")
-            const storagePath = `variants/${activeFranchiseId || "global"}/${productId}/${Date.now()}-${variant.variation_name.replace(/\s+/g, "_")}.png`
+            const safeVariationName = (variant.variation_name || "variant").replace(/\s+/g, "_")
+            const storagePath = `variants/${activeFranchiseId}/${productId}/${Date.now()}-${safeVariationName}.png`
 
             await supabase.storage.from("product-images").upload(storagePath, buffer, { upsert: false, contentType: "image/png" })
             const { data: urlData } = supabase.storage.from("product-images").getPublicUrl(storagePath)
@@ -681,12 +678,31 @@ export default function InventoryDashboard() {
   }
 
   const filteredProducts = useMemo(() => {
+    const selectedCategory = categories.find((cat) => cat.id === categoryFilter)
+    const selectedCategoryName = selectedCategory?.name?.trim().toLowerCase()
+
     let filtered = products.filter((product) => {
       const matchesSearch =
         product.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         (product.barcode && product.barcode.toLowerCase().includes(searchTerm.toLowerCase()))
 
       if (!matchesSearch) return false
+
+      if (categoryFilter !== "all") {
+        const productCategoryId = product.category_id?.trim()
+        const productSubcategoryId = product.subcategory_id?.trim()
+        const productCategoryName = product.category_name?.trim().toLowerCase()
+        const productCategoryParentId = productCategoryId ? categoryParentMap[productCategoryId] : null
+        const productSubcategoryParentId = productSubcategoryId ? categoryParentMap[productSubcategoryId] : null
+        const matchesCategory =
+          productCategoryId === categoryFilter ||
+          productSubcategoryId === categoryFilter ||
+          productCategoryParentId === categoryFilter ||
+          productSubcategoryParentId === categoryFilter ||
+          (!!selectedCategoryName && productCategoryName === selectedCategoryName)
+
+        if (!matchesCategory) return false
+      }
 
       if (stockFilter !== "all") {
         if (stockFilter === "in_stock" && product.stock_available <= product.reorder_level) return false
@@ -715,7 +731,7 @@ export default function InventoryDashboard() {
         default: return lastActivity(b) - lastActivity(a)
       }
     })
-  }, [products, searchTerm, stockFilter, categoryFilter, sortBy])
+  }, [products, searchTerm, stockFilter, categoryFilter, sortBy, categories, categoryParentMap])
 
   const stats = useMemo(() => ({
     total: products.length,
@@ -900,7 +916,7 @@ export default function InventoryDashboard() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Categories</SelectItem>
-              {categories.map((cat) => (
+              {topLevelCategories.map((cat) => (
                 <SelectItem key={cat.id} value={cat.id}>
                   {cat.name}
                 </SelectItem>

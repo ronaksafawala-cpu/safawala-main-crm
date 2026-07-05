@@ -397,12 +397,8 @@ export default function CreateInvoicePage() {
       }
       const userFranchiseId = user?.franchise_id
       setFranchiseId(userFranchiseId) // Store in state for later use
-      console.log(`[LoadNextInvoice] Franchise: ${userFranchiseId}, Type: ${invoiceData.invoice_type}`)
-
       if (!userFranchiseId) {
-        console.warn("[LoadNextInvoice] No franchise_id found, using default")
         const defaultNum = invoiceData.invoice_type === 'sale' ? 'ORD-2026001' : 'INV-2026001'
-        console.log(`[LoadNextInvoice] Default number for ${invoiceData.invoice_type}: ${defaultNum}`)
         setInvoiceData(prev => ({
           ...prev,
           invoice_number: defaultNum
@@ -415,9 +411,7 @@ export default function CreateInvoicePage() {
       })
 
       if (!response.ok) {
-        console.warn(`[LoadNextInvoice] API error for ${invoiceData.invoice_type}: ${response.status}`)
         const defaultNum = invoiceData.invoice_type === 'sale' ? 'ORD-2026001' : 'INV-2026001'
-        console.log(`[LoadNextInvoice] Using default: ${defaultNum}`)
         setInvoiceData(prev => ({
           ...prev,
           invoice_number: defaultNum
@@ -427,7 +421,6 @@ export default function CreateInvoicePage() {
 
       const data = await response.json()
       const nextNum = data.next_invoice_number || (invoiceData.invoice_type === 'sale' ? 'ORD-2026001' : 'INV-2026001')
-      console.log(`[LoadNextInvoice] ${invoiceData.invoice_type.toUpperCase()} → ${nextNum}`)
       setInvoiceData(prev => ({
         ...prev,
         invoice_number: nextNum
@@ -515,9 +508,7 @@ export default function CreateInvoicePage() {
 
   // Load existing order if editing
   useEffect(() => {
-    console.log("[EditOrder] useEffect triggered - mode:", mode, "orderId:", orderId)
     if (orderId && mode !== "new") {
-      console.log("[EditOrder] Loading existing order...")
       loadExistingOrder(orderId)
     }
   }, [orderId, mode])
@@ -527,7 +518,6 @@ export default function CreateInvoicePage() {
     if (editingOrderCustomerId && customers.length > 0 && !selectedCustomer) {
       const matchingCustomer = customers.find(c => c.id === editingOrderCustomerId)
       if (matchingCustomer) {
-        console.log("[EditOrder] Auto-selecting customer:", matchingCustomer.name)
         setSelectedCustomer(matchingCustomer)
       } else {
         console.warn("[EditOrder] Customer not found in list:", editingOrderCustomerId)
@@ -547,7 +537,6 @@ export default function CreateInvoicePage() {
 
       // If 403 (permission denied), try with basic=1
       if (response.status === 403) {
-        console.log("[CreateInvoice] Permission denied, trying with ?basic=1")
         response = await fetch("/api/customers?basic=1", {
           method: "GET",
           cache: "no-store",
@@ -564,7 +553,6 @@ export default function CreateInvoicePage() {
       }
 
       const result = await response.json()
-      console.log("[CreateInvoice] Raw API response:", result)
       // Handle multiple response formats
       let data = []
       if (result?.data && Array.isArray(result.data)) {
@@ -572,7 +560,6 @@ export default function CreateInvoicePage() {
       } else if (Array.isArray(result)) {
         data = result
       }
-      console.log("[CreateInvoice] Loaded customers:", Array.isArray(data) ? data.length : 0)
       setCustomers(Array.isArray(data) ? data : [])
     } catch (error) {
       console.error("[CreateInvoice] Error loading customers:", error)
@@ -709,8 +696,6 @@ export default function CreateInvoicePage() {
       const user = userRes.ok ? await userRes.json() : null
       const franchiseId = user?.franchise_id
 
-      console.log("[CreateInvoice] Loading products for franchise:", franchiseId)
-
       // Fetch products with barcodes (same as create-product-order)
       const productsWithBarcodes = await fetchProductsWithBarcodes(franchiseId)
       
@@ -744,18 +729,12 @@ export default function CreateInvoicePage() {
       }))
 
       setProducts(mappedProducts)
-      console.log("[CreateInvoice] Loaded products:", mappedProducts.length)
-      if (mappedProducts.length > 0) {
-        console.log("[CreateInvoice] Sample product:", mappedProducts[0])
-      }
-
       // Set categories
       if (categoriesData) {
         const mainCats = categoriesData.filter((c: any) => !c.parent_id) || []
         const subCats = categoriesData.filter((c: any) => c.parent_id) || []
         setCategories(mainCats.map((c: any) => ({ id: c.id, name: c.name })))
         setSubcategories(subCats.map((c: any) => ({ id: c.id, name: c.name, parent_id: c.parent_id })))
-        console.log("[CreateInvoice] Loaded categories:", mainCats.length, "subcategories:", subCats.length)
       }
     } catch (error) {
       console.error("[CreateInvoice] Error loading products and categories:", error)
@@ -771,8 +750,6 @@ export default function CreateInvoicePage() {
       const user = userRes.ok ? await userRes.json() : null
       const franchiseId = user?.franchise_id
       
-      console.log("[CreateInvoice] Loading packages for franchise:", franchiseId)
-
       // Fetch categories and variants using the same APIs as book-package
       const [catResponse, variantResponse] = await Promise.all([
         fetch('/api/packages/categories', { cache: 'no-store' }),
@@ -794,20 +771,7 @@ export default function CreateInvoicePage() {
           }
         })
         
-        console.log("[CreateInvoice] Loaded package variants:", filteredVariants.length)
-        console.log("[CreateInvoice] Categories with packages:", Array.from(categoryIdsWithPackages))
-        
         if (filteredVariants.length === 0) {
-          console.warn("[CreateInvoice] ⚠️ No packages returned from API. This could mean:")
-          console.warn("  1. No package variants exist for your franchise")
-          console.warn("  2. All variants have a different franchise_id")
-          console.warn("  3. Variants API returned an error")
-        }
-        
-        // Debug log
-        if (filteredVariants.length > 0) {
-          console.log("[CreateInvoice] Sample variant:", filteredVariants[0])
-          console.log("[CreateInvoice] Variant columns:", Object.keys(filteredVariants[0]).join(", "))
         }
       } else {
         console.error("[CreateInvoice] Error loading package variants:", variantResponse.status)
@@ -826,13 +790,6 @@ export default function CreateInvoicePage() {
         )
         
         setPackagesCategories(filteredCategories)
-        console.log(
-          "[CreateInvoice] Loaded package categories:", 
-          filteredCategories.length, 
-          "out of", 
-          allCategories.length, 
-          "total"
-        )
       } else {
         console.error("[CreateInvoice] Error loading package categories:", catResponse.status)
       }
@@ -970,19 +927,14 @@ export default function CreateInvoicePage() {
   }
 
   const loadExistingOrder = async (id: string) => {
-    console.log("[EditOrder] loadExistingOrder called with id:", id)
     setLoading(true)
     try {
-      console.log("[EditOrder] Loading order:", id)
-      
       // Fetch order first (without joins that might fail)
       const { data: order, error: orderError } = await supabase
         .from("product_orders")
         .select("*")
         .eq("id", id)
         .single()
-
-      console.log("[EditOrder] Query result - order:", order, "error:", orderError)
 
       if (orderError) {
         console.error("[EditOrder] Error fetching order:", orderError)
@@ -998,19 +950,14 @@ export default function CreateInvoicePage() {
         return
       }
 
-      console.log("[EditOrder] Order data loaded:", order.order_number, order)
-
       // Fetch customer ID for later matching
       let customerId = order.customer_id
-      console.log("[EditOrder] Order has customer_id:", customerId)
 
       // Fetch order items separately (now with denormalized product details)
       const { data: orderItems, error: itemsError } = await supabase
         .from("product_order_items")
         .select("*")  // Get all columns including denormalized: product_name, barcode, category, image_url
         .eq("order_id", order.id)
-
-      console.log("[EditOrder] Order items query result:", { orderItems, itemsError, orderId: order.id })
 
       if (itemsError) {
         console.warn("[EditOrder] Could not load items:", itemsError)
@@ -1021,17 +968,14 @@ export default function CreateInvoicePage() {
       if (customerId) {
         // Store the customer ID to match later
         setEditingOrderCustomerId(customerId)
-        console.log("[EditOrder] Will auto-select customer ID:", customerId)
-
         // Proactively fetch customer details directly (essential when pdfToken bypasses loadCustomers)
         try {
           const { data: directCust, error: custError } = await supabase
             .from("customers")
             .select("*")
-            .eq("id", customerId)
-            .single()
+          .eq("id", customerId)
+          .single()
           if (directCust) {
-            console.log("[EditOrder] Loaded customer directly:", directCust.name)
             setSelectedCustomer(directCust)
           } else if (custError) {
             console.warn("[EditOrder] Error loading customer directly:", custError)
@@ -1039,13 +983,10 @@ export default function CreateInvoicePage() {
         } catch (e) {
           console.error("[EditOrder] Failed loading customer directly:", e)
         }
-      } else {
-        console.log("[EditOrder] Order has no customer_id")
       }
 
       // Load company settings and banking using order's franchise_id
       if (order.franchise_id) {
-        console.log("[EditOrder] Loading company settings for franchise:", order.franchise_id)
         loadCompanySettings(order.franchise_id)
       }
       
@@ -1095,7 +1036,6 @@ export default function CreateInvoicePage() {
       // Check if this is a quote (for "Convert to Booking" button)
       if (order.is_quote || order.status === 'quote' || order.order_number?.startsWith('QTE')) {
         setEditingQuote(true)
-        console.log("[EditOrder] Editing a QUOTE - will show 'Convert to Booking' button")
       }
 
       // Restore GST toggle state from saved data
@@ -1139,7 +1079,6 @@ export default function CreateInvoicePage() {
               setSelectedPackageCategory(variant.category_id)
             }
             packageLoaded = true
-            console.log("[EditOrder] Loaded package variant:", variant.name, "with base_price:", variant.base_price, "security_deposit:", mappedVariant.security_deposit)
           }
         } catch (pkgError) {
           console.warn("[EditOrder] Could not load package variant:", pkgError)
@@ -1153,8 +1092,6 @@ export default function CreateInvoicePage() {
         if (packageMatch) {
           const packageName = packageMatch[1].trim()
           const packagePrice = parseFloat(packageMatch[2])
-          console.log("[EditOrder] Found package in notes:", packageName, "price:", packagePrice)
-          
           // Try to find matching variant by name
           try {
             const { data: matchingVariants } = await supabase
@@ -1179,10 +1116,8 @@ export default function CreateInvoicePage() {
                 setUseCustomPackagePrice(true)
                 setCustomPackagePrice(packagePrice)
               }
-              console.log("[EditOrder] Matched package from notes:", variant.name)
             } else {
               // No matching variant found - create a placeholder package
-              console.log("[EditOrder] No matching variant found, creating placeholder")
               setSelectionMode("package")
               setSelectedPackage({
                 name: packageName,
@@ -1199,10 +1134,6 @@ export default function CreateInvoicePage() {
         }
       }
       
-      console.log("[EditOrder] Invoice data set - invoice_number:", order.order_number)
-      console.log("[EditOrder] Raw dates from DB - event_date:", order.event_date, "delivery_date:", order.delivery_date, "return_date:", order.return_date)
-      console.log("[EditOrder] Formatted dates - event_date:", formatDateForInput(order.event_date), "delivery_date:", formatDateForInput(order.delivery_date), "return_date:", formatDateForInput(order.return_date))
-      
       // Map order items to invoice items (using denormalized columns directly)
       const items = (orderItems || []).map((item: any) => ({
         id: item.id,
@@ -1217,9 +1148,6 @@ export default function CreateInvoicePage() {
       }))
       setInvoiceItems(items)
       
-      // Log items loaded
-      console.log("[EditOrder] Loaded items from denormalized columns:", items)
-
       // Load lost/damaged items (NEW)
       try {
         const { data: lostDamagedData } = await supabase
@@ -1241,7 +1169,6 @@ export default function CreateInvoicePage() {
           }))
           setLostDamagedItems(loadedLostDamaged)
           setShowLostDamaged(true)
-          console.log("[EditOrder] Loaded lost/damaged items:", loadedLostDamaged.length)
         }
       } catch (ldError) {
         console.warn("[EditOrder] Could not load lost/damaged items:", ldError)
@@ -1252,7 +1179,6 @@ export default function CreateInvoicePage() {
         setFranchiseId(order.franchise_id)
       }
       
-      console.log("[EditOrder] Successfully loaded order:", order.order_number, "Items:", items.length)
       toast({ title: "Order Loaded", description: `Editing ${order.order_number}` })
       
     } catch (error: any) {
@@ -1386,17 +1312,11 @@ export default function CreateInvoicePage() {
     const isSafaByName = productName.includes("BARATI SAFA") || productName.includes("GROOM SAFA") || productName.includes("BRIDE SAFA")
     
     const result = isSafaByCategory || isSafaByName
-    console.log(`[isSafaProduct] Name: "${product.name}" | Category: "${product.category}" → ByCategory: ${isSafaByCategory}, ByName: ${isSafaByName}, Result: ${result}`)
     return result
   }
 
   // Helper: Count total safas currently in invoice (from BARATI SAFA and GROOM SAFA categories)
   const countSafasInInvoice = (): number => {
-    console.log("[countSafasInInvoice] Checking all invoice items:")
-    invoiceItems.forEach((item, idx) => {
-      console.log(`  [${idx}] ${item.product_name} | Category: "${item.category}" | Qty: ${item.quantity}`)
-    })
-    
     const result = invoiceItems
       .filter(item => {
         const itemCategory = (item.category || "").toUpperCase().trim()
@@ -1407,40 +1327,22 @@ export default function CreateInvoicePage() {
         const isSafaByName = itemName.includes("BARATI SAFA") || itemName.includes("GROOM SAFA") || itemName.includes("BRIDE SAFA")
         const matches = isSafaByCategory || isSafaByName
         
-        if (matches) {
-          console.log(`    ✓ SAFA MATCH: Category="${item.category}" | Name="${item.product_name}"`)
-        }
         return matches
       })
       .reduce((sum, item) => sum + item.quantity, 0)
-    
-    console.log("[countSafasInInvoice] TOTAL SAFAS:", result)
     return result
   }
 
   // Add product to invoice
   const addProduct = (product: Product, quantity: number = 1) => {
-    console.log("=== ADD PRODUCT ===")
-    console.log("Product:", product.name)
-    console.log("Category:", product.category)
-    console.log("Bypass Limit:", bypassSafaLimit)
-    console.log("Current Safa Limit from state:", safaLimit)
-    
     // If bypass is enabled, skip all restrictions
-    if (bypassSafaLimit) {
-      console.log("✅ Bypass enabled - adding without restriction")
-    } else {
+    if (!bypassSafaLimit) {
       // Check safa limit only if NOT bypassed
       const isSafa = isSafaProduct(product)
-      console.log("Is Safa Product:", isSafa)
       
       if (isSafa) {
         const currentSafas = countSafasInInvoice()
-        console.log("Safa Limit:", safaLimit)
-        console.log("Current Safas:", currentSafas)
-        
         if (safaLimit !== null && currentSafas >= safaLimit) {
-          console.log("❌ BLOCKED - Limit reached")
           toast({ 
             title: "Safa Limit Reached", 
             description: `Maximum ${safaLimit} safas allowed. Currently: ${currentSafas}`,
@@ -1504,8 +1406,6 @@ export default function CreateInvoicePage() {
     const item = invoiceItems.find(i => i.id === itemId)
     if (!item) return
 
-    console.log("[UpdateQuantity] Item category from DB:", item.category, "Raw:", JSON.stringify(item.category))
-
     // If bypass is enabled, allow any quantity
     if (bypassSafaLimit) {
       setInvoiceItems(items =>
@@ -1520,16 +1420,12 @@ export default function CreateInvoicePage() {
 
     // Check safa limit for this item
     const isSafa = isSafaProduct({ name: item.product_name, category: item.category } as Product)
-    console.log("[UpdateQuantity] Is Safa?:", isSafa, "SafaLimit:", safaLimit)
-    
     if (isSafa && safaLimit !== null) {
       const currentSafas = countSafasInInvoice()
       const quantityDifference = newQuantity - item.quantity
-      console.log("[UpdateQuantity] Current Safas:", currentSafas, "Difference:", quantityDifference, "New Total:", currentSafas + quantityDifference, "Limit:", safaLimit)
       
       if (currentSafas + quantityDifference > safaLimit) {
         const maxAllowed = Math.max(0, safaLimit - (currentSafas - item.quantity))
-        console.log("[UpdateQuantity] BLOCKED! Max allowed:", maxAllowed)
         toast({ 
           title: "Safa Limit Exceeded", 
           description: `Can only add ${maxAllowed} more safas. Max limit: ${safaLimit}`,
@@ -2052,11 +1948,6 @@ export default function CreateInvoicePage() {
       return
     }
 
-    // DEBUG: Log state before saving
-    console.log("[CreateOrder] ===== SAVE START =====")
-    console.log("[CreateOrder] invoiceItems:", invoiceItems.length, invoiceItems.map(i => i.product_name))
-    console.log("[CreateOrder] extraItems:", extraItems.length, extraItems.map(i => i.product_name))
-    console.log("[CreateOrder] lostDamagedItems:", lostDamagedItems.length)
     // Products/packages are now optional - allow saving skeleton/header first
     // Users can add items later during editing
 
@@ -2079,16 +1970,12 @@ export default function CreateInvoicePage() {
 
       // For new orders OR converting quote to booking, generate/verify invoice number
       let orderNumber = invoiceData.invoice_number
-      console.log(`[CreateOrder] Creating order with invoice_number: ${orderNumber}`)
-      
       // If converting from quote, generate a new INV/ORD/SAL number
       if (editingQuote && mode === "edit") {
-        console.log(`[CreateOrder] Converting QUOTE to BOOKING - generating new invoice number`)
         const seqRes = await fetch(`/api/invoice-sequences?franchise_id=${currentFranchiseId}&type=${invoiceData.invoice_type}`, { cache: "no-store" })
         if (seqRes.ok) {
           const { next_invoice_number } = await seqRes.json()
           orderNumber = next_invoice_number || orderNumber
-          console.log(`[CreateOrder] Generated new invoice number for converted booking: ${orderNumber}`)
           setInvoiceData(prev => ({ ...prev, invoice_number: orderNumber }))
         }
       } else if (!orderId || mode !== "edit") {
@@ -2101,16 +1988,12 @@ export default function CreateInvoicePage() {
         
         if (existingOrder) {
           // Order number exists, get a fresh one from the sequence
-          console.warn(`[CreateOrder] Order number "${orderNumber}" already exists, regenerating...`)
           const seqRes = await fetch(`/api/invoice-sequences?franchise_id=${currentFranchiseId}&type=${invoiceData.invoice_type}`, { cache: "no-store" })
           if (seqRes.ok) {
             const { next_invoice_number } = await seqRes.json()
             orderNumber = next_invoice_number || orderNumber
-            console.log(`[CreateOrder] Regenerated to: ${orderNumber}`)
             setInvoiceData(prev => ({ ...prev, invoice_number: orderNumber }))
           }
-        } else {
-          console.log(`[CreateOrder] Order number "${orderNumber}" is unique, using it`)
         }
       }
 
@@ -2306,7 +2189,8 @@ export default function CreateInvoicePage() {
           code: invoiceData.coupon_code,
           invoice_type: invoiceData.invoice_type,
           subtotal: baseSubtotal,
-          orderValue: baseSubtotal
+          orderValue: baseSubtotal,
+          franchise_id: franchiseId,
         })
       })
 
@@ -2369,7 +2253,6 @@ export default function CreateInvoicePage() {
       invoiceData.invoice_number &&
       companySettings !== null  // company settings have loaded
     ) {
-      console.log("[CreateInvoice] Auto-triggering print for invoice:", invoiceData.invoice_number)
       // 2.5s gives enough time for QR base64 load + product images
       const timer = setTimeout(() => {
         handlePrint()
@@ -4079,9 +3962,14 @@ export default function CreateInvoicePage() {
                               <Input
                                 value={invoiceData.coupon_code}
                                 onChange={(e) => {
-                                  setInvoiceData({ ...invoiceData, coupon_code: e.target.value.toUpperCase() })
+                                  const nextCode = e.target.value.toUpperCase()
+                                  setInvoiceData((prev) => ({
+                                    ...prev,
+                                    coupon_code: nextCode,
+                                    coupon_discount: appliedCoupon && appliedCoupon !== nextCode ? 0 : prev.coupon_discount,
+                                  }))
                                   setCouponError(null)
-                                  if (appliedCoupon !== invoiceData.coupon_code) {
+                                  if (appliedCoupon && appliedCoupon !== nextCode) {
                                     setAppliedCoupon(null)
                                   }
                                 }}
@@ -4198,7 +4086,7 @@ export default function CreateInvoicePage() {
                             <Button 
                               variant="outline" 
                               size="sm" 
-                              onClick={handleSaveAsQuote} 
+                              onClick={() => handleSaveAsQuote()}
                               disabled={saving}
                               className="border-slate-200 text-slate-700 hover:bg-slate-50 h-8"
                             >

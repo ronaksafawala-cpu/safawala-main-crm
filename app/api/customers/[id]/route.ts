@@ -1,5 +1,5 @@
 import { type NextRequest, NextResponse } from "next/server"
-import { supabaseServer, getDefaultFranchiseId } from "@/lib/supabase-server-simple"
+import { supabaseServer } from "@/lib/supabase-server-simple"
 import { ApiResponseBuilder } from "@/lib/api-response"
 import AuditLogger from "@/lib/audit-logger"
 import { requireAuth, AuthMiddleware } from "@/lib/auth-middleware"
@@ -57,7 +57,7 @@ function hasModuleAccess(perms: UserPermissions | null, key: keyof UserPermissio
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
     // Authentication check
-    const authResult = await requireAuth(request, 'viewer');
+    const authResult = await requireAuth(request, 'readonly');
     if (!authResult.success) {
       return NextResponse.json(authResult.response, { status: 401 });
     }
@@ -72,8 +72,6 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     }
 
     const { id } = params
-    const defaultFranchiseId = await getDefaultFranchiseId()
-
     if (!id || typeof id !== "string") {
       return NextResponse.json(
         ApiResponseBuilder.validationError("Valid customer ID is required", "id"),
@@ -191,8 +189,6 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     }
 
     const { id } = params
-    const defaultFranchiseId = await getDefaultFranchiseId()
-
     if (!id || typeof id !== "string") {
       return NextResponse.json(
         ApiResponseBuilder.validationError("Valid customer ID is required", "id"),
@@ -536,7 +532,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
 export async function PATCH(request: NextRequest, { params }: RouteParams) {
   try {
     // Authentication check
-    const authResult = await requireAuth(request, 'editor');
+    const authResult = await requireAuth(request, 'staff');
     if (!authResult.success) {
       return NextResponse.json(authResult.response, { status: 401 });
     }

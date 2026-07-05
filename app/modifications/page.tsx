@@ -249,7 +249,7 @@ export default function ModificationsPage() {
           <div className="flex items-center gap-2">
             <Button
               variant={timeFilter === "all" ? "default" : "outline"}
-              size="xs"
+              size="sm"
               onClick={() => setTimeFilter("all")}
               className="text-xs h-8 px-3 rounded-lg"
             >
@@ -257,7 +257,7 @@ export default function ModificationsPage() {
             </Button>
             <Button
               variant={timeFilter === "today" ? "default" : "outline"}
-              size="xs"
+              size="sm"
               onClick={() => setTimeFilter("today")}
               className="text-xs h-8 px-3 rounded-lg"
             >
@@ -265,7 +265,7 @@ export default function ModificationsPage() {
             </Button>
             <Button
               variant={timeFilter === "week" ? "default" : "outline"}
-              size="xs"
+              size="sm"
               onClick={() => setTimeFilter("week")}
               className="text-xs h-8 px-3 rounded-lg"
             >

@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { authenticateRequest } from "@/lib/auth-middleware"
 
 /**
  * POST /api/inventory/reserve
@@ -18,6 +19,10 @@ import { createClient } from "@/lib/supabase/server"
  * }
  */
 export async function POST(request: NextRequest) {
+  const auth = await authenticateRequest(request, { minRole: 'staff' })
+  if (!auth.authorized) {
+    return NextResponse.json(auth.error, { status: auth.statusCode })
+  }
   try {
     const body = await request.json()
     const { operation, items, bookingId } = body

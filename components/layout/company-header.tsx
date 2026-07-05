@@ -25,29 +25,24 @@ export function CompanyHeader({ className = "" }: CompanyHeaderProps) {
 
   const fetchCompanySettings = async () => {
     try {
-      console.log('[CompanyHeader] Fetching franchise-specific company settings...')
-      
       const response = await fetch('/api/company-settings', {
         credentials: 'include', // Include session cookie
       })
       
       if (response.ok) {
         const data = await response.json()
-        console.log('[CompanyHeader] Loaded settings:', data.company_name)
         setCompanySettings({
           company_name: data.company_name || 'Safawala CRM',
           logo_url: data.logo_url || ''
         })
       } else {
-        console.error('[CompanyHeader] Failed to fetch settings:', response.status)
         // Fallback to default
         setCompanySettings({
           company_name: 'Safawala CRM',
           logo_url: ''
         })
       }
-    } catch (error) {
-      console.error('[CompanyHeader] Error fetching company settings:', error)
+    } catch {
       // Fallback to default
       setCompanySettings({
         company_name: 'Safawala CRM',

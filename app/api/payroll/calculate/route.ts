@@ -1,13 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { computePayroll } from '@/lib/payroll'
-import { getCurrentUser } from '@/lib/auth'
+import { authenticateRequest } from '@/lib/auth-middleware'
 
 export async function GET(req: NextRequest) {
   try {
-    const user = await getCurrentUser()
-    if (!user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+    const auth = await authenticateRequest(req, { minRole: 'franchise_admin' })
+    if (!auth.authorized) {
+      return NextResponse.json(auth.error, { status: auth.statusCode })
     }
+    const user = auth.user!
 
     const { searchParams } = new URL(req.url)
     const month = searchParams.get('month') || new Date().toISOString().slice(0,7)

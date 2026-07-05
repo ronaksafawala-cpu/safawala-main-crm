@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
-import { authenticateRequest } from '@/lib/auth-middleware'
+import { authenticateRequest, AuthMiddleware } from '@/lib/auth-middleware'
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -15,25 +15,28 @@ export const runtime = 'nodejs'
  */
 export async function POST(req: NextRequest) {
   try {
-    // Check for admin authentication - either via session or API key
-    const authHeader = req.headers.get('authorization')
-    const hasValidKey = authHeader === `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`
-    
-    if (!hasValidKey) {
-      // Fall back to session-based auth
-      const auth = await authenticateRequest(req, { minRole: 'super_admin' })
-      if (!auth.authorized) {
-        return NextResponse.json(auth.error, { status: auth.statusCode || 401 })
-      }
+    const auth = await authenticateRequest(req, { minRole: 'staff', requirePermission: 'inventory' })
+    if (!auth.authorized) {
+      return NextResponse.json(auth.error, { status: auth.statusCode || 401 })
     }
+    const user = auth.user!
 
     const body = await req.json()
-    const { stock_quantity = 600, franchise_id } = body
+    const requestedFranchiseId = body.franchise_id
+    const franchise_id = user.is_super_admin ? requestedFranchiseId : (user.franchise_id || null)
+    const { stock_quantity = 600 } = body
 
     if (!Number.isFinite(stock_quantity) || stock_quantity < 0) {
       return NextResponse.json(
         { error: "Invalid stock_quantity. Must be a non-negative number." },
         { status: 400 }
+      )
+    }
+
+    if (franchise_id && !AuthMiddleware.canAccessFranchise(user, franchise_id)) {
+      return NextResponse.json(
+        { error: "Access denied to this franchise" },
+        { status: 403 }
       )
     }
 
@@ -52,12 +55,18 @@ export async function POST(req: NextRequest) {
     if (franchise_id) {
       query = query.eq("franchise_id", franchise_id)
     } else {
-      // Update all active products when no franchise is specified
+      if (!user.is_super_admin) {
+        return NextResponse.json(
+          { error: "Franchise context is required for stock updates" },
+          { status: 400 }
+        )
+      }
       query = query.eq("is_active", true)
     }
 
     // Execute the update
-    const { data, error, count } = await query.select("id", { count: "exact" })
+    const { data, error } = await query.select("id")
+    const count = data?.length || 0
 
     if (error) {
       console.error("Failed to bulk update stock:", error)
@@ -91,25 +100,25 @@ export async function POST(req: NextRequest) {
  */
 export async function GET(req: NextRequest) {
   try {
-    // Check for admin authentication - either via session or API key
-    const authHeader = req.headers.get('authorization')
-    const hasValidKey = authHeader === `Bearer ${process.env.SUPABASE_SERVICE_ROLE_KEY}`
-    
-    if (!hasValidKey) {
-      // Fall back to session-based auth
-      const auth = await authenticateRequest(req, { minRole: 'super_admin' })
-      if (!auth.authorized) {
-        return NextResponse.json(auth.error, { status: auth.statusCode || 401 })
-      }
+    const auth = await authenticateRequest(req, { minRole: 'staff', requirePermission: 'inventory' })
+    if (!auth.authorized) {
+      return NextResponse.json(auth.error, { status: auth.statusCode || 401 })
     }
+    const user = auth.user!
 
     const supabase = createClient()
 
     // Get stock statistics
-    const { data: stats, error } = await supabase
+    let query = supabase
       .from("products")
       .select("stock_available, franchise_id")
       .eq("is_active", true)
+
+    if (!user.is_super_admin && user.franchise_id) {
+      query = query.eq("franchise_id", user.franchise_id)
+    }
+
+    const { data: stats, error } = await query
 
     if (error) {
       return NextResponse.json(
@@ -118,14 +127,14 @@ export async function GET(req: NextRequest) {
       )
     }
 
-    const totalProducts = stats.length
-    const totalStock = stats.reduce((sum, product) => sum + (product.stock_available || 0), 0)
+    const totalProducts = (stats || []).length
+    const totalStock = (stats || []).reduce((sum, product) => sum + (product.stock_available || 0), 0)
     const averageStock = totalProducts > 0 ? Math.round(totalStock / totalProducts) : 0
-    const minStock = Math.min(...stats.map(p => p.stock_available || 0))
-    const maxStock = Math.max(...stats.map(p => p.stock_available || 0))
+    const minStock = totalProducts > 0 ? Math.min(...(stats || []).map(p => p.stock_available || 0)) : 0
+    const maxStock = totalProducts > 0 ? Math.max(...(stats || []).map(p => p.stock_available || 0)) : 0
 
     // Group by franchise
-    const franchiseStats = stats.reduce((acc, product) => {
+    const franchiseStats = (stats || []).reduce((acc, product) => {
       const franchiseId = product.franchise_id || 'unknown'
       if (!acc[franchiseId]) {
         acc[franchiseId] = { count: 0, totalStock: 0 }

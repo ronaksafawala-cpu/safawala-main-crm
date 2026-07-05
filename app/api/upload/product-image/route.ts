@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
+import { requireAuth, AuthMiddleware } from "@/lib/auth-middleware"
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -9,6 +10,12 @@ const MAX_SIZE_MB = 10
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireAuth(request, "staff")
+    if (!auth.success) {
+      return NextResponse.json(auth.response, { status: 401 })
+    }
+
+    const user = auth.authContext!.user
     const formData = await request.formData()
     const file = formData.get("file") as File | null
     let franchiseId = formData.get("franchiseId") as string | null
@@ -16,7 +23,15 @@ export async function POST(request: NextRequest) {
     if (!file) return NextResponse.json({ error: "No file provided" }, { status: 400 })
 
     if (!franchiseId || franchiseId === "null" || franchiseId === "undefined" || franchiseId.trim() === "") {
-      franchiseId = "global"
+      franchiseId = user.franchise_id || null
+    }
+
+    if (!franchiseId) {
+      return NextResponse.json({ error: "Franchise context is required" }, { status: 400 })
+    }
+
+    if (!AuthMiddleware.canAccessFranchise(user, franchiseId)) {
+      return NextResponse.json({ error: "Access denied to this franchise" }, { status: 403 })
     }
 
     if (!file.type.startsWith("image/")) {

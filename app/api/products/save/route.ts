@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@supabase/supabase-js"
+import { requireAuth, AuthMiddleware } from "@/lib/auth-middleware"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -18,6 +19,16 @@ function getServiceClient() {
  */
 export async function POST(req: NextRequest) {
   try {
+    const authResult = await requireAuth(req, "staff")
+    if (!authResult.success) {
+      return NextResponse.json(authResult.response, { status: 401 })
+    }
+
+    const authUser = authResult.authContext!.user
+    if (!authUser.permissions.inventory && !authUser.permissions.productArchive) {
+      return NextResponse.json({ error: "You do not have permission to create products" }, { status: 403 })
+    }
+
     const body = await req.json()
     const { images, variants, _variation_count, category_name, product_code, franchiseId: bodyFranchiseId, ...productData } = body
 
@@ -31,20 +42,14 @@ export async function POST(req: NextRequest) {
 
     const supabase = getServiceClient()
 
-    // Resolve franchise_id: use passed franchiseId, or fall back to first active franchise
-    let franchise_id = bodyFranchiseId || cleanData.franchise_id
-    if (!franchise_id || franchise_id === "null" || franchise_id === "undefined") {
-      const { data: franchises } = await supabase
-        .from("franchises")
-        .select("id")
-        .eq("is_active", true)
-        .order("created_at", { ascending: true })
-        .limit(1)
-      franchise_id = franchises?.[0]?.id ?? null
-    }
+    let franchise_id = bodyFranchiseId || cleanData.franchise_id || authUser.franchise_id
 
     if (!franchise_id) {
-      return NextResponse.json({ error: "No franchise found to assign product to" }, { status: 400 })
+      return NextResponse.json({ error: "Franchise ID is required to create a product" }, { status: 400 })
+    }
+
+    if (!AuthMiddleware.canAccessFranchise(authUser, franchise_id)) {
+      return NextResponse.json({ error: "Access denied to this franchise" }, { status: 403 })
     }
 
     cleanData.franchise_id = franchise_id

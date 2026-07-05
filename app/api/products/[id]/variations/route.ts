@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-import { authenticateRequest } from "@/lib/auth-middleware"
+import { authenticateRequest, AuthMiddleware } from "@/lib/auth-middleware"
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -95,6 +95,10 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
       return NextResponse.json({ error: "Product not found" }, { status: 404 })
     }
 
+    if (!AuthMiddleware.canAccessFranchise(auth.user!, product.franchise_id)) {
+      return NextResponse.json({ error: "Access denied to this franchise" }, { status: 403 })
+    }
+
     const franchiseId = auth.user!.franchise_id || product.franchise_id
     if (!franchiseId) {
       return NextResponse.json({ error: "No franchise assigned" }, { status: 403 })
@@ -163,6 +167,21 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
 
     const supabase = createClient()
 
+    const { data: existingVariation, error: existingVariationError } = await supabase
+      .from("product_variations")
+      .select("id, franchise_id")
+      .eq("id", variation_id)
+      .eq("product_id", params.id)
+      .single()
+
+    if (existingVariationError || !existingVariation) {
+      return NextResponse.json({ error: "Variation not found" }, { status: 404 })
+    }
+
+    if (!AuthMiddleware.canAccessFranchise(auth.user!, existingVariation.franchise_id)) {
+      return NextResponse.json({ error: "Access denied to this franchise" }, { status: 403 })
+    }
+
     // Build safe update object
     const updateData: Record<string, unknown> = {}
     if (updateFields.variation_name !== undefined) updateData.variation_name = updateFields.variation_name.trim().substring(0, 255)
@@ -230,6 +249,21 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
     }
 
     const supabase = createClient()
+
+    const { data: existingVariation, error: existingVariationError } = await supabase
+      .from("product_variations")
+      .select("id, franchise_id")
+      .eq("id", variationId)
+      .eq("product_id", params.id)
+      .single()
+
+    if (existingVariationError || !existingVariation) {
+      return NextResponse.json({ error: "Variation not found" }, { status: 404 })
+    }
+
+    if (!AuthMiddleware.canAccessFranchise(auth.user!, existingVariation.franchise_id)) {
+      return NextResponse.json({ error: "Access denied to this franchise" }, { status: 403 })
+    }
 
     const { error } = await supabase
       .from("product_variations")

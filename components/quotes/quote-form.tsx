@@ -85,23 +85,18 @@ export function QuoteForm({ customers, products, categories }: QuoteFormProps) {
   const [pincodeStatus, setPincodeStatus] = useState<"idle" | "loading" | "success" | "error">("idle")
 
   const [packageMode, setPackageMode] = useState(false)
-  const [selectedPackageItems, setSelectedPackageItems] = useState<any[]>([])
 
   useEffect(() => {
     const fetchProductsWithStock = async () => {
       try {
-        console.log("[v0] Fetching products with current stock levels...")
         const { data, error } = await supabase.from("products").select("*").eq("is_active", true).order("name")
 
         if (error) {
-          console.error("Error fetching products:", error)
           return
         }
 
-        console.log(`[v0] Fetched ${data.length} products with stock data`)
         setRealTimeProducts(data || [])
       } catch (error) {
-        console.error("Error fetching products:", error)
         toast.error("Failed to load current stock levels")
       }
     }
@@ -335,13 +330,11 @@ export function QuoteForm({ customers, products, categories }: QuoteFormProps) {
         })),
       }
 
-      console.log("[v0] Creating quote with validated data:", quoteData)
       const quote = await quoteService.create(quoteData)
 
       toast.success("Quote generated successfully!")
       router.push(`/quotes/${quote.id}`)
     } catch (error) {
-      console.error("Error generating quote:", error)
       toast.error(`Failed to generate quote: ${error instanceof Error ? error.message : "Unknown error"}`)
     } finally {
       setGeneratingQuote(false)
@@ -734,17 +727,16 @@ export function QuoteForm({ customers, products, categories }: QuoteFormProps) {
                 <div className="space-y-4">
                   <div className="text-center py-8 text-gray-500">
                     <Package className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-                    <p className="font-medium">Package Selection for Quotes</p>
-                    <p className="text-sm">Select from pre-configured package bundles with automatic pricing</p>
+                    <p className="font-medium">Package Quotes</p>
+                    <p className="text-sm">Use the dedicated package builder to create package-based quotes with variants, inclusions, and pricing.</p>
                     <Button
                       variant="outline"
                       className="mt-4 bg-transparent"
                       onClick={() => {
-                        // Navigate to package selection or open package dialog
-                        toast.info("Package selection coming soon! Use individual products for now.")
+                        router.push("/book-package")
                       }}
                     >
-                      Browse Packages
+                      Open Package Quote Builder
                     </Button>
                   </div>
                 </div>

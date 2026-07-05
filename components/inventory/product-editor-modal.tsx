@@ -228,15 +228,18 @@ export function ProductEditorModal({
 
   // When product loads, also load its subcategories
   useEffect(() => {
-    if (product?.category_id) {
-      supabase
-        .from("product_categories")
-        .select("id, name")
-        .eq("parent_id", product.category_id)
-        .eq("is_active", true)
-        .order("name")
-        .then(({ data }: any) => { if (data) setSubcategories(data) })
+    if (!product?.category_id) {
+      setSubcategories([])
+      return
     }
+
+    supabase
+      .from("product_categories")
+      .select("id, name")
+      .eq("parent_id", product.category_id)
+      .eq("is_active", true)
+      .order("name")
+      .then(({ data }: any) => { if (data) setSubcategories(data) })
   }, [product?.category_id])
 
   const [formData, setFormData] = useState<Product>({
@@ -328,9 +331,9 @@ export function ProductEditorModal({
   }
 
   const handleUploadImages = async (files: File[]) => {
-    let uploadFranchiseId = franchiseId || (product as any)?.franchise_id || "global"
-    if (uploadFranchiseId === "undefined" || uploadFranchiseId === "null" || uploadFranchiseId.trim() === "") {
-      uploadFranchiseId = "global"
+    const uploadFranchiseId = (franchiseId || (product as any)?.franchise_id || "").trim()
+    if (!uploadFranchiseId || uploadFranchiseId === "undefined" || uploadFranchiseId === "null") {
+      throw new Error("Franchise context is required before uploading product images")
     }
 
     try {
@@ -370,6 +373,10 @@ export function ProductEditorModal({
 
     setSaving(true)
     try {
+      if (!product && !franchiseId) {
+        throw new Error("Franchise context is required before creating a product")
+      }
+
       const mainImage = images.find((img) => img.is_main)
 
       const payload = {

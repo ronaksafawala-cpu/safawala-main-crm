@@ -12,7 +12,7 @@ export async function POST(request: NextRequest) {
   
   try {
     // Require super admin access
-    const authResult = await requireAuth(request, 'superadmin');
+    const authResult = await requireAuth(request, 'super_admin');
     if (!authResult.success) {
       await logService.logWarn(requestId, 'Unauthorized access to log token revocation', {
         endpoint: '/internal/logs/revoke',

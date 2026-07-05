@@ -5,6 +5,21 @@ import { supabaseServer } from "@/lib/supabase-server-simple"
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
 
+const SAFE_STAFF_SELECT = `
+  id,
+  name,
+  email,
+  role,
+  department,
+  franchise_id,
+  is_active,
+  base_salary,
+  permissions,
+  created_at,
+  updated_at,
+  franchise:franchises(name, code)
+`
+
 /**
  * POST /api/staff/toggle-status
  * Body: { id: string }
@@ -37,7 +52,7 @@ export async function POST(request: NextRequest) {
     // Load target user and verify franchise
     const { data: targetUser, error: fetchError } = await supabaseServer
       .from('users')
-      .select('id, is_active, franchise_id')
+      .select('id, is_active, franchise_id, role')
       .eq('id', id)
       .single()
 
@@ -53,6 +68,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized: Can only toggle staff in your own franchise' }, { status: 403 })
     }
 
+    if (user!.role !== 'super_admin' && targetUser.role === 'super_admin') {
+      return NextResponse.json({ error: 'Unauthorized: Cannot modify super admin accounts' }, { status: 403 })
+    }
+
     // Toggle
     const newStatus = !targetUser.is_active
 
@@ -60,7 +79,7 @@ export async function POST(request: NextRequest) {
       .from('users')
       .update({ is_active: newStatus, updated_at: new Date().toISOString() })
       .eq('id', id)
-      .select(`*, franchise:franchises(name, code)`) // keep response shape consistent
+      .select(SAFE_STAFF_SELECT)
       .single()
 
     if (updateError) {

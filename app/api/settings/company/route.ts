@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
 import { ApiResponseBuilder, validateRequiredFields, validateEmail } from '@/lib/api-response'
+import { authenticateRequest, AuthMiddleware } from '@/lib/auth-middleware'
 
 // GET - Fetch company settings
 export async function GET(request: NextRequest) {
   try {
+    const auth = await authenticateRequest(request, { minRole: 'franchise_admin', requirePermission: 'settings' })
+    if (!auth.authorized) return NextResponse.json(auth.error, { status: auth.statusCode || 401 })
+
     const supabase = createClient()
     const { searchParams } = new URL(request.url)
     const franchiseId = searchParams.get('franchise_id')
@@ -13,6 +17,13 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(
         ApiResponseBuilder.validationError('Franchise ID is required', 'franchise_id'),
         { status: 400 }
+      )
+    }
+
+    if (!AuthMiddleware.canAccessFranchise(auth.user!, franchiseId)) {
+      return NextResponse.json(
+        ApiResponseBuilder.forbiddenError('Access denied to this franchise'),
+        { status: 403 }
       )
     }
 
@@ -45,6 +56,9 @@ export async function GET(request: NextRequest) {
 // POST/PUT - Create or update company settings
 export async function POST(request: NextRequest) {
   try {
+    const auth = await authenticateRequest(request, { minRole: 'franchise_admin', requirePermission: 'settings' })
+    if (!auth.authorized) return NextResponse.json(auth.error, { status: auth.statusCode || 401 })
+
     const supabase = createClient()
     const body = await request.json()
 
@@ -82,6 +96,13 @@ export async function POST(request: NextRequest) {
       logo_url,
       terms_conditions
     } = body
+
+    if (!AuthMiddleware.canAccessFranchise(auth.user!, franchise_id)) {
+      return NextResponse.json(
+        ApiResponseBuilder.forbiddenError('Access denied to this franchise'),
+        { status: 403 }
+      )
+    }
 
     // Check if settings exist for this franchise
     const { data: existing, error: fetchError } = await supabase

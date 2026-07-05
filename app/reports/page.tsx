@@ -118,7 +118,6 @@ export default function ReportsPage() {
 
   const checkAuth = async () => {
     const currentUser = await getCurrentUser()
-    console.log("[Reports] Current user from getCurrentUser:", currentUser)
     if (!currentUser) { router.push("/"); return }
     if (!canViewReports(currentUser.role)) { router.push("/dashboard"); return }
     setUser(currentUser)
@@ -133,7 +132,6 @@ export default function ReportsPage() {
     // Super admins see all data (no franchise filter)
     const franchiseId = currentUser.role === "super_admin" ? undefined : currentUser.franchise_id
     
-    console.log("[Reports] Loading data for user:", currentUser.email, "role:", currentUser.role, "franchiseId:", franchiseId)
 
     try {
       await Promise.all([
@@ -148,8 +146,7 @@ export default function ReportsPage() {
         loadEnhancedExpenseData(franchiseId, fromDate, toDate),
       ])
       toast({ title: "Data Loaded", description: "All reports refreshed" })
-    } catch (error) {
-      console.error("Error:", error)
+    } catch {
       toast({ title: "Error", description: "Failed to load some data", variant: "destructive" })
     } finally {
       setRefreshing(false)
@@ -189,8 +186,6 @@ export default function ReportsPage() {
   }
 
   const loadInventoryStats = async (franchiseId: string | undefined) => {
-    console.log("[Reports] Loading inventory directly from Supabase")
-    
     try {
       // Use same approach as inventory page - direct Supabase query
       let query = supabase
@@ -205,13 +200,11 @@ export default function ReportsPage() {
       const { data: products, error } = await query
       
       if (error) {
-        console.error("[Reports] Error loading products:", error)
         return
       }
       
       // Filter active products (is_active !== false) - same as inventory page
       const activeProducts = (products || []).filter((p: any) => p.is_active !== false)
-      console.log("[Reports] Loaded products:", activeProducts.length)
       
       // Get categories
       let catQuery = supabase.from("product_categories").select("id, name")
@@ -289,8 +282,8 @@ export default function ReportsPage() {
           .sort((a, b) => b.value - a.value)
       )
       
-    } catch (error) {
-      console.error("[Reports] Error loading inventory:", error)
+    } catch {
+      return
     }
   }
 
@@ -301,8 +294,6 @@ export default function ReportsPage() {
   }
 
   const loadExpenseStats = async (franchiseId: string | undefined, fromDate: string, toDate: string) => {
-    console.log("[Reports] Loading expenses via API")
-    
     try {
       // Use the same API as expenses page
       const res = await fetch(`/api/expenses?pageSize=1000&dateFrom=${fromDate}&dateTo=${toDate}`, {
@@ -310,13 +301,11 @@ export default function ReportsPage() {
       })
       
       if (!res.ok) {
-        console.error("[Reports] API error:", res.status, res.statusText)
         return
       }
       
       const result = await res.json()
       const data = result.data || []
-      console.log("[Reports] Expenses loaded:", data.length, data)
       
       // Group by category (subcategory field)
       const expenseByCategory: Record<string, number> = {}
@@ -330,8 +319,8 @@ export default function ReportsPage() {
           .map(([category, amount]) => ({ category, amount }))
           .sort((a, b) => b.amount - a.amount)
       )
-    } catch (error) {
-      console.error("[Reports] Error loading expenses:", error)
+    } catch {
+      return
     }
   }
 
@@ -445,8 +434,6 @@ export default function ReportsPage() {
 
   // Enhanced expense data loading
   const loadEnhancedExpenseData = async (franchiseId: string | undefined, fromDate: string, toDate: string) => {
-    console.log("[Reports] Loading enhanced expense data via API")
-    
     try {
       // Use the same API as expenses page
       const res = await fetch(`/api/expenses?pageSize=1000&dateFrom=${fromDate}&dateTo=${toDate}`, {
@@ -454,13 +441,11 @@ export default function ReportsPage() {
       })
       
       if (!res.ok) {
-        console.error("[Reports] Enhanced expense API error:", res.status)
         return
       }
       
       const result = await res.json()
       const exps = result.data || []
-      console.log("[Reports] Enhanced expenses loaded:", exps.length)
 
       // Expense details (top 20 recent expenses)
       const details = exps.slice(0, 20).map((e: any) => ({
@@ -503,8 +488,8 @@ export default function ReportsPage() {
           .sort((a, b) => b.amount - a.amount)
           .slice(0, 10)
       )
-    } catch (error) {
-      console.error("[Reports] Error loading enhanced expenses:", error)
+    } catch {
+      return
     }
   }
 

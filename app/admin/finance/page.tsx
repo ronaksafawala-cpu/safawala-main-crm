@@ -53,15 +53,9 @@ export default function FranchisePaymentsPage() {
       .then(d => setFranchises(d.data ?? d ?? []))
       .catch(() => {})
 
-    // Load financial categories
-    fetch("https://xplnyaxkusvuajtmorss.supabase.co/rest/v1/financial_categories?select=id,name,type&order=type,name", {
-      headers: {
-        "apikey": process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || "",
-        "Authorization": `Bearer ${process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || ""}`,
-      }
-    })
+    fetch("/api/financial-categories", { cache: "no-store" })
       .then(r => r.json())
-      .then(d => Array.isArray(d) ? setCategories(d) : {})
+      .then(d => setCategories(d.data ?? []))
       .catch(() => {})
   }, [])
 

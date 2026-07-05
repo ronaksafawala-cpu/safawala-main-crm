@@ -1,11 +1,17 @@
 import { NextRequest, NextResponse } from "next/server"
 import { v4 as uuidv4 } from "uuid"
+import { requireAuth } from "@/lib/auth-middleware"
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireAuth(request, "staff")
+    if (!auth.success) {
+      return NextResponse.json(auth.response, { status: 401 })
+    }
+
     const formData = await request.formData()
     const file = formData.get('file') as File
-    const folder = formData.get('folder') as string
+    const folder = (formData.get('folder') as string) || 'uploads'
 
     if (!file) {
       return NextResponse.json(
@@ -37,6 +43,31 @@ export async function POST(request: NextRequest) {
 
     if (!allowedTypes.includes(file.type)) {
       return NextResponse.json({ error: `File type ${file.type} not allowed` }, { status: 400 })
+    }
+
+    const normalizedFolder = folder.trim()
+    const allowedFolders = new Set([
+      'uploads',
+      'products',
+      'company',
+      'hr',
+      'kyc',
+      'vendors',
+      'documents',
+      'logos',
+    ])
+
+    if (
+      normalizedFolder.includes('..') ||
+      normalizedFolder.includes('\\') ||
+      normalizedFolder.startsWith('/')
+    ) {
+      return NextResponse.json({ error: "Invalid folder path" }, { status: 400 })
+    }
+
+    const topLevelFolder = normalizedFolder.split('/')[0]
+    if (!allowedFolders.has(topLevelFolder)) {
+      return NextResponse.json({ error: "Upload folder not allowed" }, { status: 403 })
     }
 
     // Generate unique filename for reference

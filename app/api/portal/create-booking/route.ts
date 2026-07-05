@@ -140,6 +140,28 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    if (!is_quote) {
+      try {
+        const { NotificationService } = await import("@/lib/notification-service")
+        const { data: customer } = await supabase
+          .from("customers")
+          .select("name, phone")
+          .eq("id", customer_id)
+          .single()
+
+        await NotificationService.notifyBookingCreated({
+          ...order,
+          customer_name: customer?.name || null,
+          customer_phone: customer?.phone || null,
+          venue: venue_address || null,
+          booking_type,
+          type: booking_type,
+        })
+      } catch (notificationError) {
+        console.error('[Portal Create Booking] Notification failed:', notificationError)
+      }
+    }
+
     return NextResponse.json({ success: true, data: order }, { status: 201 })
   } catch (error) {
     console.error('[Portal Create Booking] Unexpected error:', error)

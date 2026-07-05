@@ -24,7 +24,7 @@ import {
 import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { supabase } from "@/lib/supabase"
 import { toast } from "sonner"
-import { PincodeService } from "@/lib/pincode-service"
+import { lookupPincode } from "@/lib/pincode-service"
 
 interface FranchiseFormData {
   franchise_name: string
@@ -79,7 +79,7 @@ export default function NewFranchisePage() {
       setPincodeLoading(true)
 
       try {
-        const pincodeData = await PincodeService.lookupPincode(pincode)
+        const pincodeData = await lookupPincode(pincode)
 
         if (pincodeData) {
           setFormData((prev) => ({

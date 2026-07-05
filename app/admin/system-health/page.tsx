@@ -18,7 +18,6 @@ import {
   Shield,
   FileText,
 } from "lucide-react"
-import { DashboardLayout } from "@/components/layout/dashboard-layout"
 import { toast } from "@/hooks/use-toast"
 
 interface HealthCheck {
@@ -26,7 +25,7 @@ interface HealthCheck {
   status: "healthy" | "warning" | "error" | "checking"
   message: string
   details?: string
-  lastChecked?: Date
+  lastChecked?: string
   responseTime?: number
 }
 
@@ -52,7 +51,16 @@ export default function SystemHealthPage() {
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null)
   const [autoRefresh, setAutoRefresh] = useState(false)
 
-  const runHealthCheck = async () => {
+  const normalizeHealth = (payload: Partial<SystemHealth> | undefined): SystemHealth => ({
+    database: payload?.database ?? [],
+    integrations: payload?.integrations ?? [],
+    apis: payload?.apis ?? [],
+    authentication: payload?.authentication ?? [],
+    storage: payload?.storage ?? [],
+    performance: payload?.performance ?? [],
+  })
+
+  const runHealthCheck = async (options?: { silent?: boolean }) => {
     setIsChecking(true)
     try {
       const response = await fetch("/api/admin/health-check", {
@@ -62,12 +70,14 @@ export default function SystemHealthPage() {
 
       if (response.ok) {
         const data = await response.json()
-        setHealth(data.health)
-        setLastUpdate(new Date())
-        toast({
-          title: "Health Check Complete",
-          description: `System health check completed successfully`,
-        })
+        setHealth(normalizeHealth(data.health))
+        setLastUpdate(data.timestamp ? new Date(data.timestamp) : new Date())
+        if (!options?.silent) {
+          toast({
+            title: "Health Check Complete",
+            description: `System health check completed successfully`,
+          })
+        }
       } else {
         throw new Error("Health check failed")
       }
@@ -83,13 +93,13 @@ export default function SystemHealthPage() {
   }
 
   useEffect(() => {
-    runHealthCheck()
+    runHealthCheck({ silent: true })
   }, [])
 
   useEffect(() => {
     let interval: NodeJS.Timeout
     if (autoRefresh) {
-      interval = setInterval(runHealthCheck, 30000) // 30 seconds
+      interval = setInterval(() => runHealthCheck({ silent: true }), 30000) // 30 seconds
     }
     return () => {
       if (interval) clearInterval(interval)
@@ -146,10 +156,19 @@ export default function SystemHealthPage() {
   }
 
   const overallHealth = getOverallHealth()
+  const formatCheckedTime = (value?: string) => {
+    if (!value) return null
+    const parsed = new Date(value)
+    if (Number.isNaN(parsed.getTime())) return "Invalid timestamp"
+    return parsed.toLocaleTimeString("en-IN", {
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: true,
+    })
+  }
 
   return (
-    <DashboardLayout>
-      <div className="space-y-6">
+      <div className="space-y-6 p-4 md:p-7">
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
@@ -160,7 +179,7 @@ export default function SystemHealthPage() {
             <Button variant="outline" size="sm" onClick={() => setAutoRefresh(!autoRefresh)}>
               {autoRefresh ? "Stop Auto Refresh" : "Auto Refresh"}
             </Button>
-            <Button onClick={runHealthCheck} disabled={isChecking}>
+            <Button onClick={() => runHealthCheck()} disabled={isChecking}>
               <RefreshCw className={`h-4 w-4 mr-2 ${isChecking ? "animate-spin" : ""}`} />
               {isChecking ? "Checking..." : "Run Health Check"}
             </Button>
@@ -219,7 +238,7 @@ export default function SystemHealthPage() {
             </TabsTrigger>
           </TabsList>
 
-          {Object.entries(health).map(([category, checks]) => (
+          {(Object.entries(health) as Array<[keyof SystemHealth, HealthCheck[]]>).map(([category, checks]) => (
             <TabsContent key={category} value={category} className="space-y-4">
               {checks.length === 0 ? (
                 <Alert>
@@ -247,7 +266,7 @@ export default function SystemHealthPage() {
                         )}
                         {check.lastChecked && (
                           <p className="text-xs text-gray-500">
-                            Last checked: {check.lastChecked.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true })}
+                            Last checked: {formatCheckedTime(check.lastChecked)}
                           </p>
                         )}
                       </CardContent>
@@ -259,6 +278,5 @@ export default function SystemHealthPage() {
           ))}
         </Tabs>
       </div>
-    </DashboardLayout>
   )
 }

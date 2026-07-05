@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { authenticateRequest } from "@/lib/auth-middleware"
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 30
@@ -9,6 +10,10 @@ export const revalidate = 0
  * GET /api/bookings-items?id=UUID&source=product_order|package_booking
  */
 export async function GET(request: NextRequest) {
+  const auth = await authenticateRequest(request, { minRole: 'staff' })
+  if (!auth.authorized) {
+    return NextResponse.json(auth.error, { status: auth.statusCode })
+  }
   const startTime = Date.now()
   try {
     const { searchParams } = new URL(request.url)
@@ -217,6 +222,10 @@ export async function GET(request: NextRequest) {
  * Save/update booking items
  */
 export async function POST(request: NextRequest) {
+  const auth = await authenticateRequest(request, { minRole: 'staff' })
+  if (!auth.authorized) {
+    return NextResponse.json(auth.error, { status: auth.statusCode })
+  }
   try {
     const body = await request.json()
     const { bookingId, items, source } = body

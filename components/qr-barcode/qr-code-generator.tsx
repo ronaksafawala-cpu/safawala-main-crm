@@ -39,8 +39,7 @@ export function QRCodeGenerator({ item, onClose }: QRCodeGeneratorProps) {
         // Generate Barcode
         const barcode = generateBarcode(codeText)
         setBarcodeDataURL(barcode)
-      } catch (error) {
-        console.error('Error generating codes:', error)
+      } catch {
       } finally {
         setLoading(false)
       }

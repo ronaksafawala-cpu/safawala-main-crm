@@ -112,7 +112,6 @@ export function ProductSelector({
     if (!code.trim()) return
     
     setIsScanning(true)
-    console.log('[ProductSelector] Barcode scan:', code)
     
     try {
       // Try API lookup first
@@ -124,7 +123,6 @@ export function ProductSelector({
       
       if (response.ok) {
         const result = await response.json()
-        console.log('[ProductSelector] ✅ Found via API:', result.product.name)
         
         // Find matching product in our list to use proper typing
         const matchedProduct = products.find(p => p.id === result.product.id)
@@ -167,7 +165,6 @@ export function ProductSelector({
       })
       
       if (foundProduct) {
-        console.log('[ProductSelector] ✅ Found in local products:', foundProduct.name)
         onProductSelect(foundProduct)
         toast.success("Product added!", {
           description: `${foundProduct.name} added to cart`,
@@ -178,14 +175,12 @@ export function ProductSelector({
       }
       
       // Not found
-      console.log('[ProductSelector] ❌ Product not found:', code)
       toast.error("Product not found", {
         description: `No product found with barcode: ${code}`,
         duration: 3000
       })
       
     } catch (error) {
-      console.error('[ProductSelector] Barcode scan error:', error)
       toast.error("Scan error", {
         description: "Failed to lookup barcode",
         duration: 3000
@@ -226,7 +221,6 @@ export function ProductSelector({
           () => {}
         )
       } catch (error: any) {
-        console.error("[ProductSelector] Camera error:", error)
         setCameraError(error?.message || "Failed to start camera scanner")
       }
     }, 250)
@@ -264,17 +258,6 @@ export function ProductSelector({
       }, 1000)
     }
   }
-
-  // Log on mount and when props change
-  useEffect(() => {
-    console.log("[ProductSelector] Rendered with:", {
-      productCount: products.length,
-      categoryCount: categories.length,
-      subcategoryCount: subcategories.length,
-      firstProduct: products[0],
-      firstCategory: categories[0]
-    })
-  }, [products, categories, subcategories])
 
   // Categories restricted to the other transaction type (used to hide their products)
   const categoryTypeById = useMemo(() => {

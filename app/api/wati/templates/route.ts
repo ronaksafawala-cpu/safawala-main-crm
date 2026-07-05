@@ -1,4 +1,11 @@
-export async function GET() {
+import { type NextRequest } from "next/server"
+import { authenticateRequest } from "@/lib/auth-middleware"
+
+export async function GET(request: NextRequest) {
+  const auth = await authenticateRequest(request, { minRole: 'franchise_admin' })
+  if (!auth.authorized) {
+    return Response.json(auth.error, { status: auth.statusCode })
+  }
   try {
     const response = await fetch("https://live-mt-server.wati.io/481455/api/v1/getMessageTemplates", {
       method: "GET",

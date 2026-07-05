@@ -234,8 +234,7 @@ export function ReturnProcessingDialog({
       )
 
       setItems(itemsWithDetails)
-    } catch (error) {
-      console.error("Error loading return items:", error)
+    } catch {
       toast({
         title: "Error",
         description: "Failed to load return items",
@@ -370,8 +369,7 @@ export function ReturnProcessingDialog({
       const data = await response.json()
       setPreview(data.preview || [])
       setShowPreview(true)
-    } catch (error) {
-      console.error("Error loading preview:", error)
+    } catch {
       toast({
         title: "Error",
         description: "Failed to load inventory preview",
@@ -431,7 +429,6 @@ export function ReturnProcessingDialog({
       onSuccess()
       onClose()
     } catch (error: any) {
-      console.error("Error processing return:", error)
       toast({
         title: "Error",
         description: error.message || "Failed to process return",
@@ -510,7 +507,6 @@ export function ReturnProcessingDialog({
 
       onClose()
     } catch (error: any) {
-      console.error("Error saving return:", error)
       toast({
         title: "Error",
         description: error.message || "Failed to save return details",
@@ -533,8 +529,7 @@ export function ReturnProcessingDialog({
         videoRef.current.srcObject = mediaStream
       }
       setShowCamera(true)
-    } catch (err) {
-      console.error('Camera access denied:', err)
+    } catch {
       toast({
         title: 'Camera Error',
         description: 'Could not access camera. Please allow camera permissions or use file upload.',

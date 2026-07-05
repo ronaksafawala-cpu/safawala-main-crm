@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { authenticateRequest } from "@/lib/auth-middleware"
 
 const STYLES = [
   {
@@ -91,6 +92,11 @@ Write as one detailed paragraph starting with the product type. Be extremely spe
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await authenticateRequest(request, { minRole: 'staff' })
+    if (!auth.authorized) {
+      return NextResponse.json(auth.error, { status: auth.statusCode })
+    }
+
     const formData = await request.formData()
     const image = formData.get("image") as File | null
     const productHint = (formData.get("productHint") as string) || ""

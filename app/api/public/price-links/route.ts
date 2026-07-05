@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 
 export const dynamic = "force-dynamic"
 
-const ADMIN_PASSWORD = process.env.PACKAGES_ADMIN_PASSWORD || "Safawala@5678"
+const ADMIN_PASSWORD = process.env.PACKAGES_ADMIN_PASSWORD || null
 
 // GET: Fetch a price link by key
 export async function GET(request: NextRequest) {

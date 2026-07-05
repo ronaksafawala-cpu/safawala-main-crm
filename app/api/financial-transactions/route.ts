@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-import { requireAuth } from "@/lib/auth-middleware"
+import { requireAuth, AuthMiddleware } from "@/lib/auth-middleware"
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -9,11 +9,17 @@ export async function GET(request: NextRequest) {
   try {
     const authResult = await requireAuth(request, 'readonly')
     if (!authResult.success) return NextResponse.json(authResult.response, { status: 401 })
+    const user = authResult.authContext!.user
 
     const { searchParams } = new URL(request.url)
-    const franchiseId = searchParams.get('franchise_id')
+    const requestedFranchiseId = searchParams.get('franchise_id')
+    const franchiseId = user.is_super_admin ? requestedFranchiseId : (user.franchise_id || null)
     const type = searchParams.get('type')
     const limit = parseInt(searchParams.get('limit') ?? '200', 10)
+
+    if (franchiseId && !AuthMiddleware.canAccessFranchise(user, franchiseId)) {
+      return NextResponse.json({ error: "Access denied to this franchise" }, { status: 403 })
+    }
 
     const supabase = createClient()
     let query = supabase
@@ -50,6 +56,10 @@ export async function POST(request: NextRequest) {
 
     if (!amount || !type || !franchise_id || !category_id) {
       return NextResponse.json({ error: "amount, type, franchise_id, category_id are required" }, { status: 400 })
+    }
+
+    if (!AuthMiddleware.canAccessFranchise(user, franchise_id)) {
+      return NextResponse.json({ error: "Access denied to this franchise" }, { status: 403 })
     }
 
     const supabase = createClient()

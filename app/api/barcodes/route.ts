@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { supabase } from "@/lib/supabase"
+import { authenticateRequest } from "@/lib/auth-middleware"
 
 /**
  * POST /api/barcodes
@@ -13,6 +14,11 @@ import { supabase } from "@/lib/supabase"
  */
 export async function POST(req: NextRequest) {
   try {
+    const auth = await authenticateRequest(req, { minRole: 'staff' })
+    if (!auth.authorized) {
+      return NextResponse.json(auth.error, { status: auth.statusCode })
+    }
+
     const body = await req.json()
 
     const {

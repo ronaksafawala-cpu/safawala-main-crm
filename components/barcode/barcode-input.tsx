@@ -78,12 +78,6 @@ export function BarcodeInput({
     // Set new timeout
     timeoutRef.current = setTimeout(() => {
       const finalValue = value.trim()
-      console.log('[BarcodeInput] Scan complete:', {
-        fullValue: finalValue,
-        length: finalValue.length,
-        timestamp: new Date().toISOString(),
-        scanDuration: Date.now() - scanStartTimeRef.current
-      })
       onScan(finalValue)
       setValue("")
       setIsScanning(false)
@@ -105,11 +99,6 @@ export function BarcodeInput({
         onChange={(e) => {
           const raw = e.currentTarget.value
           const newValue = digitsOnly ? raw.replace(/\D/g, "") : raw
-          console.log('[BarcodeInput] Character received:', {
-            character: newValue[newValue.length - 1],
-            totalLength: newValue.length,
-            fullValue: newValue
-          })
           if (!value) {
             // mark start of scan window
             scanStartTimeRef.current = Date.now()
@@ -121,7 +110,6 @@ export function BarcodeInput({
               clearTimeout(timeoutRef.current)
             }
             immediateScanRef.current = true
-            console.log('[BarcodeInput] minDigits reached, triggering immediate scan:', { code, minDigits })
             onScan(code)
             setValue("")
             setIsScanning(false)
@@ -137,24 +125,15 @@ export function BarcodeInput({
             const finalValue = (digitsOnly ? value.replace(/\D/g, "") : value).trim()
             // If minDigits is set, only allow Enter to trigger when threshold met
             if (typeof minDigits === 'number' && finalValue.length < minDigits) {
-              console.log('[BarcodeInput] Enter pressed but below minDigits, ignoring', { length: finalValue.length, minDigits })
               return
             }
             const code = typeof minDigits === 'number' ? finalValue.slice(0, minDigits) : finalValue
-            console.log('[BarcodeInput] Enter key pressed, triggering scan:', {
-              fullValue: code,
-              length: code.length
-            })
             if (timeoutRef.current) {
               clearTimeout(timeoutRef.current)
             }
             onScan(code)
             setValue("")
             setIsScanning(false)
-          }
-          // Also log other characters being typed
-          if (e.key.length === 1) {
-            console.log('[BarcodeInput] Char:', e.key)
           }
         }}
         onPaste={(e) => {
@@ -163,11 +142,6 @@ export function BarcodeInput({
           const pastedText = e.clipboardData.getData('text')
           const sanitizedPaste = digitsOnly ? pastedText.replace(/\D/g, "") : pastedText
           const combined = (value + sanitizedPaste)
-          console.log('[BarcodeInput] Paste detected:', {
-            pastedText,
-            combinedValue: combined,
-            length: combined.length
-          })
           if (!value) {
             scanStartTimeRef.current = Date.now()
           }
@@ -177,7 +151,6 @@ export function BarcodeInput({
               clearTimeout(timeoutRef.current)
             }
             immediateScanRef.current = true
-            console.log('[BarcodeInput] Paste met minDigits, triggering immediate scan:', { code, minDigits })
             onScan(code)
             setValue("")
             setIsScanning(false)

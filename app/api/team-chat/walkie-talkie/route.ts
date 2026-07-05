@@ -18,6 +18,20 @@ export async function GET(req: NextRequest) {
   const sessionId = searchParams.get("session_id")
 
   if (transmissionsOnly && sessionId) {
+    const { data: session, error: sessionError } = await supabase
+      .from("walkie_talkie_sessions")
+      .select("id, franchise_id")
+      .eq("id", sessionId)
+      .single()
+
+    if (sessionError || !session) {
+      return NextResponse.json({ error: "Session not found" }, { status: 404 })
+    }
+
+    if (!user?.is_super_admin && session.franchise_id !== franchiseId) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    }
+
     // Fetch transmissions for specific session ordered chronologically
     const { data, error } = await supabase
       .from("walkie_talkie_transmissions")
@@ -96,6 +110,10 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Session not found" }, { status: 404 })
     }
 
+    if (!user?.is_super_admin && session.franchise_id !== franchiseId) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    }
+
     // Fetch all transmissions
     const { data: transmissions } = await supabase
       .from("walkie_talkie_transmissions")
@@ -129,6 +147,24 @@ export async function POST(req: NextRequest) {
   }
 
   if (action === "transmit" && sessionId && audioUrl) {
+    const { data: session, error: sessionError } = await supabase
+      .from("walkie_talkie_sessions")
+      .select("id, franchise_id, status")
+      .eq("id", sessionId)
+      .single()
+
+    if (sessionError || !session) {
+      return NextResponse.json({ error: "Session not found" }, { status: 404 })
+    }
+
+    if (session.status !== "active") {
+      return NextResponse.json({ error: "Session is not active" }, { status: 400 })
+    }
+
+    if (!user?.is_super_admin && session.franchise_id !== franchiseId) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    }
+
     // Insert new voice clip transmission
     const { data, error } = await supabase
       .from("walkie_talkie_transmissions")

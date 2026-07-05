@@ -48,8 +48,6 @@ export default function CustomerDetailPage() {
   const uuidMatch = rawId?.match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i)
   const customerId = uuidMatch ? uuidMatch[1] : rawId
   
-  console.log('Raw ID:', rawId, 'Sanitized ID:', customerId)
-
   const [customer, setCustomer] = useState<Customer | null>(null)
   const [bookings, setBookings] = useState<Booking[]>([])
   const [payments, setPayments] = useState<Payment[]>([])
@@ -84,7 +82,6 @@ export default function CustomerDetailPage() {
 
       // Fallback when is_active column doesn't exist yet on prod
       if (customerError && /is_active|column .* does not exist/i.test(String((customerError as any).message))) {
-        console.warn('[Customer Detail] is_active missing. Retrying without filter.')
         const retry = await supabase
           .from('customers')
           .select('*')
@@ -157,7 +154,6 @@ export default function CustomerDetailPage() {
         lastBookingDate,
       })
     } catch (error) {
-      console.error("Error loading customer data:", error)
       toast({
         title: "Error",
         description: "Failed to load customer data. Please try again.",
@@ -224,12 +220,6 @@ export default function CustomerDetailPage() {
       return
     }
 
-    console.log('[Delete Customer Detail] Starting deletion for:', {
-      id: customerId,
-      name: customer.name,
-      code: customer.customer_code
-    })
-
     try {
       // intentional Raw fetch
       const response = await fetch(`/api/delete`, {
@@ -240,8 +230,6 @@ export default function CustomerDetailPage() {
         credentials: "include",
         body: JSON.stringify({ entity: 'customer', id: customerId, hard: true })
       })
-
-      console.log('[Delete Customer Detail] Response status:', response.status)
 
       // Handle non-OK responses
       if (!response.ok) {
@@ -263,7 +251,6 @@ export default function CustomerDetailPage() {
               errorMessage = "You don't have permission to delete this customer."
             }
           } catch (parseError) {
-            console.error('[Delete Customer Detail] Failed to parse error response:', parseError)
             errorMessage = `Server error: ${response.status} ${response.statusText}`
           }
         } else {
@@ -281,12 +268,9 @@ export default function CustomerDetailPage() {
           responseData = await response.json()
         }
       } catch (parseError) {
-        console.warn('[Delete Customer Detail] Could not parse success response:', parseError)
       }
 
       // Success!
-      console.log('[Delete Customer Detail] Successfully deleted:', responseData)
-      
       toast({
         title: "Success",
         description: `Customer "${customer.name}" permanently deleted.`,
@@ -298,8 +282,6 @@ export default function CustomerDetailPage() {
       }, 500)
 
     } catch (error: any) {
-      console.error('[Delete Customer Detail] Error:', error)
-      
       // Show user-friendly error message
       const errorMessage = error.message || "Failed to delete customer. Please try again."
       toast({

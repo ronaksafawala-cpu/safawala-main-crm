@@ -84,6 +84,22 @@ export async function POST(req: NextRequest) {
   const user = auth.authContext?.user
   const franchiseId = user?.franchise_id
 
+  if (recipient_id) {
+    const { data: recipient, error: recipientError } = await supabase
+      .from("users")
+      .select("id, franchise_id")
+      .eq("id", recipient_id)
+      .single()
+
+    if (recipientError || !recipient) {
+      return NextResponse.json({ error: "Recipient not found" }, { status: 404 })
+    }
+
+    if (!user?.is_super_admin && recipient.franchise_id !== franchiseId) {
+      return NextResponse.json({ error: "Recipient must belong to your franchise" }, { status: 403 })
+    }
+  }
+
   if (!message?.trim() && message_type !== "voice" && message_type !== "image" && message_type !== "file") {
     return NextResponse.json({ error: "Message is required" }, { status: 400 })
   }
@@ -121,6 +137,26 @@ export async function DELETE(req: NextRequest) {
   const id = req.nextUrl.searchParams.get("id")
   if (!id) return NextResponse.json({ error: "ID required" }, { status: 400 })
 
+  const user = auth.authContext?.user
+
+  const { data: existingMessage, error: existingError } = await supabase
+    .from("team_messages")
+    .select("id, user_id, franchise_id")
+    .eq("id", id)
+    .single()
+
+  if (existingError || !existingMessage) {
+    return NextResponse.json({ error: "Message not found" }, { status: 404 })
+  }
+
+  const canModerate = !!user?.is_super_admin
+  const isOwner = existingMessage.user_id === user?.id
+  const sameFranchise = !user?.franchise_id || existingMessage.franchise_id === user.franchise_id
+
+  if (!isOwner && !(canModerate && sameFranchise)) {
+    return NextResponse.json({ error: "You can only delete your own messages" }, { status: 403 })
+  }
+
   const { error } = await supabase.from("team_messages").delete().eq("id", id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
@@ -135,6 +171,21 @@ export async function PUT(req: NextRequest) {
   const { id, message } = body
   if (!id || !message) {
     return NextResponse.json({ error: "id and message are required" }, { status: 400 })
+  }
+
+  const user = auth.authContext?.user
+  const { data: existingMessage, error: existingError } = await supabase
+    .from("team_messages")
+    .select("id, user_id")
+    .eq("id", id)
+    .single()
+
+  if (existingError || !existingMessage) {
+    return NextResponse.json({ error: "Message not found" }, { status: 404 })
+  }
+
+  if (existingMessage.user_id !== user?.id) {
+    return NextResponse.json({ error: "You can only edit your own messages" }, { status: 403 })
   }
 
   const { data, error } = await supabase

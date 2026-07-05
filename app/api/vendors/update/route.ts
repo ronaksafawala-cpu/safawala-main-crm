@@ -1,6 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
-import { authenticateRequest } from "@/lib/auth-middleware"
+import { authenticateRequest, AuthMiddleware } from "@/lib/auth-middleware"
 
 // Force dynamic rendering for this API route
 export const dynamic = 'force-dynamic'
@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
     // Allow updating even if vendor is inactive (so reactivation and edits are possible)
 
     // Authorize by franchise if column exists
-    if (!isSuperAdmin && Object.prototype.hasOwnProperty.call(existingVendor, 'franchise_id') && existingVendor.franchise_id && existingVendor.franchise_id !== franchiseId) {
+    if (Object.prototype.hasOwnProperty.call(existingVendor, 'franchise_id') && existingVendor.franchise_id && !AuthMiddleware.canAccessFranchise(auth.user!, existingVendor.franchise_id)) {
       return NextResponse.json(
         { error: "You don't have access to update this vendor" },
         { status: 403 }
@@ -138,7 +138,7 @@ export async function POST(request: NextRequest) {
     console.error("[Vendors API] UPDATE error:", error)
     return NextResponse.json(
       { error: error.message || "Failed to update vendor" },
-      { status: error.statusCode || (error.message === "Authentication required" ? 401 : 500) }
+      { status: 500 }
     )
   }
 }

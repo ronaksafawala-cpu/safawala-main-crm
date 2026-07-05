@@ -86,7 +86,6 @@ export function MarkDeliveredDialog({
   // Load delivery items - directly from product_order_items table
   const loadDeliveryItems = async () => {
     if (!delivery?.booking_id) {
-      console.log('[MarkDelivered] No booking_id, skipping item load')
       setItems([])
       return
     }
@@ -94,9 +93,7 @@ export function MarkDeliveredDialog({
     setLoadingItems(true)
     try {
       const supabase = createClientComponentClient()
-      
-      console.log('[MarkDelivered] Loading items for booking_id:', delivery.booking_id)
-      
+
       // Fetch items directly from product_order_items table (same as View dialog)
       const { data, error } = await supabase
         .from("product_order_items")
@@ -104,13 +101,10 @@ export function MarkDeliveredDialog({
         .eq("order_id", delivery.booking_id)
 
       if (error) {
-        console.error("[MarkDelivered] Error fetching items:", error)
         setItems([])
         return
       }
 
-      console.log("[MarkDelivered] Loaded items:", data)
-      
       if (data && data.length > 0) {
         // Map items to our format - use denormalized product info
         const mappedItems = data.map((item: any) => ({
@@ -124,8 +118,7 @@ export function MarkDeliveredDialog({
       } else {
         setItems([])
       }
-    } catch (e) {
-      console.error('[MarkDelivered] Exception loading items:', e)
+    } catch {
       setItems([])
     } finally {
       setLoadingItems(false)
@@ -144,8 +137,7 @@ export function MarkDeliveredDialog({
         videoRef.current.srcObject = mediaStream
       }
       setShowCamera(true)
-    } catch (err) {
-      console.error('Camera access denied:', err)
+    } catch {
       toast({
         title: 'Camera Error',
         description: 'Could not access camera. Please allow camera permissions or use file upload.',
@@ -256,8 +248,7 @@ export function MarkDeliveredDialog({
             const photoJson = await photoRes.json()
             photoStoragePath = photoJson.url || photoUrl
           }
-        } catch (uploadErr) {
-          console.warn('Photo upload failed, using base64:', uploadErr)
+        } catch {
           // Continue with base64 photo URL
         }
       }
@@ -294,7 +285,6 @@ export function MarkDeliveredDialog({
       onSuccess()
       onClose()
     } catch (e: any) {
-      console.error('Mark delivered error:', e)
       toast({
         title: 'Error',
         description: e.message || 'Failed to mark as delivered',

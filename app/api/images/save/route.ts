@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { supabaseServer as supabase } from "@/lib/supabase-server-simple"
+import { requireAuth, AuthMiddleware } from "@/lib/auth-middleware"
 
 /**
  * Save image to database as base64
@@ -7,9 +8,16 @@ import { supabaseServer as supabase } from "@/lib/supabase-server-simple"
  */
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireAuth(request, 'staff')
+    if (!auth.success) {
+      return NextResponse.json(auth.response, { status: 401 })
+    }
+
+    const user = auth.authContext!.user
     const formData = await request.formData()
     const file = formData.get("file") as File
-    const franchiseId = formData.get("franchiseId") as string
+    const requestedFranchiseId = formData.get("franchiseId") as string
+    const franchiseId = requestedFranchiseId || user.franchise_id
 
     if (!file) {
       return NextResponse.json(
@@ -22,6 +30,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: "Franchise ID required" },
         { status: 400 }
+      )
+    }
+
+    if (!AuthMiddleware.canAccessFranchise(user, franchiseId)) {
+      return NextResponse.json(
+        { error: "Access denied to this franchise" },
+        { status: 403 }
       )
     }
 

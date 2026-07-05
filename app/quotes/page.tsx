@@ -591,6 +591,16 @@ function QuotesPageContent() {
     setShowTemplatePreview(true)
   }
 
+  // Redirect to appropriate create page with edit parameter
+  const handleEditQuote = (quote: Quote) => {
+    if (quote.booking_type === 'package') {
+      router.push(`/book-package?edit=${quote.id}`)
+      return
+    }
+
+    router.push(`/create-invoice?edit=${quote.id}`)
+  }
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -952,8 +962,7 @@ function QuotesPageContent() {
                             size="sm"
                             variant="ghost"
                             onClick={() => {
-                              // All quote editing now uses unified create-invoice page
-                              router.push(`/create-invoice?edit=${quote.id}`)
+                              handleEditQuote(quote)
                             }}
                             title="Edit Quote"
                           >
@@ -1919,12 +1928,6 @@ export default function QuotesPage() {
     }
   }
 
-  // Redirect to appropriate create page with edit parameter
-  const handleEditQuote = (quote: Quote) => {
-    // All quote editing now uses the unified create-invoice page
-    router.push(`/create-invoice?edit=${quote.id}`)
-  }
-
   // Save edited quote
   const handleSaveQuote = async () => {
     if (!selectedQuote) return
@@ -2084,6 +2087,15 @@ const getStatusBadge = (status: string) => {
     setShowTemplatePreview(true)
   }
 
+  const handleEditQuote = (quote: Quote) => {
+    if (quote.booking_type === 'package') {
+      router.push(`/book-package?edit=${quote.id}`)
+      return
+    }
+
+    router.push(`/create-invoice?edit=${quote.id}`)
+  }
+
   if (loading) {
     return (
       <DashboardLayout userRole={user?.role}>
@@ -2138,6 +2150,14 @@ const getStatusBadge = (status: string) => {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={() => router.push('/quotes/new')}>
+                <FileText className="h-4 w-4 mr-2" />
+                Product Quote
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => router.push('/book-package')}>
+                <Package className="h-4 w-4 mr-2" />
+                Package Quote
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={() => router.push('/create-invoice')}>
                 <Package className="h-4 w-4 mr-2" />
                 Create Booking

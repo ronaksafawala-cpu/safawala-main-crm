@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { authenticateRequest, AuthMiddleware } from "@/lib/auth-middleware"
 
 // Force dynamic rendering for this API route
 export const dynamic = 'force-dynamic'
@@ -12,50 +13,15 @@ interface RouteParams {
 }
 
 /**
- * Get user session from cookie and validate franchise access
- */
-async function getUserFromSession(request: NextRequest) {
-  try {
-    const cookieHeader = request.cookies.get("safawala_session")
-    if (!cookieHeader?.value) {
-      throw new Error("No session found")
-    }
-    
-    const sessionData = JSON.parse(cookieHeader.value)
-    if (!sessionData.id) {
-      throw new Error("Invalid session")
-    }
-
-    // Use service role to fetch user details
-    const supabase = createClient()
-    const { data: user, error } = await supabase
-      .from("users")
-      .select("id, franchise_id, role")
-      .eq("id", sessionData.id)
-      .eq("is_active", true)
-      .single()
-
-    if (error || !user) {
-      throw new Error("User not found")
-    }
-
-    return {
-      userId: user.id,
-      franchiseId: user.franchise_id,
-      role: user.role,
-      isSuperAdmin: user.role === "super_admin"
-    }
-  } catch (error) {
-    throw new Error("Authentication required")
-  }
-}
-
-/**
  * GET /api/vendors/[id] - Get vendor by ID with franchise authorization
  */
 export async function GET(request: NextRequest, { params }: RouteParams) {
   try {
-    const { franchiseId, isSuperAdmin } = await getUserFromSession(request)
+    const auth = await authenticateRequest(request, { minRole: 'staff', requirePermission: 'vendors' })
+    if (!auth.authorized) {
+      return NextResponse.json(auth.error, { status: auth.statusCode || 401 })
+    }
+    const user = auth.user!
     const supabase = createClient()
 
     const { id } = params
@@ -76,7 +42,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       )
     }
 
-    console.log(`[Vendors API] Fetching vendor ${id} for franchise: ${franchiseId}`)
+    console.log(`[Vendors API] Fetching vendor ${id} for user: ${user.id}`)
 
     // 1) Fetch vendor by ID first (no franchise filter to avoid false 404s)
     let query = supabase
@@ -113,7 +79,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       }
 
       // 2) Now authorize by checking vendor's franchise_id
-      if (!isSuperAdmin && vendor.franchise_id !== franchiseId) {
+      if (!AuthMiddleware.canAccessFranchise(user, vendor.franchise_id)) {
         return NextResponse.json(
           { error: "You don't have access to this vendor" },
           { status: 403 }
@@ -141,7 +107,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
         }
 
         // Authorize by franchise
-        if (!isSuperAdmin && vendor.franchise_id !== franchiseId) {
+        if (!AuthMiddleware.canAccessFranchise(user, vendor.franchise_id)) {
           return NextResponse.json(
             { error: "You don't have access to this vendor" },
             { status: 403 }
@@ -159,7 +125,7 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
     console.error("[Vendors API] GET error:", error)
     return NextResponse.json(
       { error: error.message || "Failed to fetch vendor" },
-      { status: error.message === "Authentication required" ? 401 : 500 }
+      { status: 500 }
     )
   }
 }
@@ -169,15 +135,13 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
  */
 export async function PUT(request: NextRequest, { params }: RouteParams) {
   try {
-    const { franchiseId, userId, role, isSuperAdmin } = await getUserFromSession(request)
-    
-    // Only allow staff and above to update vendors
-    if (!["super_admin", "franchise_admin", "staff"].includes(role)) {
-      return NextResponse.json(
-        { error: "Insufficient permissions to update vendors" },
-        { status: 403 }
-      )
+    const auth = await authenticateRequest(request, { minRole: 'staff', requirePermission: 'vendors' })
+    if (!auth.authorized) {
+      return NextResponse.json(auth.error, { status: auth.statusCode || 401 })
     }
+    const user = auth.user!
+    const franchiseId = user.franchise_id
+    const isSuperAdmin = user.is_super_admin
 
     const supabase = createClient()
     const { id } = params
@@ -339,7 +303,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
     console.error("[Vendors API] PUT error:", error)
     return NextResponse.json(
       { error: error.message || "Failed to update vendor" },
-      { status: error.message === "Authentication required" ? 401 : 500 }
+      { status: 500 }
     )
   }
 }
@@ -349,15 +313,13 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
  */
 export async function DELETE(request: NextRequest, { params }: RouteParams) {
   try {
-    const { franchiseId, userId, role, isSuperAdmin } = await getUserFromSession(request)
-    
-    // Only allow staff and above to delete vendors
-    if (!["super_admin", "franchise_admin", "staff"].includes(role)) {
-      return NextResponse.json(
-        { error: "Insufficient permissions to delete vendors" },
-        { status: 403 }
-      )
+    const auth = await authenticateRequest(request, { minRole: 'staff', requirePermission: 'vendors' })
+    if (!auth.authorized) {
+      return NextResponse.json(auth.error, { status: auth.statusCode || 401 })
     }
+    const user = auth.user!
+    const franchiseId = user.franchise_id
+    const isSuperAdmin = user.is_super_admin
 
     const supabase = createClient()
     const { id } = params
@@ -378,7 +340,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       )
     }
 
-    console.log(`[Vendors API] Deleting vendor ${id} for franchise: ${franchiseId}, user: ${userId}`)
+    console.log(`[Vendors API] Deleting vendor ${id} for franchise: ${franchiseId}, user: ${user.id}`)
 
     // 1) Fetch existing vendor first
     const { data: existingVendor, error: fetchError } = await supabase
@@ -398,7 +360,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     }
 
     // 2) Authorize by vendor's franchise_id
-    if (!isSuperAdmin && existingVendor.franchise_id !== franchiseId) {
+    if (!AuthMiddleware.canAccessFranchise(user, existingVendor.franchise_id)) {
       return NextResponse.json(
         { error: "You don't have access to delete this vendor" },
         { status: 403 }
@@ -480,7 +442,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
     console.error("[Vendors API] DELETE error:", error)
     return NextResponse.json(
       { error: error.message || "Failed to delete vendor" },
-      { status: error.message === "Authentication required" ? 401 : 500 }
+      { status: 500 }
     )
   }
 }

@@ -23,8 +23,7 @@ export default function CompanyHeaderSimple() {
         const data = await response.json()
         setSettings(data)
       }
-    } catch (error) {
-      console.error('Error loading company settings:', error)
+    } catch {
     } finally {
       setLoading(false)
     }

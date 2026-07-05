@@ -29,7 +29,8 @@ export default function AdminReportsPage() {
       // Fetch data from dashboard stats api which already aggregates booking totals, commissions, etc.
       const res = await fetch(`/api/dashboard/stats?days=${timeRange}`)
       const d = await res.json()
-      setStats(d)
+      if (!res.ok) throw new Error(d.error || "Failed to load reports")
+      setStats(d.data)
     } catch {
       toast.error("Failed to load reports data")
     } finally {
@@ -37,44 +38,24 @@ export default function AdminReportsPage() {
     }
   }
 
-  // Pre-configured mock analytics derived from DB stats or defaults for super admin
   const salesTrendData = useMemo(() => {
-    return [
-      { month: "Jan", sales: 240000, bookings: 45, commissions: 36000 },
-      { month: "Feb", sales: 320000, bookings: 58, commissions: 48000 },
-      { month: "Mar", sales: 480000, bookings: 82, commissions: 72000 },
-      { month: "Apr", sales: 350000, bookings: 61, commissions: 52500 },
-      { month: "May", sales: 540000, bookings: 94, commissions: 81000 },
-      { month: "Jun", sales: 620000, bookings: 110, commissions: 93000 },
-    ]
-  }, [])
+    return (stats?.revenueByMonth || []).map((row: any) => ({ month: row.month, sales: row.revenue }))
+  }, [stats])
 
   const franchisePerformanceData = useMemo(() => {
-    if (!stats?.franchisesBreakdown) {
-      return [
-        { name: "Vadodara", revenue: 450000, bookings: 78 },
-        { name: "Mumbai", revenue: 380000, bookings: 62 },
-        { name: "Surat", revenue: 290000, bookings: 51 },
-        { name: "Ahmedabad", revenue: 210000, bookings: 39 },
-        { name: "Pune", revenue: 150000, bookings: 25 },
-      ]
-    }
-    return stats.franchisesBreakdown.map((f: any) => ({
+    return (stats?.franchisePerformance || []).map((f: any) => ({
       name: f.name,
       revenue: f.revenue || 0,
-      bookings: f.bookingsCount || 0
+      bookings: f.bookings || 0,
+      commission: f.commission || 0,
+      commissionRate: f.commissionRate || 0,
+      code: f.code || "—",
     }))
   }, [stats])
 
   const expenseBreakdownData = useMemo(() => {
-    return [
-      { name: "Fabric & Production", value: 120000 },
-      { name: "Marketing & Ads", value: 75000 },
-      { name: "Staff Payroll", value: 185000 },
-      { name: "Store Rent & Utilities", value: 95000 },
-      { name: "Logistics & Travels", value: 45000 },
-    ]
-  }, [])
+    return stats?.expenseBreakdown || []
+  }, [stats])
 
   return (
     <div style={{ background: WARM, minHeight: "100vh", fontFamily: "system-ui,-apple-system,sans-serif", paddingBottom: 40 }}>
@@ -107,10 +88,10 @@ export default function AdminReportsPage() {
         {/* KPI Row */}
         <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 14 }}>
           {[
-            { label: "Total Gross Revenue", value: `₹${(stats?.revenueTotal || 2540000).toLocaleString("en-IN")}`, desc: "From all franchise orders & rentals" },
-            { label: "Total Bookings/Orders", value: stats?.bookingsTotal || 342, desc: "Aggregated items ordered" },
-            { label: "Active Franchise Branches", value: stats?.franchisesCount || 12, desc: "Commission generating branches" },
-            { label: "Net Earned Commission", value: `₹${(stats?.commissionEarned || 381000).toLocaleString("en-IN")}`, desc: "Calculated at average 15%" },
+            { label: "Total Gross Revenue", value: loading ? "—" : `₹${Number(stats?.totalRevenue || 0).toLocaleString("en-IN")}`, desc: "From orders in the selected period" },
+            { label: "Total Bookings/Orders", value: loading ? "—" : stats?.totalBookings || 0, desc: "Orders in the selected period" },
+            { label: "Active Franchise Branches", value: loading ? "—" : franchisePerformanceData.length, desc: "Branches with orders in this period" },
+            { label: "Calculated Commission", value: loading ? "—" : `₹${Number(stats?.commissionEarned || 0).toLocaleString("en-IN")}`, desc: "Based on each branch commission rate" },
           ].map((k, i) => (
             <div key={i} style={{ background: CREAM, border: `1px solid ${BORDER}`, borderRadius: 16, padding: "18px 20px" }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: "#a07040", textTransform: "uppercase", letterSpacing: "0.04em" }}>{k.label}</div>
@@ -135,7 +116,6 @@ export default function AdminReportsPage() {
                   <Tooltip />
                   <Legend verticalAlign="top" height={36} />
                   <Line type="monotone" dataKey="sales" name="Gross Sales (₹)" stroke={GOLD} strokeWidth={3} activeDot={{ r: 8 }} />
-                  <Line type="monotone" dataKey="commissions" name="Commission (₹)" stroke={BROWN} strokeWidth={2} />
                 </LineChart>
               </ResponsiveContainer>
             </div>
@@ -164,7 +144,11 @@ export default function AdminReportsPage() {
           {/* Expense Breakdown */}
           <div style={{ background: CREAM, border: `1px solid ${BORDER}`, borderRadius: 16, padding: 20 }}>
             <h3 style={{ margin: "0 0 16px", fontSize: 15, fontWeight: 800, color: BROWN }}>Corporate Expense Breakdown</h3>
-            <div style={{ display: "flex", gap: 20, alignItems: "center", flexWrap: "wrap" }}>
+            {expenseBreakdownData.length === 0 ? (
+              <div style={{ height: 250, display: "flex", alignItems: "center", justifyContent: "center", color: "#a07040", fontSize: 13 }}>
+                No expense transactions in the selected period
+              </div>
+            ) : <div style={{ display: "flex", gap: 20, alignItems: "center", flexWrap: "wrap" }}>
               <div style={{ height: 250, width: 250, position: "relative" }}>
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
@@ -177,7 +161,7 @@ export default function AdminReportsPage() {
                       paddingAngle={4}
                       dataKey="value"
                     >
-                      {expenseBreakdownData.map((entry, index) => (
+                      {expenseBreakdownData.map((_entry: { name: string; value: number }, index: number) => (
                         <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                       ))}
                     </Pie>
@@ -186,7 +170,7 @@ export default function AdminReportsPage() {
                 </ResponsiveContainer>
               </div>
               <div style={{ display: "flex", flexDirection: "column", gap: 8, flex: 1 }}>
-                {expenseBreakdownData.map((e, index) => (
+                {expenseBreakdownData.map((e: { name: string; value: number }, index: number) => (
                   <div key={e.name} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", fontSize: 12, color: BROWN }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                       <div style={{ width: 12, height: 12, borderRadius: "50%", background: COLORS[index % COLORS.length] }} />
@@ -196,7 +180,7 @@ export default function AdminReportsPage() {
                   </div>
                 ))}
               </div>
-            </div>
+            </div>}
           </div>
 
           {/* Commission Ledger settlements summary */}
@@ -209,28 +193,22 @@ export default function AdminReportsPage() {
                     <th style={{ padding: "8px 4px", color: "#a07040" }}>Branch</th>
                     <th style={{ padding: "8px 4px", color: "#a07040" }}>Rate</th>
                     <th style={{ padding: "8px 4px", color: "#a07040" }}>Total Sales</th>
-                    <th style={{ padding: "8px 4px", color: "#a07040" }}>Pending Commission</th>
-                    <th style={{ padding: "8px 4px", color: "#a07040" }}>Status</th>
+                    <th style={{ padding: "8px 4px", color: "#a07040" }}>Calculated Commission</th>
+                    <th style={{ padding: "8px 4px", color: "#a07040" }}>Basis</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {[
-                    { branch: "Vadodara (VAD101)", rate: "15%", sales: 650000, commission: 97500, status: "settled" },
-                    { branch: "Mumbai (MUM002)", rate: "12%", sales: 480000, commission: 57600, status: "pending" },
-                    { branch: "Surat (SUR003)", rate: "15%", sales: 320000, commission: 48000, status: "settled" },
-                    { branch: "Ahmedabad (AHM004)", rate: "15%", sales: 180000, commission: 27000, status: "pending" },
-                  ].map((row, i) => (
+                  {franchisePerformanceData.map((row: any, i: number) => (
                     <tr key={i} style={{ borderBottom: "1px solid rgba(201,168,76,0.08)" }}>
-                      <td style={{ padding: "10px 4px", fontWeight: 700, color: BROWN }}>{row.branch}</td>
-                      <td style={{ padding: "10px 4px", color: BROWN }}>{row.rate}</td>
-                      <td style={{ padding: "10px 4px", color: BROWN }}>₹{row.sales.toLocaleString()}</td>
-                      <td style={{ padding: "10px 4px", color: BROWN, fontWeight: 600 }}>₹{row.commission.toLocaleString()}</td>
+                      <td style={{ padding: "10px 4px", fontWeight: 700, color: BROWN }}>{row.name} ({row.code})</td>
+                      <td style={{ padding: "10px 4px", color: BROWN }}>{row.commissionRate}%</td>
+                      <td style={{ padding: "10px 4px", color: BROWN }}>₹{Number(row.revenue).toLocaleString("en-IN")}</td>
+                      <td style={{ padding: "10px 4px", color: BROWN, fontWeight: 600 }}>₹{Math.round(Number(row.commission)).toLocaleString("en-IN")}</td>
                       <td style={{ padding: "10px 4px" }}>
                         <span style={{
                           fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 10,
-                          background: row.status === "settled" ? "#e0f2fe" : "#fef3c7",
-                          color: row.status === "settled" ? "#0369a1" : "#b45309"
-                        }}>{row.status.toUpperCase()}</span>
+                          background: "#fef3c7", color: "#b45309"
+                        }}>CALCULATED</span>
                       </td>
                     </tr>
                   ))}

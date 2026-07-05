@@ -211,9 +211,13 @@ export default function AddProductPage() {
       [field]: value,
     }))
 
-    if (field === "category_id" && value) {
-      fetchSubcategories(value)
+    if (field === "category_id") {
       setFormData((prev) => ({ ...prev, subcategory_id: "" }))
+      if (value) {
+        fetchSubcategories(value)
+      } else {
+        setSubcategories([])
+      }
     }
   }
 

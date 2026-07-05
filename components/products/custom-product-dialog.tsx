@@ -178,20 +178,16 @@ export function CustomProductDialog({
         setUploadingImage(true)
         try {
           const compressedFile = await compressImage(imageFile)
-          console.log("Uploading image file:", compressedFile.name, compressedFile.size, compressedFile.type)
           const uploadResult = await uploadWithProgress(compressedFile, { folder: "products" })
           imageUrl = uploadResult.url
-          console.log("Image uploaded successfully:", imageUrl)
           toast.success("Image uploaded successfully!")
         } catch (error) {
-          console.error("Image upload error:", error)
           toast.warning("Could not upload image, proceeding without image")
         }
         setUploadingImage(false)
       }
 
       // Step 2: Create product in database
-      console.log("Creating product with image URL:", imageUrl)
       const productRes = await fetch("/api/products", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -217,7 +213,6 @@ export function CustomProductDialog({
       }
 
       const product = await productRes.json()
-      console.log("Product created successfully:", product)
 
       // Step 3: Auto-generate barcodes for the custom product (5 barcodes by default)
       let barcodesGenerated = false
@@ -232,16 +227,11 @@ export function CustomProductDialog({
         )
         
         if (!barcodeResult.success) {
-          console.warn('Auto-barcode generation failed:', barcodeResult.error)
-          console.warn('This is non-fatal. Product created successfully without barcodes.')
           // Non-fatal: continue without auto-barcodes
         } else {
-          console.log(`✓ Auto-generated ${barcodeResult.barcodes?.length || 0} barcodes for custom product`)
           barcodesGenerated = true
         }
       } catch (barcodeError: any) {
-        console.warn('Error auto-generating barcodes:', barcodeError.message || barcodeError)
-        console.warn('This is non-fatal. Product created successfully without barcodes.')
         // Non-fatal: continue
       }
 
@@ -283,7 +273,6 @@ export function CustomProductDialog({
       setImagePreview(null)
       onOpenChange(false)
     } catch (error) {
-      console.error("Error creating custom product:", error)
       toast.error(error instanceof Error ? error.message : "Failed to create product")
     } finally {
       setLoading(false)

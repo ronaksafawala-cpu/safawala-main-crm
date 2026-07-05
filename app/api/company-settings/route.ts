@@ -8,7 +8,7 @@ export const runtime = 'nodejs'
 export async function GET(request: NextRequest) {
   try {
     // 🔒 SECURITY: Authenticate user and get franchise context
-    const authResult = await requireAuth(request, 'viewer')
+    const authResult = await requireAuth(request, 'readonly')
     if (!authResult.success) {
       return NextResponse.json(authResult.response, { status: 401 })
     }

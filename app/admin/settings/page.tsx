@@ -33,7 +33,8 @@ export default function AdminSettingsPage() {
 
   const [wati, setWati] = useState({
     apiUrl: "https://api.wati.io/api/v1",
-    apiKey: "••••••••••••••••••••••••••••••••••••",
+    apiKey: "",
+    apiKeyConfigured: false,
     templates: {
       booking_confirmation: "booking_confirm_v2",
       order_dispatch: "order_dispatch_update",
@@ -48,7 +49,7 @@ export default function AdminSettingsPage() {
   const loadSettings = async () => {
     setLoading(true)
     try {
-      const res = await fetch("/api/settings/all")
+      const res = await fetch("/api/admin/settings", { cache: "no-store" })
       if (res.ok) {
         const d = await res.json()
         if (d.company) setCompany(d.company)
@@ -66,10 +67,10 @@ export default function AdminSettingsPage() {
     e.preventDefault()
     setSaving(true)
     try {
-      const res = await fetch("/api/settings/company", {
-        method: "POST",
+      const res = await fetch("/api/admin/settings", {
+        method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(company)
+        body: JSON.stringify({ section: "company", data: company })
       })
       if (res.ok) {
         toast.success("Company settings saved")
@@ -87,8 +88,16 @@ export default function AdminSettingsPage() {
     e.preventDefault()
     setSaving(true)
     try {
-      // Mock pricing update or call settings API if available
-      toast.success("Pricing and GST settings updated successfully")
+      const res = await fetch("/api/admin/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ section: "pricing", data: pricing })
+      })
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}))
+        throw new Error(data.error || "Failed to save pricing")
+      }
+      toast.success("Pricing and GST settings saved")
     } catch {
       toast.error("Error saving settings")
     } finally {
@@ -100,10 +109,10 @@ export default function AdminSettingsPage() {
     e.preventDefault()
     setSaving(true)
     try {
-      const res = await fetch("/api/settings/whatsapp", {
-        method: "POST",
+      const res = await fetch("/api/admin/settings", {
+        method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(wati)
+        body: JSON.stringify({ section: "wati", data: wati })
       })
       if (res.ok) {
         toast.success("WhatsApp/WATI settings saved")
@@ -246,7 +255,13 @@ export default function AdminSettingsPage() {
                 </div>
                 <div style={{ display: "flex", flexDirection: "column" }}>
                   <label style={labelStyle}>WATI Access Token / API Key</label>
-                  <input style={inputStyle} type="password" value={wati.apiKey} onChange={e => setWati({ ...wati, apiKey: e.target.value })} />
+                  <input
+                    style={inputStyle}
+                    type="password"
+                    value={wati.apiKey}
+                    placeholder={wati.apiKeyConfigured ? "Configured — enter a new key to replace" : "Enter WATI API key"}
+                    onChange={e => setWati({ ...wati, apiKey: e.target.value })}
+                  />
                 </div>
                 
                 <h4 style={{ margin: "10px 0 6px", fontSize: 11, fontWeight: 700, color: BROWN, textTransform: "uppercase" }}>Approved WATI Message Templates</h4>

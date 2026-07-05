@@ -1,5 +1,6 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { requireAuth, AuthMiddleware } from "@/lib/auth-middleware"
 
 export const dynamic = 'force-dynamic'
 
@@ -9,13 +10,27 @@ export const dynamic = 'force-dynamic'
  */
 export async function GET(request: NextRequest) {
   try {
+    const authResult = await requireAuth(request, 'readonly')
+    if (!authResult.success) {
+      return NextResponse.json(authResult.response, { status: 401 })
+    }
+
+    const user = authResult.authContext!.user
     const { searchParams } = new URL(request.url)
-    const franchiseId = searchParams.get('franchise_id')
+    const requestedFranchiseId = searchParams.get('franchise_id')
+    const franchiseId = user.is_super_admin ? requestedFranchiseId : (user.franchise_id || null)
     
     if (!franchiseId) {
       return NextResponse.json(
         { error: 'franchise_id is required' },
         { status: 400 }
+      )
+    }
+
+    if (!AuthMiddleware.canAccessFranchise(user, franchiseId)) {
+      return NextResponse.json(
+        { error: 'Access denied to this franchise' },
+        { status: 403 }
       )
     }
     

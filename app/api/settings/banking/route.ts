@@ -1,15 +1,23 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@/lib/supabase/server'
+import { authenticateRequest, AuthMiddleware } from '@/lib/auth-middleware'
 
 // GET - Fetch banking details
 export async function GET(request: NextRequest) {
   try {
+    const auth = await authenticateRequest(request, { minRole: 'franchise_admin', requirePermission: 'settings' })
+    if (!auth.authorized) return NextResponse.json(auth.error, { status: auth.statusCode || 401 })
+
     const supabase = createClient()
     const { searchParams } = new URL(request.url)
     const franchiseId = searchParams.get('franchise_id')
 
     if (!franchiseId) {
       return NextResponse.json({ error: 'Franchise ID required' }, { status: 400 })
+    }
+
+    if (!AuthMiddleware.canAccessFranchise(auth.user!, franchiseId)) {
+      return NextResponse.json({ error: 'Access denied to this franchise' }, { status: 403 })
     }
 
     const { data, error } = await supabase
@@ -32,6 +40,9 @@ export async function GET(request: NextRequest) {
 // POST - Create new bank account
 export async function POST(request: NextRequest) {
   try {
+    const auth = await authenticateRequest(request, { minRole: 'franchise_admin', requirePermission: 'settings' })
+    if (!auth.authorized) return NextResponse.json(auth.error, { status: auth.statusCode || 401 })
+
     const supabase = createClient()
     const body = await request.json()
     const {
@@ -52,6 +63,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ 
         error: 'Required fields: franchise_id, bank_name, account_holder_name, account_number, ifsc_code' 
       }, { status: 400 })
+    }
+
+    if (!AuthMiddleware.canAccessFranchise(auth.user!, franchise_id)) {
+      return NextResponse.json({ error: 'Access denied to this franchise' }, { status: 403 })
     }
 
     // If this is set as primary, unset other primary accounts
@@ -96,6 +111,9 @@ export async function POST(request: NextRequest) {
 // PUT - Update bank account
 export async function PUT(request: NextRequest) {
   try {
+    const auth = await authenticateRequest(request, { minRole: 'franchise_admin', requirePermission: 'settings' })
+    if (!auth.authorized) return NextResponse.json(auth.error, { status: auth.statusCode || 401 })
+
     const supabase = createClient()
     const body = await request.json()
     const {
@@ -117,12 +135,28 @@ export async function PUT(request: NextRequest) {
       return NextResponse.json({ error: 'Bank account ID required' }, { status: 400 })
     }
 
+    const { data: existingBank, error: existingBankError } = await supabase
+      .from('banking_details')
+      .select('id, franchise_id')
+      .eq('id', id)
+      .single()
+
+    if (existingBankError || !existingBank) {
+      return NextResponse.json({ error: 'Bank account not found' }, { status: 404 })
+    }
+
+    const effectiveFranchiseId = franchise_id || existingBank.franchise_id
+
+    if (!effectiveFranchiseId || !AuthMiddleware.canAccessFranchise(auth.user!, effectiveFranchiseId)) {
+      return NextResponse.json({ error: 'Access denied to this franchise' }, { status: 403 })
+    }
+
     // If this is set as primary, unset other primary accounts
     if (is_primary) {
       await supabase
         .from('banking_details')
         .update({ is_primary: false })
-        .eq('franchise_id', franchise_id)
+        .eq('franchise_id', effectiveFranchiseId)
         .neq('id', id)
     }
 
@@ -161,12 +195,29 @@ export async function PUT(request: NextRequest) {
 // DELETE - Remove bank account
 export async function DELETE(request: NextRequest) {
   try {
+    const auth = await authenticateRequest(request, { minRole: 'franchise_admin', requirePermission: 'settings' })
+    if (!auth.authorized) return NextResponse.json(auth.error, { status: auth.statusCode || 401 })
+
     const supabase = createClient()
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
 
     if (!id) {
       return NextResponse.json({ error: 'Bank account ID required' }, { status: 400 })
+    }
+
+    const { data: existingBank, error: existingBankError } = await supabase
+      .from('banking_details')
+      .select('id, franchise_id')
+      .eq('id', id)
+      .single()
+
+    if (existingBankError || !existingBank) {
+      return NextResponse.json({ error: 'Bank account not found' }, { status: 404 })
+    }
+
+    if (!AuthMiddleware.canAccessFranchise(auth.user!, existingBank.franchise_id)) {
+      return NextResponse.json({ error: 'Access denied to this franchise' }, { status: 403 })
     }
 
     const { error } = await supabase

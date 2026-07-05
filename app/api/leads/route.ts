@@ -9,7 +9,8 @@ export async function POST(request: NextRequest) {
   try {
     // Try to authenticate the user to see if this is a manual CRM submission
     const auth = await authenticateRequest(request, { minRole: "staff" }).catch(() => ({ authorized: false, user: null }))
-    const isCRM = auth.authorized && auth.user
+    const authUser = auth.authorized ? auth.user : null
+    const isCRM = Boolean(authUser)
 
     const body = await request.json()
     const { 
@@ -47,13 +48,13 @@ export async function POST(request: NextRequest) {
       notes: notes?.trim() || null,
     }
 
-    if (isCRM) {
+    if (isCRM && authUser) {
       insertData.source = source || "manual"
       insertData.status = status || "new"
       insertData.assigned_to = assigned_to || null
-      insertData.franchise_id = auth.user.is_super_admin && franchise_id
+      insertData.franchise_id = authUser.is_super_admin && franchise_id
         ? franchise_id
-        : auth.user.franchise_id || null
+        : authUser.franchise_id || null
     } else {
       insertData.source = source || "website"
       insertData.status = "new"
@@ -91,6 +92,9 @@ export async function GET(request: NextRequest) {
     const auth = await authenticateRequest(request, { minRole: "readonly" })
     if (!auth.authorized) {
       return NextResponse.json(auth.error, { status: auth.statusCode || 401 })
+    }
+    if (!auth.user) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 })
     }
 
     const supabase = createClient()
@@ -148,6 +152,9 @@ export async function PATCH(request: NextRequest) {
     const auth = await authenticateRequest(request, { minRole: "staff" })
     if (!auth.authorized) {
       return NextResponse.json(auth.error, { status: auth.statusCode || 401 })
+    }
+    if (!auth.user) {
+      return NextResponse.json({ error: "Authentication required" }, { status: 401 })
     }
 
     const body = await request.json()

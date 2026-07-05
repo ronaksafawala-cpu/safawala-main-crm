@@ -3,6 +3,7 @@
 import type React from "react"
 
 import { useState, useCallback, useEffect, useRef } from "react"
+import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -19,6 +20,7 @@ import type { Customer, Product, BookingType, PaymentType } from "@/lib/types"
 import { toast } from "@/hooks/use-toast"
 import { debounce } from "lodash"
 import { validatePhoneWithCountry } from "@/lib/form-validation"
+import { quoteService } from "@/lib/services/quote-service"
 
 interface BookingFormProps {
   customers: Customer[]
@@ -30,11 +32,13 @@ interface BookingFormProps {
 type PincodeStatus = "idle" | "loading" | "success" | "error"
 
 export function BookingForm({ customers, products, onSubmit, initialBooking }: BookingFormProps) {
+  const router = useRouter()
   const [selectedCustomer, setSelectedCustomer] = useState<string>("")
   const [newCustomer, setNewCustomer] = useState({
     name: "",
     phone: "+91",
     whatsapp: "+91",
+    email: "",
     address: "",
     city: "",
     state: "",
@@ -234,16 +238,10 @@ export function BookingForm({ customers, products, onSubmit, initialBooking }: B
 
   useEffect(() => {
     if (initialBooking && customers.length > 0) {
-      console.log("[v0] Initial booking data:", initialBooking)
-      console.log("[v0] Available customers:", customers)
-      console.log("[v0] Customer ID from booking:", initialBooking.customer_id)
-
       if (initialBooking.customer_id) {
         const customerExists = customers.find((c) => c.id === initialBooking.customer_id)
-        console.log("[v0] Customer exists in array:", customerExists)
 
         if (customerExists) {
-          console.log("[v0] Setting selectedCustomer to:", initialBooking.customer_id)
           setSelectedCustomer(initialBooking.customer_id)
           setCurrentCustomer(customerExists) // Store the customer object for display
           setIsNewCustomer(false)
@@ -286,15 +284,10 @@ export function BookingForm({ customers, products, onSubmit, initialBooking }: B
             productQuantities[productId] = item.quantity
           }
         })
-        console.log("[v0] Setting product quantities:", productQuantities)
         setSelectedProducts(productQuantities)
       }
     }
   }, [initialBooking, customers])
-
-  useEffect(() => {
-    console.log("[v0] selectedCustomer state changed to:", selectedCustomer)
-  }, [selectedCustomer])
 
   const handlePincodeChange = useCallback(
     debounce(async (value: string) => {
@@ -459,14 +452,15 @@ export function BookingForm({ customers, products, onSubmit, initialBooking }: B
     try {
       const quoteData = {
         customer: isNewCustomer ? newCustomer : customers.find((c) => c.id === selectedCustomer),
-        bookingType,
-        selectedProducts: Object.entries(selectedProducts).map(([productId, quantity]) => {
+        items: Object.entries(selectedProducts).map(([productId, quantity]) => {
           const product = products.find((p) => p.id === productId)
+          const unitPrice = bookingType === "rental" ? product?.rental_price || 0 : product?.price || 0
+
           return {
             product,
             quantity,
-            unitPrice: bookingType === "rental" ? product?.rental_price : product?.price,
-            totalPrice: (bookingType === "rental" ? product?.rental_price : product?.price || 0) * quantity,
+            unitPrice,
+            totalPrice: unitPrice * quantity,
           }
         }),
         eventDate,
@@ -474,56 +468,54 @@ export function BookingForm({ customers, products, onSubmit, initialBooking }: B
         returnDate,
         notes,
         totalAmount: calculateTotal(),
-        quoteDate: new Date(),
-        validUntil: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000), // 7 days from now
       }
 
-      // Generate PDF quote (mock implementation)
-      const quoteContent = `
-        SAFAWALA WEDDING ACCESSORIES
-        QUOTATION
-        
-        Date: ${format(new Date(), "PPP")}
-        Valid Until: ${format(quoteData.validUntil, "PPP")}
-        
-        Customer: ${quoteData.customer?.name || "New Customer"}
-        Event Date: ${eventDate ? format(eventDate, "PPP") : "TBD"}
-        Service Type: ${bookingType === "rental" ? "Rental" : "Direct Sale"}
-        
-        ITEMS:
-        ${quoteData.selectedProducts
-          .map((item) => `${item.product?.name} x ${item.quantity} = ₹${item.totalPrice?.toLocaleString()}`)
-          .join("\n")}
-        
-        TOTAL AMOUNT: ₹${quoteData.totalAmount.toLocaleString()}
-        
-        Terms & Conditions:
-        - Advance payment required for booking confirmation
-        - Items must be returned in original condition (for rentals)
-        - Damage charges apply for any damages
-        
-        Thank you for choosing Safawala!
-      `
-
-      // Create and download quote as text file (in real app, this would be a PDF)
-      const blob = new Blob([quoteContent], { type: "text/plain" })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement("a")
-      a.href = url
-      a.download = `quote-${Date.now()}.txt`
-      document.body.appendChild(a)
-      a.click()
-      document.body.removeChild(a)
-      URL.revokeObjectURL(url)
+      const savedQuote = await quoteService.create({
+        customer_id: isNewCustomer ? undefined : selectedCustomer || undefined,
+        type: bookingType === "direct_sale" ? "direct_sale" : "rental",
+        event_type: eventType || "wedding",
+        event_date: eventDate ? format(eventDate, "yyyy-MM-dd") : undefined,
+        delivery_date: deliveryDate ? format(deliveryDate, "yyyy-MM-dd") : undefined,
+        return_date: returnDate ? format(returnDate, "yyyy-MM-dd") : undefined,
+        customer_name: isNewCustomer ? newCustomer.name : undefined,
+        customer_phone: isNewCustomer ? newCustomer.phone : undefined,
+        customer_whatsapp: isNewCustomer ? newCustomer.whatsapp : undefined,
+        customer_email: isNewCustomer ? newCustomer.email : undefined,
+        customer_address: isNewCustomer ? newCustomer.address : undefined,
+        customer_city: isNewCustomer ? newCustomer.city : undefined,
+        customer_pincode: isNewCustomer ? newCustomer.pincode : undefined,
+        customer_state: isNewCustomer ? newCustomer.state : undefined,
+        event_for: eventFor as "groom" | "bride" | "both",
+        groom_name: groomName || undefined,
+        bride_name: brideName || undefined,
+        venue_name: venueName || undefined,
+        venue_address: venueAddress || undefined,
+        special_instructions: notes || undefined,
+        notes: notes || undefined,
+        total_amount: quoteData.totalAmount,
+        security_deposit: 0,
+        tax_amount: 0,
+        items: quoteData.items.map((item) => ({
+          product_id: item.product?.id,
+          product_name: item.product?.name || "Product",
+          product_code: item.product?.product_code || "",
+          category: item.product?.category || "",
+          quantity: item.quantity,
+          unit_price: item.unitPrice,
+          total_price: item.totalPrice,
+          security_deposit: 0,
+        })),
+      })
 
       toast({
         title: "Quote Generated",
-        description: "Quote has been generated and downloaded",
+        description: "Quote has been saved successfully",
       })
+      router.push(`/quotes/${savedQuote.id}`)
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to generate quote",
+        description: error instanceof Error ? error.message : "Failed to generate quote",
         variant: "destructive",
       })
     } finally {

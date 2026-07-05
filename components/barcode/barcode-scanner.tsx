@@ -104,7 +104,6 @@ export function BarcodeScanner({
         onProductFound(product)
       }
     } catch (error) {
-      console.error("Error searching product:", error)
       toast.error("Search failed", {
         description: "Failed to search for product"
       })
@@ -167,7 +166,6 @@ export function BarcodeScanner({
             aspectRatio: 1.777778
           },
           (decodedText) => {
-            console.log("[BarcodeScanner] Scanned:", decodedText)
             handleUsbScan(decodedText)
             stopCamera()
           },
@@ -179,7 +177,6 @@ export function BarcodeScanner({
           description: "Point camera at barcode"
         })
       } catch (error: any) {
-        console.error("Camera error:", error)
         setCameraError(error?.message || "Failed to start camera scanner")
         toast.error("Camera access denied", {
           description: "Please check camera permissions in browser settings"
@@ -196,7 +193,7 @@ export function BarcodeScanner({
           .then(() => {
             scanner.clear()
           })
-          .catch((err: any) => console.error("Error stopping camera scanner:", err))
+          .catch(() => undefined)
       }
       html5QrCodeRef.current = null
     }

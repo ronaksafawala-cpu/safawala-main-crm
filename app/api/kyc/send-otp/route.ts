@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
+import { requireAuth } from "@/lib/auth-middleware"
 
 export const dynamic = "force-dynamic"
 
@@ -33,6 +34,11 @@ async function getSandboxAccessToken() {
 
 export async function POST(request: NextRequest) {
   try {
+    const auth = await requireAuth(request, "staff")
+    if (!auth.success) {
+      return NextResponse.json(auth.response, { status: 401 })
+    }
+
     const { phone, aadharNumber } = await request.json()
 
     if (!phone || !phone.trim()) {
