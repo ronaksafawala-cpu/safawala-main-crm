@@ -29,6 +29,8 @@ interface User {
   email: string
   role: string
   franchise_id: string
+  franchise_name?: string | null
+  franchise_code?: string | null
 }
 
 interface Product {
@@ -269,6 +271,23 @@ export default function InventoryDashboard() {
 
   useEffect(() => {
     fetchProducts()
+  }, [])
+
+  useEffect(() => {
+    const handleWindowFocus = () => {
+      if (typeof document === "undefined") return
+      if (document.visibilityState === "visible") {
+        fetchProducts()
+      }
+    }
+
+    window.addEventListener("focus", handleWindowFocus)
+    document.addEventListener("visibilitychange", handleWindowFocus)
+
+    return () => {
+      window.removeEventListener("focus", handleWindowFocus)
+      document.removeEventListener("visibilitychange", handleWindowFocus)
+    }
   }, [])
 
   const fetchProducts = async () => {
@@ -841,6 +860,12 @@ export default function InventoryDashboard() {
             <p className="text-[#102516]/60 text-sm">
               Manage products, variations, pricing & barcodes
             </p>
+            {user?.franchise_name && (
+              <p className="mt-1 text-xs font-medium text-[#102516]/45">
+                Active franchise: {user.franchise_name}
+                {user.franchise_code ? ` (${user.franchise_code})` : ""}
+              </p>
+            )}
           </div>
           <div className="flex flex-wrap gap-2">
             <Button
