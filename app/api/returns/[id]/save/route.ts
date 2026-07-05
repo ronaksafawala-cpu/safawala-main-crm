@@ -60,6 +60,7 @@ export async function POST(
       .from("returns")
       .update(updateData)
       .eq("id", returnId)
+      .eq("franchise_id", returnRecord.franchise_id)
     
     if (updateError) {
       console.error("Error updating return:", updateError)
@@ -102,8 +103,9 @@ export async function POST(
           // Update existing item
           await supabase
             .from("return_items")
-            .update(itemData)
-            .eq("id", existingItem.id)
+          .update(itemData)
+          .eq("id", existingItem.id)
+          .eq("return_id", returnId)
         } else {
           // Insert new item
           await supabase

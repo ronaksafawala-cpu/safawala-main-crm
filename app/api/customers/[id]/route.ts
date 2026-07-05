@@ -278,12 +278,17 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
 
     // Check for duplicate email (excluding current customer)
     if (email && email !== existingCustomer.email) {
-      const { data: existingByEmail } = await supabaseServer
+      let duplicateQuery = supabaseServer
         .from("customers")
-        .select("id, name")
+        .select("id, name, franchise_id")
         .eq("email", email.trim())
         .neq("id", id)
-        .single()
+
+      if (existingCustomer.franchise_id) {
+        duplicateQuery = duplicateQuery.eq("franchise_id", existingCustomer.franchise_id)
+      }
+
+      const { data: existingByEmail } = await duplicateQuery.single()
 
       if (existingByEmail) {
         return NextResponse.json(
@@ -338,6 +343,7 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       .from("customers")
       .update(updateData)
       .eq("id", id)
+      .eq("franchise_id", existingCustomer.franchise_id)
       .select()
       .single()
 
@@ -455,6 +461,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
       .from("bookings")
       .select("id")
       .eq("customer_id", id)
+      .eq("franchise_id", existingCustomer.franchise_id)
       .limit(1)
 
     if (relatedBookings && relatedBookings.length > 0) {
@@ -472,6 +479,7 @@ export async function DELETE(request: NextRequest, { params }: RouteParams) {
         updated_at: new Date().toISOString(),
       })
       .eq("id", id)
+      .eq("franchise_id", existingCustomer.franchise_id)
 
     if (deleteError) {
       // Fallback: if is_active column not migrated yet, perform hard delete

@@ -12,14 +12,26 @@ export async function GET(
   { params }: { params: { id: string } }
 ) {
   try {
-    const { data: delivery, error } = await supabaseServer
+    const auth = await authenticateRequest(request, { minRole: 'readonly' })
+    if (!auth.authorized) {
+      return NextResponse.json(auth.error, { status: auth.statusCode || 401 })
+    }
+    const franchiseId = auth.user!.franchise_id
+    const isSuperAdmin = auth.user!.is_super_admin
+
+    let query = supabaseServer
       .from("deliveries")
       .select(`
         *,
         customer:customers(id, name, phone, email)
       `)
       .eq("id", params.id)
-      .single()
+
+    if (!isSuperAdmin && franchiseId) {
+      query = query.eq("franchise_id", franchiseId)
+    }
+
+    const { data: delivery, error } = await query.single()
 
     if (error) {
       console.error("[Deliveries API] Error fetching delivery:", error)
@@ -44,6 +56,20 @@ export async function PATCH(
     if (!auth.authorized) {
       console.error("[Deliveries API] Unauthorized:", auth.error)
       return NextResponse.json(auth.error, { status: auth.statusCode || 401 })
+    }
+
+    const { data: existingDelivery, error: existingError } = await supabaseServer
+      .from("deliveries")
+      .select("id, franchise_id")
+      .eq("id", params.id)
+      .single()
+
+    if (existingError || !existingDelivery) {
+      return NextResponse.json({ error: "Delivery not found" }, { status: 404 })
+    }
+
+    if (!auth.user?.is_super_admin && existingDelivery.franchise_id && existingDelivery.franchise_id !== auth.user?.franchise_id) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
     const body = await request.json()
@@ -130,6 +156,7 @@ export async function PATCH(
       .from("deliveries")
       .update(updateData)
       .eq("id", deliveryId)
+      .eq("franchise_id", existingDelivery.franchise_id)
       .select(`
         *,
         customer:customers(id, name, phone, email)
@@ -160,10 +187,25 @@ export async function DELETE(
       return NextResponse.json(auth.error, { status: auth.statusCode || 401 })
     }
 
+    const { data: existingDelivery, error: existingError } = await supabaseServer
+      .from("deliveries")
+      .select("id, franchise_id")
+      .eq("id", params.id)
+      .single()
+
+    if (existingError || !existingDelivery) {
+      return NextResponse.json({ error: "Delivery not found" }, { status: 404 })
+    }
+
+    if (!auth.user?.is_super_admin && existingDelivery.franchise_id && existingDelivery.franchise_id !== auth.user?.franchise_id) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 })
+    }
+
     const { error } = await supabaseServer
       .from("deliveries")
       .delete()
       .eq("id", params.id)
+      .eq("franchise_id", existingDelivery.franchise_id)
 
     if (error) {
       console.error("[Deliveries API] Error deleting delivery:", error)

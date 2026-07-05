@@ -217,6 +217,7 @@ export async function PUT(req: NextRequest, { params }: { params: { id: string }
       .update(updateData)
       .eq("id", variation_id)
       .eq("product_id", params.id)
+      .eq("franchise_id", existingVariation.franchise_id)
       .select()
       .single()
 
@@ -275,6 +276,7 @@ export async function DELETE(req: NextRequest, { params }: { params: { id: strin
       .update({ is_active: false })
       .eq("id", variationId)
       .eq("product_id", params.id)
+      .eq("franchise_id", existingVariation.franchise_id)
 
     if (error) {
       console.error("Failed to delete variation:", error)

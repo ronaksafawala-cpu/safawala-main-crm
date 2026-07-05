@@ -108,6 +108,7 @@ export async function POST(req: NextRequest) {
       .from("products")
       .update({ barcode })
       .eq("id", productId)
+      .eq("franchise_id", product.franchise_id)
 
     if (updateError) {
       console.error("Failed to update barcode:", updateError)
