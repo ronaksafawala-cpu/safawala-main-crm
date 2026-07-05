@@ -9,6 +9,8 @@ export async function POST(request: NextRequest) {
     if (!auth.authorized) {
       return NextResponse.json(auth.error, { status: auth.statusCode })
     }
+    const franchiseId = auth.user?.franchise_id || ""
+    const isSuperAdmin = auth.user?.is_super_admin || false
 
     const { syncType = "products" } = await request.json()
 
@@ -62,7 +64,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (syncType === "products") {
-      syncResults = await syncProductsFromWooCommerce()
+      syncResults = await syncProductsFromWooCommerce(franchiseId, isSuperAdmin)
     } else if (syncType === "orders") {
       syncResults = await syncOrdersFromWooCommerce()
     } else if (syncType === "customers") {
@@ -93,7 +95,7 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function syncProductsFromWooCommerce() {
+async function syncProductsFromWooCommerce(franchiseId: string, isSuperAdmin: boolean) {
   const success: Array<{ name: string; sku: string }> = []
   const errors: Array<{ product: string; error: string }> = []
 
@@ -113,11 +115,14 @@ async function syncProductsFromWooCommerce() {
       for (const wooProduct of wooProducts) {
         try {
           // Check if product already exists in CRM
-          const { data: existingProduct } = await supabase
+          let existingQuery = supabase
             .from("products")
             .select("id")
             .eq("product_code", wooProduct.sku)
-            .single()
+          if (!isSuperAdmin && franchiseId) {
+            existingQuery = existingQuery.eq("franchise_id", franchiseId)
+          }
+          const { data: existingProduct } = await existingQuery.maybeSingle()
 
           const productData = {
             product_code: wooProduct.sku || `WOO-${wooProduct.id}`,
@@ -131,12 +136,17 @@ async function syncProductsFromWooCommerce() {
             is_active: wooProduct.status === "publish",
             woocommerce_id: wooProduct.id,
             woocommerce_sync: true,
+            franchise_id: franchiseId || null,
             updated_at: new Date().toISOString(),
           }
 
           if (existingProduct) {
             // Update existing product
-            const { error } = await supabase.from("products").update(productData).eq("id", existingProduct.id)
+            let updateQuery = supabase.from("products").update(productData).eq("id", existingProduct.id)
+            if (!isSuperAdmin && franchiseId) {
+              updateQuery = updateQuery.eq("franchise_id", franchiseId)
+            }
+            const { error } = await updateQuery
 
             if (error) throw error
           } else {
