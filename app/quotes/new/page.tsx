@@ -11,9 +11,13 @@ import { categoryService } from "@/lib/services/category-service"
 export const dynamic = "force-dynamic"
 
 async function NewQuotePage() {
+  const userRes = await fetch("/api/auth/user", { cache: "no-store" })
+  const currentUser = userRes.ok ? await userRes.json() : null
+  const franchiseId = currentUser?.franchise_id
+
   const [customers, products, categories] = await Promise.all([
     customerService.getAll(),
-    productService.getAvailable(),
+    productService.getAvailable(franchiseId),
     categoryService.getAll(),
   ])
 

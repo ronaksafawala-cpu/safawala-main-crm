@@ -20,9 +20,18 @@ export interface UpdateProductData extends Partial<CreateProductData> {
 }
 
 class ProductService {
-  async getAll(): Promise<Product[]> {
+  async getAll(franchiseId?: string): Promise<Product[]> {
     try {
-      const { data, error } = await supabase.from("products").select("*").order("created_at", { ascending: false })
+      if (!franchiseId) {
+        console.warn("ProductService.getAll called without a franchiseId; returning empty list")
+        return []
+      }
+
+      const { data, error } = await supabase
+        .from("products")
+        .select("*")
+        .eq("franchise_id", franchiseId)
+        .order("created_at", { ascending: false })
 
       if (error) throw error
 
@@ -33,13 +42,19 @@ class ProductService {
     }
   }
 
-  async getAvailable(): Promise<Product[]> {
+  async getAvailable(franchiseId?: string): Promise<Product[]> {
     try {
+      if (!franchiseId) {
+        console.warn("ProductService.getAvailable called without a franchiseId; returning empty list")
+        return []
+      }
+
       const { data, error } = await supabase
         .from("products")
         .select("*")
         .eq("is_active", true)
         .gt("stock_available", 0)
+        .eq("franchise_id", franchiseId)
         .order("name", { ascending: true })
 
       if (error) throw error
@@ -51,9 +66,19 @@ class ProductService {
     }
   }
 
-  async getById(id: string): Promise<Product | null> {
+  async getById(id: string, franchiseId?: string): Promise<Product | null> {
     try {
-      const { data, error } = await supabase.from("products").select("*").eq("id", id).single()
+      if (!franchiseId) {
+        console.warn("ProductService.getById called without a franchiseId; returning null")
+        return null
+      }
+
+      const { data, error } = await supabase
+        .from("products")
+        .select("*")
+        .eq("id", id)
+        .eq("franchise_id", franchiseId)
+        .single()
 
       if (error) throw error
 
@@ -131,13 +156,19 @@ class ProductService {
     }
   }
 
-  async getLowStock(): Promise<Product[]> {
+  async getLowStock(franchiseId?: string): Promise<Product[]> {
     try {
+      if (!franchiseId) {
+        console.warn("ProductService.getLowStock called without a franchiseId; returning empty list")
+        return []
+      }
+
       const { data, error } = await supabase
         .from("products")
         .select("*")
         .eq("is_active", true)
         .filter("stock_available", "lte", "min_stock_level")
+        .eq("franchise_id", franchiseId)
         .order("stock_available", { ascending: true })
 
       if (error) throw error
