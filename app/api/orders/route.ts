@@ -126,6 +126,7 @@ export async function PUT(req: NextRequest) {
       .from("product_orders")
       .update(updatePayload)
       .eq("id", orderId)
+      .eq("franchise_id", franchiseId)
 
     if (updateError && updateError.message?.includes("column")) {
       // Fallback: minimal safe columns only
@@ -149,7 +150,7 @@ export async function PUT(req: NextRequest) {
         pdf_url: null,
         updated_at: new Date().toISOString(),
       }
-      const retry = await supabase.from("product_orders").update(safePayload).eq("id", orderId)
+      const retry = await supabase.from("product_orders").update(safePayload).eq("id", orderId).eq("franchise_id", franchiseId)
       updateError = retry.error
     }
 
