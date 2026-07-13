@@ -107,6 +107,7 @@ export async function PATCH(request: NextRequest) {
       .from('product_orders')
       .update(updates)
       .eq('id', id)
+      .eq('franchise_id', existing.franchise_id)
       .select()
       .single()
 
