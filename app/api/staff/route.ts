@@ -4,6 +4,7 @@ import type { UserPermissions } from "@/lib/types"
 import bcrypt from "bcryptjs"
 import { authenticateRequest } from "@/lib/auth-middleware"
 import { createClient as createServiceClient } from "@supabase/supabase-js"
+import { CRM_ADMIN_ROLES, CRM_USER_ROLES } from "@/lib/user-roles"
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -16,14 +17,14 @@ const SAFE_STAFF_SELECT = `
   department,
   franchise_id,
   is_active,
-  base_salary,
+  base_salary:salary,
   permissions,
   created_at,
   updated_at,
   franchise:franchises(name, code)
 `
 
-const ALLOWED_STAFF_ROLES = new Set(["super_admin", "franchise_admin", "staff", "readonly"])
+const ALLOWED_STAFF_ROLES = new Set<string>(CRM_USER_ROLES)
 
 /**
  * Hash password using bcrypt
@@ -106,7 +107,7 @@ function defaultPermissionsForRole(role: string): UserPermissions {
     integrations: false,
     settings: false,
   }
-  if (role === 'super_admin' || role === 'franchise_admin') return all
+  if (CRM_ADMIN_ROLES.includes(role as (typeof CRM_ADMIN_ROLES)[number])) return all
   if (role === 'readonly') return readonly
   return staff
 }
@@ -301,7 +302,7 @@ export async function POST(request: NextRequest) {
         is_active,
       }
       if (department) insertData.department = department
-      if (parsedSalary !== undefined) insertData.base_salary = parsedSalary
+      if (parsedSalary !== undefined) insertData.salary = parsedSalary
 
       const { data, error } = await supabase
         .from("users")
@@ -410,7 +411,7 @@ export async function PUT(request: NextRequest) {
           results.push({ success: false, error: "Invalid salary amount", id })
           continue
         }
-        effectiveUpdate.base_salary = parsedSalary ?? null
+        effectiveUpdate.salary = parsedSalary ?? null
       }
 
       if (updateData.role !== undefined) {

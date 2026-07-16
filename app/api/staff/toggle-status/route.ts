@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { authenticateRequest } from "@/lib/auth-middleware"
 import { supabaseServer } from "@/lib/supabase-server-simple"
+import { CRM_ADMIN_ROLES } from "@/lib/user-roles"
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -13,7 +14,7 @@ const SAFE_STAFF_SELECT = `
   department,
   franchise_id,
   is_active,
-  base_salary,
+  base_salary:salary,
   permissions,
   created_at,
   updated_at,
@@ -49,6 +50,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Staff ID is required' }, { status: 400 })
     }
 
+    if (id === user!.id) {
+      return NextResponse.json({ error: 'Cannot change your own active status' }, { status: 403 })
+    }
+
     // Load target user and verify franchise
     const { data: targetUser, error: fetchError } = await supabaseServer
       .from('users')
@@ -74,6 +79,19 @@ export async function POST(request: NextRequest) {
 
     // Toggle
     const newStatus = !targetUser.is_active
+
+    if (!newStatus && CRM_ADMIN_ROLES.includes(targetUser.role as (typeof CRM_ADMIN_ROLES)[number]) && targetUser.role !== 'super_admin') {
+      const { data: admins } = await supabaseServer
+        .from('users')
+        .select('id')
+        .eq('franchise_id', targetUser.franchise_id)
+        .in('role', ['franchise_admin', 'franchise_owner', 'manager'])
+        .eq('is_active', true)
+
+      if (admins && admins.length <= 1) {
+        return NextResponse.json({ error: 'Cannot deactivate the last active admin. Activate another admin first.' }, { status: 403 })
+      }
+    }
 
     const { data, error: updateError } = await supabaseServer
       .from('users')

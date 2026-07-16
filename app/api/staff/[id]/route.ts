@@ -3,6 +3,7 @@ import { authenticateRequest } from "@/lib/auth-middleware"
 import { supabaseServer } from "@/lib/supabase-server-simple"
 import type { UserPermissions } from "@/lib/types"
 import bcrypt from "bcryptjs"
+import { CRM_ADMIN_ROLES, CRM_USER_ROLES } from "@/lib/user-roles"
 
 // Ensure dynamic rendering for Vercel edge caching behavior
 export const dynamic = 'force-dynamic'
@@ -16,14 +17,14 @@ const SAFE_STAFF_SELECT = `
   department,
   franchise_id,
   is_active,
-  base_salary,
+  base_salary:salary,
   permissions,
   created_at,
   updated_at,
   franchise:franchises(name, code)
 `
 
-const ALLOWED_STAFF_ROLES = new Set(["super_admin", "franchise_admin", "staff", "readonly"])
+const ALLOWED_STAFF_ROLES = new Set<string>(CRM_USER_ROLES)
 
 /**
  * Hash password using bcrypt
@@ -52,7 +53,7 @@ function defaultPermissionsForRole(role: string): UserPermissions {
     deliveries: false, productArchive: false, payroll: false, attendance: true, reports: true,
     financials: false, franchises: false, staff: false, integrations: false, settings: false,
   }
-  if (role === 'super_admin' || role === 'franchise_admin') return all
+  if (CRM_ADMIN_ROLES.includes(role as (typeof CRM_ADMIN_ROLES)[number])) return all
   if (role === 'readonly') return readonly
   return staff
 }
@@ -225,7 +226,7 @@ export async function PATCH(
       if (parsedSalary === undefined && base_salary !== "" && base_salary !== null) {
         return NextResponse.json({ error: "Invalid salary amount" }, { status: 400 })
       }
-      updateData.base_salary = parsedSalary ?? null
+      updateData.salary = parsedSalary ?? null
     }
     
     // Hash password if provided (with validation)
@@ -325,12 +326,12 @@ export async function DELETE(
     }
     
     // 🔒 PREVENT DELETING LAST ACTIVE ADMIN IN FRANCHISE
-    if (existingUser.role === 'franchise_admin' && existingUser.is_active) {
+    if (CRM_ADMIN_ROLES.includes(existingUser.role as (typeof CRM_ADMIN_ROLES)[number]) && existingUser.role !== 'super_admin' && existingUser.is_active) {
       const { data: adminCount } = await supabaseServer
         .from("users")
         .select("id")
         .eq("franchise_id", existingUser.franchise_id)
-        .eq("role", "franchise_admin")
+        .in("role", ["franchise_admin", "franchise_owner", "manager"])
         .eq("is_active", true)
       
       if (adminCount && adminCount.length <= 1) {
