@@ -3,6 +3,7 @@ import { createClient } from "@/lib/supabase/server"
 import bcrypt from "bcryptjs"
 import { authenticateRequest } from "@/lib/auth-middleware"
 import type { UserPermissions } from "@/lib/types"
+import { CRM_ADMIN_ROLES, CRM_USER_ROLES } from "@/lib/user-roles"
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -15,14 +16,14 @@ const SAFE_STAFF_SELECT = `
   department,
   franchise_id,
   is_active,
-  base_salary,
+  base_salary:salary,
   permissions,
   created_at,
   updated_at,
   franchise:franchises(name, code)
 `
 
-const ALLOWED_STAFF_ROLES = new Set(["super_admin", "franchise_admin", "staff", "readonly"])
+const ALLOWED_STAFF_ROLES = new Set<string>(CRM_USER_ROLES)
 
 async function hashPassword(password: string): Promise<string> {
   const salt = await bcrypt.genSalt(10)
@@ -30,7 +31,7 @@ async function hashPassword(password: string): Promise<string> {
 }
 
 function defaultPermissionsForRole(role: string): UserPermissions {
-  if (role === "super_admin" || role === "franchise_admin") {
+  if (CRM_ADMIN_ROLES.includes(role as (typeof CRM_ADMIN_ROLES)[number])) {
     return {
       dashboard: true, bookings: true, customers: true, inventory: true, packages: true, vendors: true,
       quotes: true, invoices: true, invoice_payment_access: true, laundry: true, expenses: true,
@@ -135,7 +136,7 @@ export async function POST(request: NextRequest) {
       if (parsedSalary === undefined && base_salary !== "" && base_salary !== null) {
         return NextResponse.json({ error: 'Invalid salary amount' }, { status: 400 })
       }
-      updateData.base_salary = parsedSalary ?? null
+      updateData.salary = parsedSalary ?? null
     }
 
     if (password && password.length > 0) {

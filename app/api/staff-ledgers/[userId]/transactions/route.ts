@@ -81,13 +81,13 @@ export async function POST(request: NextRequest, { params }: { params: { userId:
       // Fetch base salary from users table
       const { data: userData } = await supabaseServer
         .from("users")
-        .select("base_salary")
+        .select("salary")
         .eq("id", userId)
         .maybeSingle()
 
       const { data: newLedger, error: createError } = await supabaseServer
         .from("staff_ledgers")
-        .insert({ user_id: userId, base_salary: userData?.base_salary ?? 0, utilized_credit: 0, credit_limit: 50000 })
+        .insert({ user_id: userId, base_salary: userData?.salary ?? 0, utilized_credit: 0, credit_limit: 50000 })
         .select()
         .single()
 
