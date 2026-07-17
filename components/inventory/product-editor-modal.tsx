@@ -39,6 +39,7 @@ interface Product {
   subcategory_id?: string
   image_url?: string
   barcode?: string
+  franchise_id?: string
 }
 
 interface ProductImage {
@@ -188,20 +189,26 @@ export function ProductEditorModal({
   // Load categories + all their subcategories on mount
   useEffect(() => {
     const loadAll = async () => {
-      const { data: cats } = await supabase
+      let categoriesQuery = supabase
         .from("product_categories")
         .select("id, name")
         .eq("is_active", true)
         .is("parent_id", null)
-        .order("name")
+      if (franchiseId) {
+        categoriesQuery = categoriesQuery.eq("franchise_id", franchiseId)
+      }
+      const { data: cats } = await categoriesQuery.order("name")
       if (!cats) return
       // Fetch all subcategories at once
-      const { data: subs } = await supabase
+      let subcategoriesQuery = supabase
         .from("product_categories")
         .select("id, name, parent_id")
         .eq("is_active", true)
         .not("parent_id", "is", null)
-        .order("name")
+      if (franchiseId) {
+        subcategoriesQuery = subcategoriesQuery.eq("franchise_id", franchiseId)
+      }
+      const { data: subs } = await subcategoriesQuery.order("name")
       const catsWithSubs = cats.map((c: any) => ({
         ...c,
         subcategories: (subs || []).filter((s: any) => s.parent_id === c.id).map((s: any) => ({ id: s.id, name: s.name })),
@@ -209,19 +216,22 @@ export function ProductEditorModal({
       setCategories(catsWithSubs as any)
     }
     loadAll()
-  }, [])
+  }, [franchiseId])
 
   // Load subcategories when category changes
   const handleCategoryChange = async (categoryId: string) => {
     setFormData(prev => ({ ...prev, category_id: categoryId, subcategory_id: "" }))
     setSubcategories([])
     if (categoryId) {
-      const { data } = await supabase
+      let subcategoriesQuery = supabase
         .from("product_categories")
         .select("id, name")
         .eq("parent_id", categoryId)
         .eq("is_active", true)
-        .order("name")
+      if (franchiseId) {
+        subcategoriesQuery = subcategoriesQuery.eq("franchise_id", franchiseId)
+      }
+      const { data } = await subcategoriesQuery.order("name")
       if (data) setSubcategories(data)
     }
   }
@@ -233,14 +243,20 @@ export function ProductEditorModal({
       return
     }
 
-    supabase
+    let subcategoriesQuery = supabase
       .from("product_categories")
       .select("id, name")
       .eq("parent_id", product.category_id)
       .eq("is_active", true)
+
+    if (franchiseId) {
+      subcategoriesQuery = subcategoriesQuery.eq("franchise_id", franchiseId)
+    }
+
+    subcategoriesQuery
       .order("name")
       .then(({ data }: any) => { if (data) setSubcategories(data) })
-  }, [product?.category_id])
+  }, [franchiseId, product?.category_id])
 
   const [formData, setFormData] = useState<Product>({
     name: "",
@@ -280,12 +296,19 @@ export function ProductEditorModal({
         .order("order", { ascending: true })
 
       if (error) throw error
-      setImages(data?.map((img: any) => ({
+      const normalizedImages = data?.map((img: any) => ({
         id: img.id,
         url: img.url,
         is_main: img.is_main,
         order: img.order,
-      })) || [])
+      })) || []
+
+      if (normalizedImages.length === 0 && product.image_url) {
+        setImages([{ url: product.image_url, is_main: true, order: 0 }])
+        return
+      }
+
+      setImages(normalizedImages)
     } catch (error) {
       console.error("Failed to load images:", error)
     } finally {

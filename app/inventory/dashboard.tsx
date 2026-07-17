@@ -58,6 +58,7 @@ interface Product {
   reorder_level: number
   barcode?: string
   image_url?: string
+  franchise_id?: string
   is_active: boolean
   _variation_count?: number
   created_at?: string
@@ -258,6 +259,7 @@ export default function InventoryDashboard() {
     reorder_level: typeof p.reorder_level === "number" ? p.reorder_level : 0,
     barcode: p.barcode || p.barcode_number || undefined,
     image_url: p.image_url || undefined,
+    franchise_id: p.franchise_id || undefined,
     category_id: p.category_id || undefined,
     subcategory_id: p.subcategory_id || undefined,
     category_name: p.category_name || undefined,
@@ -312,7 +314,7 @@ export default function InventoryDashboard() {
         }
       }
 
-      await fetchCategoriesList()
+      await fetchCategoriesList(currentUser)
 
       const prodRes = await fetch(
         `/api/products?limit=3000&active_only=true${currentUser.franchise_id ? `&franchise_id=${encodeURIComponent(currentUser.franchise_id)}` : ""}`,
@@ -354,13 +356,18 @@ export default function InventoryDashboard() {
     }
   }
 
-  const fetchCategoriesList = async () => {
+  const fetchCategoriesList = async (currentUser?: User | null) => {
     try {
-      const { data: catData, error: catError } = await supabase
+      let categoriesQuery = supabase
         .from("product_categories")
         .select("id, name, parent_id")
         .eq("is_active", true)
-        .order("name", { ascending: true })
+
+      if (currentUser?.role !== "super_admin" && currentUser?.franchise_id) {
+        categoriesQuery = categoriesQuery.eq("franchise_id", currentUser.franchise_id)
+      }
+
+      const { data: catData, error: catError } = await categoriesQuery.order("name", { ascending: true })
 
       if (!catError && catData) {
         setCategories(catData)
@@ -591,9 +598,22 @@ export default function InventoryDashboard() {
     e.preventDefault()
     if (!newCatName.trim()) return
     try {
+      const activeFranchiseId = resolvedFranchiseId || user?.franchise_id || null
+      const payload: Record<string, any> = {
+        name: newCatName.trim(),
+        is_active: true,
+      }
+
+      if (user?.role !== "super_admin") {
+        if (!activeFranchiseId) {
+          throw new Error("Franchise context is required to create a category")
+        }
+        payload.franchise_id = activeFranchiseId
+      }
+
       const { error } = await supabase
         .from("product_categories")
-        .insert([{ name: newCatName.trim(), is_active: true }])
+        .insert([payload])
 
       if (error) throw error
       toast.success("Category added successfully")
@@ -608,10 +628,16 @@ export default function InventoryDashboard() {
   const handleUpdateCategory = async (id: string) => {
     if (!catEditingName.trim()) return
     try {
-      const { error } = await supabase
+      let query = supabase
         .from("product_categories")
         .update({ name: catEditingName.trim() })
         .eq("id", id)
+
+      if (user?.role !== "super_admin" && user?.franchise_id) {
+        query = query.eq("franchise_id", user.franchise_id)
+      }
+
+      const { error } = await query
 
       if (error) throw error
       toast.success("Category updated")
@@ -632,10 +658,16 @@ export default function InventoryDashboard() {
       variant: "destructive",
       onConfirm: async () => {
         try {
-          const { error } = await supabase
+          let query = supabase
             .from("product_categories")
             .update({ is_active: false })
             .eq("id", id)
+
+          if (user?.role !== "super_admin" && user?.franchise_id) {
+            query = query.eq("franchise_id", user.franchise_id)
+          }
+
+          const { error } = await query
 
           if (error) throw error
           toast.success("Category deleted")
