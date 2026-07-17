@@ -4,11 +4,10 @@ import { requireAuth } from "@/lib/auth-middleware"
 
 export const dynamic = "force-dynamic"
 
-const supabase = createClient()
-
 export async function GET(req: NextRequest) {
   const auth = await requireAuth(req)
   if (!auth.success) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  const supabase = createClient()
 
   const user = auth.authContext?.user
   const franchiseId = user?.franchise_id
@@ -62,6 +61,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const auth = await requireAuth(req)
   if (!auth.success) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+  const supabase = createClient()
 
   const user = auth.authContext?.user
   const franchiseId = user?.franchise_id
