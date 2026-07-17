@@ -60,7 +60,7 @@ export function PhotoGallery({ images, onImagesChange, onUpload, disabled }: Pho
       toast.success(`${files.length} image${files.length > 1 ? "s" : ""} added`)
     } catch (error) {
       console.error("Upload error:", error)
-      toast.error("Failed to upload images")
+      toast.error(error instanceof Error ? error.message : "Failed to upload images")
     } finally {
       setUploading(false)
     }
