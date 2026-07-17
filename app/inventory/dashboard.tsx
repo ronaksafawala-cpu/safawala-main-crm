@@ -278,8 +278,8 @@ export default function InventoryDashboard() {
   useEffect(() => {
     const handleWindowFocus = () => {
       if (typeof document === "undefined") return
-      if (document.visibilityState === "visible") {
-        fetchProducts()
+      if (document.visibilityState === "visible" && !editorOpen) {
+        fetchProducts({ background: true })
       }
     }
 
@@ -290,11 +290,14 @@ export default function InventoryDashboard() {
       window.removeEventListener("focus", handleWindowFocus)
       document.removeEventListener("visibilitychange", handleWindowFocus)
     }
-  }, [])
+  }, [editorOpen])
 
-  const fetchProducts = async () => {
+  const fetchProducts = async (options?: { background?: boolean }) => {
+    const isBackgroundRefresh = options?.background === true
     try {
-      setLoading(true)
+      if (!isBackgroundRefresh) {
+        setLoading(true)
+      }
       const userRes = await fetch("/api/auth/user")
       if (!userRes.ok) throw new Error("Failed to fetch user")
       const currentUser: User = await userRes.json()
@@ -352,7 +355,9 @@ export default function InventoryDashboard() {
       console.error("Error fetching products:", error)
       toast.error("Failed to load products")
     } finally {
-      setLoading(false)
+      if (!isBackgroundRefresh) {
+        setLoading(false)
+      }
     }
   }
 
