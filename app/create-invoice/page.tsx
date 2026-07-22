@@ -3386,15 +3386,6 @@ export default function CreateInvoicePage() {
             >
               <X className="h-5 w-5" />
             </button>
-            <button
-              type="button"
-              onClick={() => router.push("/bookings")}
-              aria-label="Back to bookings"
-              className="absolute left-5 top-5 inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm transition-colors hover:bg-gray-50 hover:text-gray-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Back to Bookings
-            </button>
             <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <FileText className="w-7 h-7 text-green-600" />
             </div>
@@ -3430,15 +3421,6 @@ export default function CreateInvoicePage() {
                 </div>
               </button>
             </div>
-
-            <button
-              type="button"
-              onClick={() => router.push("/bookings")}
-              className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50 hover:text-gray-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
-            >
-              <ArrowLeft className="h-4 w-4" />
-              Back to All Bookings
-            </button>
 
           </div>
         </div>
