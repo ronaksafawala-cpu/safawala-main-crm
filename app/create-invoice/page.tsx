@@ -3515,7 +3515,7 @@ export default function CreateInvoicePage() {
 
       <div className="min-h-screen bg-slate-50 p-4 print:p-0 print:bg-white invoice-scaled">
       {/* Header - Hidden on print */}
-      <div className="max-w-[64%] mx-auto mb-4 flex items-center justify-between print:hidden">
+      <div className="mx-auto mb-4 flex w-full max-w-[96rem] items-center justify-between print:hidden">
         <div className="flex items-center gap-4">
           <Link href="/bookings">
             <Button variant="outline" size="sm">
@@ -3535,9 +3535,9 @@ export default function CreateInvoicePage() {
               )}
             </div>
             <p className="text-sm text-gray-600">
-              {mode === "edit" 
-                ? `Order: ${invoiceData.invoice_number || "Loading..."}` 
-                : "Fill in the details below to create a booking"}
+              {mode === "edit"
+                ? `Order: ${invoiceData.invoice_number || "Loading..."}`
+                : "Create a complete order in a few guided steps"}
             </p>
           </div>
         </div>
@@ -3592,7 +3592,7 @@ export default function CreateInvoicePage() {
 
 
       {/* Invoice Document */}
-      <div className="max-w-[64%] mx-auto bg-white rounded-lg shadow-lg print:shadow-none print:rounded-none print:max-w-full">
+      <div className="mx-auto w-full max-w-[96rem] rounded-lg bg-white shadow-lg print:shadow-none print:rounded-none print:max-w-full">
         
         {/* ========== PRINT-ONLY HEADER ========== */}
         <div className="hidden print:block bg-slate-50 border-b border-slate-300 px-3 py-2">
