@@ -186,49 +186,58 @@ export async function POST(request: NextRequest) {
         admin: 'admin',
       };
       const portalSlug = deptToPortalSlug[deptPrefix] || deptPrefix;
-
-      // Look up real franchise_id from DB so queries return actual data
-      const serviceForFranchise = createServiceClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.SUPABASE_SERVICE_ROLE_KEY!
-      )
-      let realFranchiseId = "00000000-0000-4000-8001-000000000099"
-      let realFranchiseName = "Safawala Main"
-      let realFranchiseCode = "SFW-MAIN"
-      try {
-        const { data: fData } = await serviceForFranchise
-          .from('franchises')
-          .select('id, name, code')
-          .order('created_at', { ascending: true })
-          .limit(1)
-          .single()
-        if (fData?.id) {
-          realFranchiseId = fData.id
-          realFranchiseName = fData.name || realFranchiseName
-          realFranchiseCode = fData.code || realFranchiseCode
-        }
-      } catch (_) {}
-
       const deptDisplayNames: Record<string, string> = {
         travels: "Travel & Hotels",
       };
-      const displayName = deptDisplayNames[deptPrefix] ? `${deptDisplayNames[deptPrefix]} Manager` : `${deptCap} Manager`;
+      const displayName = deptDisplayNames[deptPrefix]
+        ? `${deptDisplayNames[deptPrefix]} Manager`
+        : `${deptCap} Manager`;
 
-      // Upsert the dept user into users table so auth-middleware can find them
-      try {
-        await serviceForFranchise
-          .from('users')
-          .upsert({
-            id: deptUserId,
-            email: `${deptPrefix}@safawala.com`,
-            name: displayName,
-            role: userRole,
-            franchise_id: realFranchiseId,
-            is_active: true,
-            permissions: getDefaultPermissions(userRole),
-          }, { onConflict: 'email', ignoreDuplicates: false })
-      } catch (upsertErr) {
-        console.warn('[v0] Could not upsert dept user (non-fatal):', upsertErr)
+      // Look up real franchise_id from DB so queries return actual data
+      // The local legacy-login path can run without a service-role key. In
+      // production, the normal Supabase-backed profile flow still requires it.
+      const serviceForFranchise = process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY
+        ? createServiceClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL,
+            process.env.SUPABASE_SERVICE_ROLE_KEY
+          )
+        : null
+      let realFranchiseId = "00000000-0000-4000-8001-000000000099"
+      let realFranchiseName = "Safawala Main"
+      let realFranchiseCode = "SFW-MAIN"
+      if (serviceForFranchise) {
+        try {
+          const { data: fData } = await serviceForFranchise
+            .from('franchises')
+            .select('id, name, code')
+            .order('created_at', { ascending: true })
+            .limit(1)
+            .single()
+          if (fData?.id) {
+            realFranchiseId = fData.id
+            realFranchiseName = fData.name || realFranchiseName
+            realFranchiseCode = fData.code || realFranchiseCode
+          }
+        } catch (_) {}
+      }
+
+      // Keep the local fallback usable when the service-role key is not present.
+      if (serviceForFranchise) {
+        try {
+          await serviceForFranchise
+            .from('users')
+            .upsert({
+              id: deptUserId,
+              email: `${deptPrefix}@safawala.com`,
+              name: displayName,
+              role: userRole,
+              franchise_id: realFranchiseId,
+              is_active: true,
+              permissions: getDefaultPermissions(userRole),
+            }, { onConflict: 'email', ignoreDuplicates: false })
+        } catch (upsertErr) {
+          console.warn('[v0] Could not upsert dept user (non-fatal):', upsertErr)
+        }
       }
 
       const user = {
