@@ -3358,7 +3358,25 @@ export default function CreateInvoicePage() {
       {!typeSelected && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
           style={{ background: "rgba(0,0,0,0.65)", backdropFilter: "blur(6px)" }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-8 text-center">
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg p-8 pt-16 text-center">
+            <button
+              type="button"
+              onClick={() => router.push("/dashboard")}
+              aria-label="Close and return to dashboard"
+              title="Return to dashboard"
+              className="absolute right-5 top-5 inline-flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 shadow-sm transition-colors hover:border-gray-300 hover:bg-gray-50 hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
+            >
+              <X className="h-5 w-5" />
+            </button>
+            <button
+              type="button"
+              onClick={() => router.push("/bookings")}
+              aria-label="Back to bookings"
+              className="absolute left-5 top-5 inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 shadow-sm transition-colors hover:bg-gray-50 hover:text-gray-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back to Bookings
+            </button>
             <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <FileText className="w-7 h-7 text-green-600" />
             </div>
@@ -3394,6 +3412,15 @@ export default function CreateInvoicePage() {
                 </div>
               </button>
             </div>
+
+            <button
+              type="button"
+              onClick={() => router.push("/bookings")}
+              className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-50 hover:text-gray-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              Back to All Bookings
+            </button>
 
           </div>
         </div>
