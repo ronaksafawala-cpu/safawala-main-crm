@@ -674,13 +674,6 @@ function QuotesPageContent() {
                 </SelectItem>
               </SelectContent>
             </Select>
-            <Button
-              className="bg-[#C4B5FD] text-[#4A1F5E] hover:bg-[#A78BFA] hover:text-[#2B1738]"
-              onClick={() => setShowBookingTypeDialog(true)}
-            >
-              <Plus className="h-3 w-3 mr-1" />
-              New Quote
-            </Button>
           </div>
         </div>
 
@@ -2147,28 +2140,6 @@ const getStatusBadge = (status: string) => {
             {isExporting ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Download className="h-3 w-3 mr-1" />}
             {isExporting ? "Exporting..." : "Export"}
           </Button>
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button className="bg-[#C4B5FD] text-[#4A1F5E] hover:bg-[#A78BFA] hover:text-[#2B1738]">
-                <Plus className="h-3 w-3 mr-1" />
-                New Quote
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={() => router.push('/quotes/new')}>
-                <FileText className="h-4 w-4 mr-2" />
-                Product Quote
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => router.push('/book-package')}>
-                <Package className="h-4 w-4 mr-2" />
-                Package Quote
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => router.push('/create-invoice')}>
-                <Package className="h-4 w-4 mr-2" />
-                Create Booking
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
         </div>
       </div>
 
