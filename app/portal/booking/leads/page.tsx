@@ -186,10 +186,12 @@ function AddLeadSheet({ onClose, onSaved }: { onClose: () => void; onSaved: () =
 
 /* ── Lead Detail Sheet ── */
 function LeadDetailSheet({ lead, onClose, onUpdated }: { lead: Lead; onClose: () => void; onUpdated: () => void }) {
+  const router = useRouter()
   const [updating, setUpdating] = useState(false)
   const [note, setNote] = useState(lead.notes || "")
   const [savingNote, setSavingNote] = useState(false)
   const [toast, setToast] = useState("")
+  const [actionError, setActionError] = useState("")
 
   function showToast(msg: string) { setToast(msg); setTimeout(() => setToast(""), 2500) }
 
@@ -197,7 +199,11 @@ function LeadDetailSheet({ lead, onClose, onUpdated }: { lead: Lead; onClose: ()
     setUpdating(true)
     try {
       const res = await fetch("/api/leads", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: lead.id, status: newStatus }) })
-      if (res.ok) { showToast(`Status → ${newStatus}`); onUpdated() }
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || "Failed to update status")
+      showToast(`Status → ${newStatus}`); onUpdated()
+    } catch (e: any) {
+      setActionError(e.message || "Failed to update status")
     } finally { setUpdating(false) }
   }
 
@@ -205,8 +211,25 @@ function LeadDetailSheet({ lead, onClose, onUpdated }: { lead: Lead; onClose: ()
     setSavingNote(true)
     try {
       const res = await fetch("/api/leads", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: lead.id, notes: note }) })
-      if (res.ok) { showToast("Note saved ✓"); onUpdated() }
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || "Failed to save note")
+      showToast("Note saved ✓"); onUpdated()
+    } catch (e: any) {
+      setActionError(e.message || "Failed to save note")
     } finally { setSavingNote(false) }
+  }
+
+  async function createBooking() {
+    setActionError("")
+    try {
+      const res = await fetch(`/api/customers?search=${encodeURIComponent(lead.phone)}`)
+      const data = await res.json()
+      const customer = data.data?.find((item: any) => item.lead_id === lead.id) || data.data?.[0]
+      if (!res.ok || !customer?.id) throw new Error("Converted customer record was not found")
+      router.push(`/portal/booking/bookings/new?customer_id=${customer.id}`)
+    } catch (e: any) {
+      setActionError(e.message || "Unable to create booking")
+    }
   }
 
   const cfg = STATUS_CONFIG[lead.status] ?? STATUS_CONFIG.new
@@ -245,6 +268,7 @@ function LeadDetailSheet({ lead, onClose, onUpdated }: { lead: Lead; onClose: ()
         </div>
 
         <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 16 }}>
+          {actionError && <div style={{ background: "#fee2e2", color: "#b91c1c", borderRadius: 12, padding: "10px 14px", fontSize: 12, fontWeight: 600 }}>{actionError}</div>}
           {/* Quick Actions */}
           <div style={{ display: "flex", gap: 10 }}>
             <a href={`tel:${lead.phone}`} style={{ flex: 1, height: 44, borderRadius: 12, background: "#eff6ff", border: "none", color: "#1d4ed8", fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, textDecoration: "none" }}>
@@ -309,7 +333,7 @@ function LeadDetailSheet({ lead, onClose, onUpdated }: { lead: Lead; onClose: ()
 
           {/* Convert to Booking */}
           {lead.status === "converted" && (
-            <button style={{ width: "100%", height: 50, borderRadius: 14, border: "none", background: `linear-gradient(135deg, ${COLOR}, ${COLOR_DARK})`, color: "white", fontSize: 14, fontWeight: 800, cursor: "pointer", fontFamily: "inherit", boxShadow: `0 6px 20px ${COLOR}50` }}>
+            <button onClick={createBooking} style={{ width: "100%", height: 50, borderRadius: 14, border: "none", background: `linear-gradient(135deg, ${COLOR}, ${COLOR_DARK})`, color: "white", fontSize: 14, fontWeight: 800, cursor: "pointer", fontFamily: "inherit", boxShadow: `0 6px 20px ${COLOR}50` }}>
               📋 Create Booking from this Lead
             </button>
           )}
@@ -338,6 +362,7 @@ export default function LeadsPage() {
       if (sourceFilter !== "all") params.set("source", sourceFilter)
       const res = await fetch(`/api/leads?${params}`)
       const data = await res.json()
+      if (!res.ok) throw new Error(data.error || "Failed to load leads")
       setLeads(data.data ?? data ?? [])
     } catch { setLeads([]) }
     finally { setLoading(false) }

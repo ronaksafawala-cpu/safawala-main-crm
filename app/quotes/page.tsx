@@ -675,6 +675,7 @@ function QuotesPageContent() {
               </SelectContent>
             </Select>
             <Button
+              className="bg-[#C4B5FD] text-[#4A1F5E] hover:bg-[#A78BFA] hover:text-[#2B1738]"
               onClick={() => setShowBookingTypeDialog(true)}
             >
               <Plus className="h-3 w-3 mr-1" />
@@ -764,7 +765,7 @@ function QuotesPageContent() {
         </div>
 
         {/* Filters */}
-        <Card className="p-3">
+        <Card className="border-[#E5DFE8] bg-white p-6 shadow-sm">
           <CardHeader className="p-0 pb-2">
             <div className="flex items-center space-x-2">
               <CardTitle className="text-sm">Filters</CardTitle>
@@ -833,7 +834,7 @@ function QuotesPageContent() {
         </Card>
 
         {/* Quotes Table */}
-        <Card className="p-3">
+        <Card className="border-[#E5DFE8] bg-white p-6 shadow-sm">
           <CardHeader className="p-0 pb-2">
             <div className="flex items-center space-x-2">
               <CardTitle className="text-sm">Quotes ({filteredQuotes.length})</CardTitle>
@@ -2142,9 +2143,13 @@ const getStatusBadge = (status: string) => {
             <RefreshCw className="h-3 w-3 mr-1" />
             Refresh
           </Button>
+          <Button variant="outline" size="sm" onClick={exportToCSV} disabled={quotes.length === 0 || isExporting}>
+            {isExporting ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Download className="h-3 w-3 mr-1" />}
+            {isExporting ? "Exporting..." : "Export"}
+          </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button>
+              <Button className="bg-[#C4B5FD] text-[#4A1F5E] hover:bg-[#A78BFA] hover:text-[#2B1738]">
                 <Plus className="h-3 w-3 mr-1" />
                 New Quote
               </Button>
@@ -2169,10 +2174,10 @@ const getStatusBadge = (status: string) => {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-        <Card className="p-3">
+        <Card className="border-[#E5DFE8] bg-white p-6 shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1">
             <div className="flex items-center space-x-1">
-              <CardTitle className="text-xs font-medium">Total Quotes</CardTitle>
+              <CardTitle className="text-sm font-medium text-[#6F6878]">Total Quotes</CardTitle>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Info className="w-3 h-3 text-muted-foreground" />
@@ -2182,16 +2187,18 @@ const getStatusBadge = (status: string) => {
                 </TooltipContent>
               </Tooltip>
             </div>
-            <FileText className="h-3 w-3 text-muted-foreground" />
+              <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#F1EAF5]">
+                <FileText className="h-4 w-4 text-[#4A1F5E]" />
+              </div>
           </CardHeader>
           <CardContent className="p-0">
-            <div className="text-lg font-bold">{stats.total}</div>
+              <div className="text-3xl font-semibold text-[#1F1B24]">{stats.total}</div>
           </CardContent>
         </Card>
-        <Card className="p-3">
+        <Card className="border-[#E5DFE8] bg-white p-6 shadow-sm">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1">
             <div className="flex items-center space-x-1">
-              <CardTitle className="text-xs font-medium">Generated</CardTitle>
+              <CardTitle className="text-sm font-medium text-[#6F6878]">Generated</CardTitle>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Info className="w-3 h-3 text-muted-foreground" />
@@ -2201,16 +2208,18 @@ const getStatusBadge = (status: string) => {
                 </TooltipContent>
               </Tooltip>
             </div>
-            <Clock className="h-3 w-3 text-muted-foreground" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#E9F7EE]">
+              <Clock className="h-4 w-4 text-[#25864A]" />
+            </div>
           </CardHeader>
           <CardContent className="p-0">
-            <div className="text-lg font-bold">{stats.generated}</div>
+            <div className="text-3xl font-semibold text-[#1F1B24]">{stats.generated}</div>
           </CardContent>
         </Card>
         <Card className="p-3">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1">
             <div className="flex items-center space-x-1">
-              <CardTitle className="text-xs font-medium">Converted</CardTitle>
+              <CardTitle className="text-sm font-medium text-[#6F6878]">Converted</CardTitle>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Info className="w-3 h-3 text-muted-foreground" />
@@ -2220,16 +2229,18 @@ const getStatusBadge = (status: string) => {
                 </TooltipContent>
               </Tooltip>
             </div>
-            <CheckCircle className="h-3 w-3 text-muted-foreground" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#EAF1FF]">
+              <CheckCircle className="h-4 w-4 text-[#4469C5]" />
+            </div>
           </CardHeader>
           <CardContent className="p-0">
-            <div className="text-lg font-bold">{stats.converted}</div>
+            <div className="text-3xl font-semibold text-[#1F1B24]">{stats.converted}</div>
           </CardContent>
         </Card>
         <Card className="p-3">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-1">
             <div className="flex items-center space-x-1">
-              <CardTitle className="text-xs font-medium">Rejected</CardTitle>
+              <CardTitle className="text-sm font-medium text-[#6F6878]">Rejected</CardTitle>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Info className="w-3 h-3 text-muted-foreground" />
@@ -2239,10 +2250,12 @@ const getStatusBadge = (status: string) => {
                 </TooltipContent>
               </Tooltip>
             </div>
-            <XCircle className="h-3 w-3 text-muted-foreground" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-[#FDEBEC]">
+              <XCircle className="h-4 w-4 text-[#C94A4A]" />
+            </div>
           </CardHeader>
           <CardContent className="p-0">
-            <div className="text-lg font-bold">{stats.rejected}</div>
+            <div className="text-3xl font-semibold text-[#1F1B24]">{stats.rejected}</div>
           </CardContent>
         </Card>
       </div>

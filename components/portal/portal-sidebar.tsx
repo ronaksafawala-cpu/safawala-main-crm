@@ -87,7 +87,20 @@ export function PortalSidebar({ config }: PortalSidebarProps) {
         <p style={{ margin: "0 0 8px 8px", fontSize: 9, fontWeight: 700, letterSpacing: 1.5, textTransform: "uppercase", color: "rgba(255,255,255,0.25)" }}>
           Navigation
         </p>
-        {config.tabs.map((tab) => {
+        {config.tabs.filter((tab) => {
+          if (!tab.permission) return true
+          // Navigation filtering is only a UX layer. Every API and server route
+          // performs the same permission check independently.
+          if (user?.is_super_admin || user?.role === "franchise_admin") return true
+          const permissions = user?.permissions || {}
+          if (permissions[tab.permission] === true) return true
+          // Existing legacy profiles may not have the new granular keys until
+          // the RBAC migration is applied; warehouse staff still get read-only
+          // navigation while the server remains authoritative.
+          if (user?.department === "warehouse" && (user?.role === "warehouse_staff" || user?.role === "staff")) return ["warehouse.view", "warehouse.update"].includes(tab.permission)
+          if (user?.department === "qc" && (user?.role === "qc_staff" || user?.role === "staff")) return ["qc.view", "qc.update"].includes(tab.permission)
+          return false
+        }).map((tab) => {
           const isActive =
             pathname === tab.href ||
             (tab.href !== "/" &&

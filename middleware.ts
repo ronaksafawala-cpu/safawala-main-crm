@@ -85,6 +85,28 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl)
   }
 
+  // Department boundary: a warehouse session may only enter its own portal.
+  // This is a fast redirect for UX; the server layout/API checks remain the
+  // authoritative enforcement against forged URLs or requests.
+  if (hasUserCookie) {
+    try {
+      const rawUser = request.cookies.get("safawala_user")?.value
+      const parsed = rawUser ? JSON.parse(rawUser) : null
+      const isWarehouse = parsed?.department === "warehouse" || parsed?.role === "warehouse_staff"
+      const isQc = parsed?.department === "qc" || parsed?.role === "qc_staff"
+      if (isWarehouse && !parsed?.is_super_admin) {
+        const allowed = pathname === "/portal/warehouse" || pathname.startsWith("/portal/warehouse/") || pathname === "/warehouse" || pathname.startsWith("/api/")
+        if (!allowed) return NextResponse.redirect(new URL("/portal/warehouse", request.url))
+      }
+      if (isQc && !parsed?.is_super_admin) {
+        const allowed = pathname === "/portal/qc" || pathname.startsWith("/portal/qc/") || pathname === "/qc" || pathname.startsWith("/api/")
+        if (!allowed) return NextResponse.redirect(new URL("/portal/qc", request.url))
+      }
+    } catch {
+      // Invalid identity is handled by the server auth guard.
+    }
+  }
+
   // Basic validation of legacy cookie if present
   if (hasLegacySession) {
     try {

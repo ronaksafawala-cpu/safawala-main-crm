@@ -34,3 +34,5 @@ next-env.d.ts
 
 # puppeteer profile
 .puppeteer-chrome-profile/
+# local package store
+.pnpm-store/

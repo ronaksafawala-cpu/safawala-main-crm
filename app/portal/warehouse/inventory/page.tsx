@@ -31,7 +31,7 @@ export default function WarehouseInventoryPage() {
   const [selected, setSelected] = useState<any | null>(null)
 
   useEffect(() => {
-    fetch("/api/inventory?limit=200")
+    fetch("/api/warehouse/inventory")
       .then(r => r.json())
       .then(d => setProducts(d.data ?? d ?? []))
       .catch(() => setProducts([]))
@@ -119,7 +119,7 @@ export default function WarehouseInventoryPage() {
         ) : (
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
             {filtered.map(p => (
-              <div key={p.id} onClick={() => router.push(`/inventory/edit/${p.id}`)}
+              <div key={p.id} onClick={() => setSelected(p)}
                 style={{ background: "white", borderRadius: 16, padding: "14px 12px", cursor: "pointer", boxShadow: "0 2px 8px rgba(0,0,0,0.06)", border: "1px solid rgba(14,165,233,0.08)" }}>
                 {/* Category icon */}
                 <div style={{ width: 40, height: 40, borderRadius: 12, background: `linear-gradient(135deg, ${COLOR}25, ${COLOR_DARK}15)`, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 20, marginBottom: 8 }}>
@@ -137,6 +137,15 @@ export default function WarehouseInventoryPage() {
         )}
       </div>
 
+      {selected && <InventoryEditDialog
+        product={selected}
+        onClose={() => setSelected(null)}
+        onSaved={(updated) => {
+          setProducts(items => items.map(item => item.id === updated.id ? { ...item, ...updated } : item))
+          setSelected(null)
+        }}
+      />}
+
       {/* FAB — Add Product */}
       <button onClick={() => router.push("/inventory/add")}
         style={{ position: "fixed", bottom: "calc(72px + env(safe-area-inset-bottom, 0px) + 12px)", right: 16, zIndex: 40, display: "flex", alignItems: "center", gap: 8, background: `linear-gradient(135deg, ${COLOR}, ${COLOR_DARK})`, border: "none", borderRadius: 18, padding: "14px 20px", color: "white", fontSize: 13, fontWeight: 800, cursor: "pointer", boxShadow: `0 8px 24px ${COLOR}55`, fontFamily: "inherit" }}>
@@ -146,4 +155,31 @@ export default function WarehouseInventoryPage() {
       <style>{`@keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.4; } }`}</style>
     </div>
   )
+}
+
+function InventoryEditDialog({ product, onClose, onSaved }: { product: any; onClose: () => void; onSaved: (product: any) => void }) {
+  const [stock, setStock] = useState(String(product.stock_available ?? product.quantity ?? 0))
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState("")
+  async function save() {
+    const value = Number(stock)
+    if (!Number.isInteger(value) || value < 0) { setError("Enter a valid non-negative quantity"); return }
+    setSaving(true); setError("")
+    try {
+      const response = await fetch("/api/warehouse/inventory", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ product_id: product.id, stock_available: value }) })
+      const payload = await response.json()
+      if (!response.ok) throw new Error(payload.error || "Unable to update inventory")
+      onSaved(payload.data || { ...product, stock_available: value })
+    } catch (e: any) { setError(e.message || "Unable to update inventory") } finally { setSaving(false) }
+  }
+  return <div style={{ position: "fixed", inset: 0, zIndex: 80, background: "rgba(15,23,42,.45)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+    <div role="dialog" aria-modal="true" style={{ width: "100%", maxWidth: 360, background: "white", borderRadius: 20, padding: 20, boxShadow: "0 20px 60px rgba(0,0,0,.25)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}><h2 style={{ margin: 0, fontSize: 17, color: "#172033" }}>Update stock</h2><button onClick={onClose} aria-label="Close" style={{ border: 0, background: "transparent", fontSize: 24, cursor: "pointer", color: "#64748b" }}>×</button></div>
+      <p style={{ margin: "0 0 14px", color: "#475569", fontWeight: 700 }}>{product.name}</p>
+      <label style={{ display: "block", fontSize: 12, color: "#475569", fontWeight: 700, marginBottom: 6 }}>Available quantity</label>
+      <input type="number" min={0} value={stock} onChange={e => setStock(e.target.value)} style={{ width: "100%", boxSizing: "border-box", border: "1px solid #cbd5e1", borderRadius: 10, padding: "11px 12px", fontSize: 16, outline: "none" }} />
+      {error && <p style={{ color: "#dc2626", fontSize: 12, margin: "8px 0 0" }}>{error}</p>}
+      <div style={{ display: "flex", gap: 10, marginTop: 18 }}><button onClick={onClose} style={{ flex: 1, border: "1px solid #cbd5e1", borderRadius: 10, padding: 11, background: "white", cursor: "pointer", fontWeight: 700 }}>Cancel</button><button onClick={save} disabled={saving} style={{ flex: 1, border: 0, borderRadius: 10, padding: 11, background: COLOR, color: "white", cursor: saving ? "wait" : "pointer", fontWeight: 800 }}>{saving ? "Saving…" : "Save"}</button></div>
+    </div>
+  </div>
 }

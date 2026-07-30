@@ -76,7 +76,9 @@ export async function GET(request: NextRequest) {
     if (orderIds.length > 0) {
       travelQ = travelQ.in("booking_id", orderIds)
     } else if (franchiseId) {
-      travelQ = travelQ.eq("franchise_id", franchiseId)
+      travelQ = travelQ.eq("franchise_id", franchiseId).not("booking_id", "is", null)
+    } else {
+      travelQ = travelQ.not("booking_id", "is", null)
     }
 
     if (status) travelQ = travelQ.eq("status", status)
@@ -84,11 +86,29 @@ export async function GET(request: NextRequest) {
 
     const { data: travels } = await travelQ
 
+    let standaloneQ = supabaseServer
+      .from("travel_bookings")
+      .select(`*, stylist:users!stylist_id(id, name, phone, department)`)
+      .is("booking_id", null)
+      .order("event_date", { ascending: true })
+      .limit(limit)
+    if (franchiseId && auth.user!.role !== "super_admin") standaloneQ = standaloneQ.eq("franchise_id", franchiseId)
+    if (month) standaloneQ = standaloneQ.gte("event_date", `${month}-01`).lte("event_date", `${month}-31`)
+    else {
+      const windowStart = new Date()
+      windowStart.setDate(windowStart.getDate() - 30)
+      standaloneQ = standaloneQ.gte("event_date", windowStart.toISOString().slice(0, 10))
+    }
+    if (status) standaloneQ = standaloneQ.eq("status", status)
+    if (stylistId) standaloneQ = standaloneQ.eq("stylist_id", stylistId)
+    const { data: standalone } = await standaloneQ
+
     // 3. Merge: one row per order with travel data attached
     const merged = (orders ?? []).map((order: any) => {
       const travel = (travels ?? []).find((t: any) => t.booking_id === order.id) ?? null
       return {
         id: order.id,
+        booking_id: order.id,
         order_number: order.order_number,
         event_date: order.event_date,
         event_time: order.event_time,
@@ -101,7 +121,21 @@ export async function GET(request: NextRequest) {
       }
     })
 
-    return NextResponse.json({ success: true, data: merged })
+    const standaloneRows = (standalone ?? []).map((travel: any) => ({
+      id: travel.id,
+      booking_id: null,
+      order_number: travel.order_number,
+      event_date: travel.event_date,
+      event_time: null,
+      event_type: null,
+      venue: travel.venue,
+      customer_name: travel.customer_name ?? travel.event_name ?? "—",
+      customer_phone: null,
+      assigned_stylist: travel.stylist ?? null,
+      travel,
+    }))
+
+    return NextResponse.json({ success: true, data: [...merged, ...standaloneRows] })
   } catch (err: any) {
     console.error("travel-bookings GET error:", err)
     return NextResponse.json({ success: true, data: [] })
@@ -117,7 +151,11 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const {
       booking_id, order_number, event_date, event_name, venue,
-      customer_name, stylist_id, status, notes, documents,
+      customer_name, stylist_id, status, notes, documents, travel_mode,
+      ticket_ref, pnr, departure_from, arrival_at, departure_date, departure_time,
+      return_date, return_time, hotel_name, hotel_address, hotel_checkin,
+      hotel_checkout, hotel_ref, hotel_contact, ticket_cost, hotel_cost,
+      other_cost, advance_given,
     } = body
 
     const franchiseId = auth.user!.franchise_id
@@ -137,7 +175,14 @@ export async function POST(request: NextRequest) {
         // Update instead
         const { data, error } = await supabaseServer
           .from("travel_bookings")
-          .update({ stylist_id, status, notes, documents })
+          .update({
+            stylist_id, status, notes, documents, travel_mode, ticket_ref, pnr,
+            departure_from, arrival_at, departure_date, departure_time, return_date,
+            return_time, hotel_name, hotel_address, hotel_checkin, hotel_checkout,
+            hotel_ref, hotel_contact, ticket_cost: ticket_cost ?? 0,
+            hotel_cost: hotel_cost ?? 0, other_cost: other_cost ?? 0,
+            advance_given: advance_given ?? 0,
+          })
           .eq("id", existing.id)
           .select()
           .single()
@@ -151,8 +196,12 @@ export async function POST(request: NextRequest) {
       .from("travel_bookings")
       .insert({
         booking_id, order_number, event_date, event_name, venue,
-        customer_name, stylist_id, franchise_id: franchiseId,
-        notes, documents: documents ?? [], status: status || "pending",
+        customer_name, stylist_id, franchise_id: franchiseId, travel_mode,
+        ticket_ref, pnr, departure_from, arrival_at, departure_date, departure_time,
+        return_date, return_time, hotel_name, hotel_address, hotel_checkin,
+        hotel_checkout, hotel_ref, hotel_contact, ticket_cost: ticket_cost ?? 0,
+        hotel_cost: hotel_cost ?? 0, other_cost: other_cost ?? 0,
+        advance_given: advance_given ?? 0, notes, documents: documents ?? [], status: status || "pending",
       })
       .select()
       .single()
