@@ -29,10 +29,14 @@ export default async function PortalLayout({
   if (!auth.authorized || !auth.user) redirect(`/auth/login?redirect=/portal/${dept}`)
 
   const user = auth.user
-  const isWarehouseByDepartment = dept === "warehouse" && user.department === "warehouse" && user.role === "staff"
-  const isQcByDepartment = dept === "qc" && user.department === "qc" && (user.role === "staff" || user.role === "qc_staff")
-  const isDeliveryByDepartment = dept === "delivery" && user.department === "delivery" && (user.role === "staff" || user.role === "delivery_staff")
-  const roleAllowed = user.is_super_admin || config.allowedRoles.includes(user.role) || isWarehouseByDepartment || isQcByDepartment || isDeliveryByDepartment
+  // Every department staff account shares the generic "staff" role, distinguished
+  // only by `department`. Checking `allowedRoles.includes("staff")` alone would let
+  // ANY staff member into ANY portal that lists "staff" — the department must match too.
+  const isGenericStaff = user.role === "staff"
+  const departmentMatchesPortal = user.department ? (DEPT_ALIASES[user.department] || user.department) === dept : false
+  const roleAllowed =
+    user.is_super_admin ||
+    (isGenericStaff ? departmentMatchesPortal : config.allowedRoles.includes(user.role))
   if (!roleAllowed) {
     if (user.role === "franchise_admin") {
       redirect("/dashboard")

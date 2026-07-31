@@ -85,27 +85,18 @@ export function middleware(request: NextRequest) {
     return NextResponse.redirect(loginUrl)
   }
 
-  // Department boundary: a warehouse session may only enter its own portal.
+  // Department boundary: a department-staff session may only enter its own portal.
   // This is a fast redirect for UX; the server layout/API checks remain the
   // authoritative enforcement against forged URLs or requests.
   if (hasUserCookie) {
     try {
       const rawUser = request.cookies.get("safawala_user")?.value
       const parsed = rawUser ? JSON.parse(rawUser) : null
-      const isWarehouse = parsed?.department === "warehouse" || parsed?.role === "warehouse_staff"
-      const isQc = parsed?.department === "qc" || parsed?.role === "qc_staff"
-      const isDelivery = parsed?.department === "delivery" || parsed?.role === "delivery_staff"
-      if (isWarehouse && !parsed?.is_super_admin) {
-        const allowed = pathname === "/portal/warehouse" || pathname.startsWith("/portal/warehouse/") || pathname === "/warehouse" || pathname.startsWith("/api/")
-        if (!allowed) return NextResponse.redirect(new URL("/portal/warehouse", request.url))
-      }
-      if (isQc && !parsed?.is_super_admin) {
-        const allowed = pathname === "/portal/qc" || pathname.startsWith("/portal/qc/") || pathname === "/qc" || pathname.startsWith("/api/")
-        if (!allowed) return NextResponse.redirect(new URL("/portal/qc", request.url))
-      }
-      if (isDelivery && !parsed?.is_super_admin) {
-        const allowed = pathname === "/portal/delivery" || pathname.startsWith("/portal/delivery/") || pathname === "/delivery" || pathname.startsWith("/api/")
-        if (!allowed) return NextResponse.redirect(new URL("/portal/delivery", request.url))
+      const dept: string | undefined = parsed?.department
+      const isDeptScopedRole = parsed?.role === "staff" || (typeof parsed?.role === "string" && parsed.role.endsWith("_staff"))
+      if (dept && isDeptScopedRole && !parsed?.is_super_admin) {
+        const allowed = pathname === `/portal/${dept}` || pathname.startsWith(`/portal/${dept}/`) || pathname === `/${dept}` || pathname.startsWith("/api/")
+        if (!allowed) return NextResponse.redirect(new URL(`/portal/${dept}`, request.url))
       }
     } catch {
       // Invalid identity is handled by the server auth guard.
