@@ -172,13 +172,17 @@ export default function BookingDetailPage() {
 
   async function downloadPDF() {
     try {
-      const res = await fetch(`/api/quotes/download-pdf?id=${id}`)
-      if (!res.ok) throw new Error()
-      const blob = await res.blob()
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement("a"); a.href=url; a.download=`${booking?.order_number||id}.pdf`; a.click()
-      URL.revokeObjectURL(url); toast.success("PDF downloaded")
-    } catch { toast.error("PDF not available") }
+      const orderType = kind === "package" ? "package_booking" : "product_order"
+      const res = await fetch("/api/generate-invoice-pdf", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId: id, orderType }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data.pdfUrl) throw new Error(data.error || "Failed to generate PDF")
+      const a = document.createElement("a"); a.href = data.pdfUrl; a.target = "_blank"; a.rel = "noreferrer"; a.download = `${booking?.order_number || id}.pdf`; a.click()
+      toast.success("PDF ready")
+    } catch (e: any) { toast.error(e.message || "PDF not available") }
   }
 
   if (loading) return (
