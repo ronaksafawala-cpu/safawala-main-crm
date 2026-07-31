@@ -58,6 +58,10 @@ export function middleware(request: NextRequest) {
           const parsed = JSON.parse(rawUser)
           if (parsed?.role === "super_admin") {
             redirectUrl = "/admin"
+          } else if (["franchise_admin", "franchise_owner", "manager"].includes(parsed?.role || "")) {
+            // These roles use the main desktop dashboard, not a mobile /portal/* page —
+            // "manager" and "franchise" departments have no corresponding portal route.
+            redirectUrl = "/dashboard"
           } else if (parsed?.department) {
             redirectUrl = `/portal/${parsed.department}`
           }
