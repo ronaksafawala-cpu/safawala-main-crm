@@ -11,6 +11,9 @@ const ALLOW_LEGACY_DEPT_LOGIN_BYPASS =
   process.env.NODE_ENV !== "production" &&
   process.env.ALLOW_LEGACY_DEPT_LOGIN_BYPASS === "true"
 
+const MAX_FAILED_LOGIN_ATTEMPTS = 5
+const LOCKOUT_MINUTES = 15
+
 /**
  * Get default permissions based on role
  */
@@ -365,6 +368,54 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid email format" }, { status: 400 })
     }
 
+    // Account lockout: track failed attempts per-user and reject while locked.
+    // Best-effort — never let this block login when the service key isn't configured.
+    const lockoutClient = process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY
+      ? createServiceClient(process.env.NEXT_PUBLIC_SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
+      : null
+
+    let lockoutUserRow: { id: string; failed_login_attempts: number | null; locked_until: string | null } | null = null
+    if (lockoutClient) {
+      const { data } = await lockoutClient
+        .from("users")
+        .select("id, failed_login_attempts, locked_until")
+        .ilike("email", email)
+        .maybeSingle()
+      lockoutUserRow = data
+      if (lockoutUserRow?.locked_until && new Date(lockoutUserRow.locked_until).getTime() > Date.now()) {
+        const minutesLeft = Math.ceil((new Date(lockoutUserRow.locked_until).getTime() - Date.now()) / 60000)
+        return NextResponse.json(
+          { error: `Too many failed attempts. Try again in ${minutesLeft} minute(s).` },
+          { status: 423 },
+        )
+      }
+    }
+
+    const requestIp = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || request.headers.get("x-real-ip") || null
+    const requestUserAgent = request.headers.get("user-agent")
+
+    async function registerFailedLoginAttempt() {
+      if (!lockoutClient || !lockoutUserRow) return
+      const nextAttempts = (lockoutUserRow.failed_login_attempts || 0) + 1
+      const willLock = nextAttempts >= MAX_FAILED_LOGIN_ATTEMPTS
+      const updates: Record<string, unknown> = { failed_login_attempts: nextAttempts }
+      if (willLock) updates.locked_until = new Date(Date.now() + LOCKOUT_MINUTES * 60 * 1000).toISOString()
+      try {
+        await lockoutClient.from("users").update(updates).eq("id", lockoutUserRow.id)
+        await lockoutClient.from("audit_logs").insert({
+          user_id: lockoutUserRow.id,
+          user_email: email,
+          module: "auth",
+          action: willLock ? "account_locked" : "login_failed",
+          ip_address: requestIp,
+          user_agent: requestUserAgent,
+          metadata: { failed_attempts: nextAttempts },
+        })
+      } catch (lockoutErr) {
+        console.warn("[Auth] Could not record failed login attempt:", lockoutErr)
+      }
+    }
+
     // Authenticate with Supabase Auth (secure password check by Supabase)
     let { data: signInData, error: signInError } = await authClient.auth.signInWithPassword({
       email,
@@ -418,6 +469,7 @@ export async function POST(request: NextRequest) {
       const passwordOk = await bcrypt.compare(password, legacyUser.password_hash)
       if (!passwordOk) {
         console.log("[v0] Password mismatch for user:", email)
+        await registerFailedLoginAttempt()
         return NextResponse.json({ error: "Invalid email or password" }, { status: 401 })
       }
       
@@ -474,6 +526,15 @@ export async function POST(request: NextRequest) {
       // Also sign out to clear any partial session
       await authClient.auth.signOut()
       return NextResponse.json({ error: "Account is inactive or missing profile" }, { status: 401 })
+    }
+
+    // Successful password check — clear any accumulated failed-attempt count/lock.
+    if (lockoutClient && (userProfile.failed_login_attempts || userProfile.locked_until)) {
+      try {
+        await lockoutClient.from("users").update({ failed_login_attempts: 0, locked_until: null }).eq("id", userProfile.id)
+      } catch (resetErr) {
+        console.warn("[Auth] Could not reset failed login attempts:", resetErr)
+      }
     }
 
     // Ensure permissions - if null or empty, use role defaults
