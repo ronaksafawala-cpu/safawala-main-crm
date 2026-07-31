@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { useRouter, useParams, useSearchParams } from "next/navigation"
+import { toast } from "sonner"
 
 const COLOR = "#4A1F5E"
 const COLOR_DARK = "#351044"
@@ -140,11 +141,10 @@ export default function BookingDetailPage() {
   const [items, setItems] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
-  const [toast, setToast] = useState("")
   const [showPayment, setShowPayment] = useState(false)
   const [showStatus, setShowStatus] = useState(false)
 
-  function showToast(msg: string) { setToast(msg); setTimeout(()=>setToast(""), 3000) }
+  function showToast(msg: string) { toast.success(msg) }
 
   const load = useCallback(async () => {
     if (!id) return
@@ -177,8 +177,8 @@ export default function BookingDetailPage() {
       const blob = await res.blob()
       const url = URL.createObjectURL(blob)
       const a = document.createElement("a"); a.href=url; a.download=`${booking?.order_number||id}.pdf`; a.click()
-      URL.revokeObjectURL(url); showToast("PDF downloaded ✓")
-    } catch { showToast("PDF not available") }
+      URL.revokeObjectURL(url); toast.success("PDF downloaded")
+    } catch { toast.error("PDF not available") }
   }
 
   if (loading) return (
@@ -208,8 +208,6 @@ export default function BookingDetailPage() {
 
   return (
     <div style={{ minHeight:"100vh", background:"linear-gradient(160deg,#F1EAF5 0%,#F1EAF5 100%)", fontFamily:"var(--font-inter), Inter, sans-serif", paddingBottom:100 }}>
-      {toast && <div style={{ position:"fixed", top:60, left:"50%", transform:"translateX(-50%)", background:COLOR_DARK, color:"white", borderRadius:12, padding:"8px 20px", fontSize:12, fontWeight:700, zIndex:200, whiteSpace:"nowrap" }}>{toast}</div>}
-
       {/* Hero */}
       <div style={{ background:`linear-gradient(135deg,${COLOR_DARK},${COLOR})`, padding:"20px 16px 24px", position:"relative", overflow:"hidden" }}>
         <div style={{ position:"absolute", top:-30, right:-30, width:150, height:150, borderRadius:"50%", background:"rgba(255,255,255,0.07)" }} />

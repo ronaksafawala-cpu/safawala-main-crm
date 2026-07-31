@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react"
 import { useRouter, useParams } from "next/navigation"
+import { toast } from "sonner"
 
 const COLOR = "#4A1F5E"
 const COLOR_DARK = "#351044"
@@ -35,9 +36,6 @@ export default function CustomerDetailPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState("")
   const [tab, setTab] = useState<Tab>("overview")
-  const [toast, setToast] = useState("")
-
-  function showToast(msg: string) { setToast(msg); setTimeout(()=>setToast(""),2500) }
 
   const loadAll = useCallback(async () => {
     if (!id) return
@@ -73,7 +71,7 @@ export default function CustomerDetailPage() {
   useEffect(() => { loadAll() }, [loadAll])
 
   async function copyPhone() {
-    try { await navigator.clipboard.writeText(customer.phone); showToast("Phone copied ✓") } catch {}
+    try { await navigator.clipboard.writeText(customer.phone); toast.success("Phone copied") } catch { toast.error("Could not copy phone") }
   }
 
   if (loading) return (
@@ -99,8 +97,6 @@ export default function CustomerDetailPage() {
 
   return (
     <div style={{ minHeight:"100vh", background:"linear-gradient(160deg,#F1EAF5 0%,#F1EAF5 100%)", fontFamily:"var(--font-inter), Inter, sans-serif", paddingBottom:100 }}>
-      {toast && <div style={{ position:"fixed", top:60, left:"50%", transform:"translateX(-50%)", background:COLOR, color:"white", borderRadius:12, padding:"8px 20px", fontSize:12, fontWeight:700, zIndex:200 }}>{toast}</div>}
-
       {/* Hero */}
       <div style={{ background:`linear-gradient(135deg,${COLOR_DARK},${COLOR})`, padding:"20px 16px 24px", position:"relative", overflow:"hidden" }}>
         <div style={{ position:"absolute", top:-30, right:-30, width:150, height:150, borderRadius:"50%", background:"rgba(255,255,255,0.07)" }} />

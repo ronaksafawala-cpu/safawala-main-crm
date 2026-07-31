@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, Suspense } from "react"
 import { useRouter, useSearchParams } from "next/navigation"
 import { validatePhoneWithCountry } from "@/lib/form-validation"
+import { toast } from "sonner"
 
 const COLOR = "#4A1F5E"
 const COLOR_DARK = "#351044"
@@ -150,7 +151,7 @@ function NewBookingInner() {
     if (!newCust.name.trim()) return
     const phoneValidation = validatePhoneWithCountry(newCust.phone)
     if (!phoneValidation.isValid) {
-      alert(phoneValidation.error || "Please enter a valid phone number")
+      toast.error(phoneValidation.error || "Please enter a valid phone number")
       return
     }
     setSavingCust(true)
@@ -165,7 +166,7 @@ function NewBookingInner() {
       setSelectedCustomer(c)
       setShowNewCust(false)
       setNewCust({name:"",phone:"+91",email:"",city:""})
-    } catch(e:any) { alert(e.message) } finally { setSavingCust(false) }
+    } catch(e:any) { toast.error(e.message) } finally { setSavingCust(false) }
   }
 
   // Save booking

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react"
 import { useRouter } from "next/navigation"
+import { toast } from "sonner"
 
 const COLOR = "#4A1F5E"
 const COLOR_DARK = "#351044"
@@ -35,9 +36,6 @@ function StatusBadge({ status }: { status: string }) {
 function QuoteDetailSheet({ quote, onClose, onUpdated }: { quote: any; onClose: () => void; onUpdated: () => void }) {
   const router = useRouter()
   const [updating, setUpdating] = useState(false)
-  const [toast, setToast] = useState("")
-
-  function showToast(msg: string) { setToast(msg); setTimeout(() => setToast(""), 2500) }
 
   async function updateStatus(newStatus: string) {
     setUpdating(true)
@@ -47,7 +45,10 @@ function QuoteDetailSheet({ quote, onClose, onUpdated }: { quote: any; onClose: 
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus }),
       })
-      if (res.ok) { showToast(`Status → ${newStatus}`); onUpdated() }
+      if (!res.ok) { const d = await res.json().catch(() => ({})); throw new Error(d.error || "Failed to update status") }
+      toast.success(`Status → ${newStatus}`); onUpdated()
+    } catch (e: any) {
+      toast.error(e.message || "Failed to update status")
     } finally { setUpdating(false) }
   }
 
@@ -60,15 +61,14 @@ function QuoteDetailSheet({ quote, onClose, onUpdated }: { quote: any; onClose: 
       const a = document.createElement("a")
       a.href = url; a.download = `${quote.quote_number || "quote"}.pdf`
       a.click(); URL.revokeObjectURL(url)
-      showToast("PDF downloaded ✓")
-    } catch { showToast("PDF download failed") }
+      toast.success("PDF downloaded")
+    } catch { toast.error("PDF download failed") }
   }
 
   const initials = (quote.customer_name || "?").split(" ").map((w: string) => w[0]).join("").slice(0, 2).toUpperCase()
 
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 100, display: "flex", flexDirection: "column" }}>
-      {toast && <div style={{ position: "fixed", top: 60, left: "50%", transform: "translateX(-50%)", background: COLOR, color: "white", borderRadius: 12, padding: "8px 20px", fontSize: 12, fontWeight: 700, zIndex: 200 }}>{toast}</div>}
       <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)" }} onClick={onClose} />
       <div style={{ position: "relative", marginTop: "auto", background: "white", borderRadius: "24px 24px 0 0", maxHeight: "90vh", overflowY: "auto", zIndex: 1, paddingBottom: "env(safe-area-inset-bottom, 20px)" }}>
         {/* Handle */}

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react"
 import { useRouter } from "next/navigation"
+import { toast } from "sonner"
 
 const COLOR = "#4A1F5E"
 const COLOR_DARK = "#351044"
@@ -190,10 +191,6 @@ function LeadDetailSheet({ lead, onClose, onUpdated }: { lead: Lead; onClose: ()
   const [updating, setUpdating] = useState(false)
   const [note, setNote] = useState(lead.notes || "")
   const [savingNote, setSavingNote] = useState(false)
-  const [toast, setToast] = useState("")
-  const [actionError, setActionError] = useState("")
-
-  function showToast(msg: string) { setToast(msg); setTimeout(() => setToast(""), 2500) }
 
   async function updateStatus(newStatus: string) {
     setUpdating(true)
@@ -201,9 +198,9 @@ function LeadDetailSheet({ lead, onClose, onUpdated }: { lead: Lead; onClose: ()
       const res = await fetch("/api/leads", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: lead.id, status: newStatus }) })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error || "Failed to update status")
-      showToast(`Status → ${newStatus}`); onUpdated()
+      toast.success(`Status → ${newStatus}`); onUpdated()
     } catch (e: any) {
-      setActionError(e.message || "Failed to update status")
+      toast.error(e.message || "Failed to update status")
     } finally { setUpdating(false) }
   }
 
@@ -213,14 +210,13 @@ function LeadDetailSheet({ lead, onClose, onUpdated }: { lead: Lead; onClose: ()
       const res = await fetch("/api/leads", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id: lead.id, notes: note }) })
       const data = await res.json().catch(() => ({}))
       if (!res.ok) throw new Error(data.error || "Failed to save note")
-      showToast("Note saved ✓"); onUpdated()
+      toast.success("Note saved"); onUpdated()
     } catch (e: any) {
-      setActionError(e.message || "Failed to save note")
+      toast.error(e.message || "Failed to save note")
     } finally { setSavingNote(false) }
   }
 
   async function createBooking() {
-    setActionError("")
     try {
       const res = await fetch(`/api/customers?search=${encodeURIComponent(lead.phone)}`)
       const data = await res.json()
@@ -228,7 +224,7 @@ function LeadDetailSheet({ lead, onClose, onUpdated }: { lead: Lead; onClose: ()
       if (!res.ok || !customer?.id) throw new Error("Converted customer record was not found")
       router.push(`/portal/booking/bookings/new?customer_id=${customer.id}`)
     } catch (e: any) {
-      setActionError(e.message || "Unable to create booking")
+      toast.error(e.message || "Unable to create booking")
     }
   }
 
@@ -236,8 +232,6 @@ function LeadDetailSheet({ lead, onClose, onUpdated }: { lead: Lead; onClose: ()
 
   return (
     <div style={{ position: "fixed", inset: 0, zIndex: 100, display: "flex", flexDirection: "column" }}>
-      {toast && <div style={{ position: "fixed", top: 60, left: "50%", transform: "translateX(-50%)", background: COLOR, color: "white", borderRadius: 12, padding: "8px 20px", fontSize: 12, fontWeight: 700, zIndex: 200, boxShadow: "0 4px 16px rgba(0,0,0,0.2)" }}>{toast}</div>}
-
       <div style={{ position: "absolute", inset: 0, background: "rgba(0,0,0,0.4)", backdropFilter: "blur(4px)" }} onClick={onClose} />
       <div style={{ position: "relative", marginTop: "auto", background: "white", borderRadius: "24px 24px 0 0", maxHeight: "90vh", overflowY: "auto", zIndex: 1, paddingBottom: "env(safe-area-inset-bottom, 20px)" }}>
 
@@ -268,7 +262,6 @@ function LeadDetailSheet({ lead, onClose, onUpdated }: { lead: Lead; onClose: ()
         </div>
 
         <div style={{ padding: "16px 20px", display: "flex", flexDirection: "column", gap: 16 }}>
-          {actionError && <div style={{ background: "#fee2e2", color: "#b91c1c", borderRadius: 12, padding: "10px 14px", fontSize: 12, fontWeight: 600 }}>{actionError}</div>}
           {/* Quick Actions */}
           <div style={{ display: "flex", gap: 10 }}>
             <a href={`tel:${lead.phone}`} style={{ flex: 1, height: 44, borderRadius: 12, background: "#eff6ff", border: "none", color: "#1d4ed8", fontSize: 13, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, textDecoration: "none" }}>
