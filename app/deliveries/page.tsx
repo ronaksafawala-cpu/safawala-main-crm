@@ -184,6 +184,15 @@ export default function DeliveriesPage() {
     special_instructions: "",
   })
 
+  // The bookings API aggregates multiple source tables and uses plural source
+  // names. Deliveries use the singular values consumed by the fulfilment APIs.
+  const normalizeBookingSource = (source?: string | null) => {
+    if (source === "package_bookings") return "package_booking"
+    if (source === "product_orders") return "product_order"
+    if (source === "direct_sales" || source === "direct_sales_orders") return "direct_sale"
+    return source || ""
+  }
+
   const [rescheduleForm, setRescheduleForm] = useState<{
     date: string
     time: string
@@ -1144,7 +1153,7 @@ export default function DeliveriesPage() {
                           setScheduleForm((prev) => ({
                             ...prev,
                             booking_id: id,
-                            booking_source: source,
+                            booking_source: normalizeBookingSource(source),
                             // Auto-fill customer if not already selected
                             customer_id: prev.customer_id || selectedBooking.customer_id || "",
                             // Auto-fill delivery date and time from booking (with proper formatting)
@@ -1154,7 +1163,7 @@ export default function DeliveriesPage() {
                             delivery_address: selectedBooking.delivery_address || prev.delivery_address || "",
                           }))
                         } else {
-                          setScheduleForm({ ...scheduleForm, booking_id: id, booking_source: source })
+                          setScheduleForm({ ...scheduleForm, booking_id: id, booking_source: normalizeBookingSource(source) })
                         }
                       }}
                     >
@@ -1460,8 +1469,10 @@ export default function DeliveriesPage() {
                         return
                       }
 
-                      // Call API to create delivery using simpler endpoint
-                      const response = await fetch("/api/deliveries/create", {
+                      // Use the canonical deliveries endpoint. It applies the
+                      // same auth, franchise isolation, UUID sanitisation and
+                      // junction-table handling as all other delivery actions.
+                      const response = await fetch("/api/deliveries", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         credentials: "include",

@@ -61,9 +61,10 @@ export default function TravelsPage() {
       setLoading(true)
       const res = await fetch("/api/travel-bookings")
       const json = await res.json()
+      if (!res.ok) throw new Error(json.error || "Failed to load bookings")
       setTrips(json.data ?? [])
-    } catch {
-      toast.error("Failed to load bookings")
+    } catch (error: any) {
+      toast.error(error.message || "Failed to load bookings")
     } finally {
       setLoading(false)
     }

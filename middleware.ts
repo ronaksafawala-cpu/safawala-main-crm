@@ -94,6 +94,7 @@ export function middleware(request: NextRequest) {
       const parsed = rawUser ? JSON.parse(rawUser) : null
       const isWarehouse = parsed?.department === "warehouse" || parsed?.role === "warehouse_staff"
       const isQc = parsed?.department === "qc" || parsed?.role === "qc_staff"
+      const isDelivery = parsed?.department === "delivery" || parsed?.role === "delivery_staff"
       if (isWarehouse && !parsed?.is_super_admin) {
         const allowed = pathname === "/portal/warehouse" || pathname.startsWith("/portal/warehouse/") || pathname === "/warehouse" || pathname.startsWith("/api/")
         if (!allowed) return NextResponse.redirect(new URL("/portal/warehouse", request.url))
@@ -101,6 +102,10 @@ export function middleware(request: NextRequest) {
       if (isQc && !parsed?.is_super_admin) {
         const allowed = pathname === "/portal/qc" || pathname.startsWith("/portal/qc/") || pathname === "/qc" || pathname.startsWith("/api/")
         if (!allowed) return NextResponse.redirect(new URL("/portal/qc", request.url))
+      }
+      if (isDelivery && !parsed?.is_super_admin) {
+        const allowed = pathname === "/portal/delivery" || pathname.startsWith("/portal/delivery/") || pathname === "/delivery" || pathname.startsWith("/api/")
+        if (!allowed) return NextResponse.redirect(new URL("/portal/delivery", request.url))
       }
     } catch {
       // Invalid identity is handled by the server auth guard.

@@ -31,7 +31,8 @@ export default async function PortalLayout({
   const user = auth.user
   const isWarehouseByDepartment = dept === "warehouse" && user.department === "warehouse" && user.role === "staff"
   const isQcByDepartment = dept === "qc" && user.department === "qc" && (user.role === "staff" || user.role === "qc_staff")
-  const roleAllowed = user.is_super_admin || config.allowedRoles.includes(user.role) || isWarehouseByDepartment || isQcByDepartment
+  const isDeliveryByDepartment = dept === "delivery" && user.department === "delivery" && (user.role === "staff" || user.role === "delivery_staff")
+  const roleAllowed = user.is_super_admin || config.allowedRoles.includes(user.role) || isWarehouseByDepartment || isQcByDepartment || isDeliveryByDepartment
   if (!roleAllowed) {
     if (user.role === "franchise_admin") {
       redirect("/dashboard")

@@ -64,6 +64,71 @@ export interface AuthOptions {
   allowSuperAdminOverride?: boolean; // Super admin bypasses permission checks
 }
 
+/** Resolve permissions from the relational RBAC model. A null result means
+ * the installation/user has not been migrated yet, so callers may safely use
+ * the legacy JSON permissions as a compatibility fallback. */
+async function getRelationalPermission(userId: string, code: string): Promise<boolean | null> {
+  try {
+    const { data: assignments, error: assignmentError } = await supabaseServer
+      .from('user_roles')
+      .select('role_id')
+      .eq('user_id', userId)
+
+    if (assignmentError || !assignments) return null
+    if (assignments.length === 0) return null
+
+    const roleIds = assignments.map((row: any) => row.role_id).filter(Boolean)
+    const { data: links, error: linkError } = await supabaseServer
+      .from('role_permissions')
+      .select('permission_id')
+      .in('role_id', roleIds)
+
+    if (linkError || !links) return null
+    const permissionIds = links.map((row: any) => row.permission_id).filter(Boolean)
+    if (permissionIds.length === 0) return false
+
+    const { data: permissions, error: permissionError } = await supabaseServer
+      .from('permissions')
+      .select('code')
+      .in('id', permissionIds)
+
+    if (permissionError || !permissions) return null
+    return permissions.some((permission: any) => permission.code === code)
+  } catch {
+    // During a staged rollout the RBAC tables may not exist yet.
+    return null
+  }
+}
+
+async function withRelationalPermissions(profile: any, userId: string): Promise<UserPermissions> {
+  const legacy = profile.permissions as UserPermissions
+  try {
+    const { data: assignments, error } = await supabaseServer
+      .from('user_roles')
+      .select('role_id')
+      .eq('user_id', userId)
+    if (error || !assignments?.length) return legacy
+    const roleIds = assignments.map((row: any) => row.role_id).filter(Boolean)
+    const { data: links, error: linkError } = await supabaseServer
+      .from('role_permissions')
+      .select('permission_id')
+      .in('role_id', roleIds)
+    if (linkError || !links?.length) return legacy
+    const ids = links.map((row: any) => row.permission_id).filter(Boolean)
+    const { data: permissions, error: permissionError } = await supabaseServer
+      .from('permissions')
+      .select('code')
+      .in('id', ids)
+    if (permissionError || !permissions) return legacy
+    return permissions.reduce((result: UserPermissions, permission: any) => {
+      result[permission.code as keyof UserPermissions] = true
+      return result
+    }, { ...legacy })
+  } catch {
+    return legacy
+  }
+}
+
 interface CookieIdentity {
   id: string;
   email: string;
@@ -145,7 +210,10 @@ async function getUserFromTrustedCookie(cookieValue?: string): Promise<Authentic
     franchise_id: appUser.franchise_id,
     franchise_name: franchise?.name,
     franchise_code: franchise?.code,
-    permissions: ensurePermissions(appUser.permissions, appUser.role as AppRole),
+    permissions: await withRelationalPermissions(
+      { ...appUser, permissions: ensurePermissions(appUser.permissions, appUser.role as AppRole) },
+      appUser.id,
+    ),
     is_super_admin: appUser.role === 'super_admin',
   };
 }
@@ -230,7 +298,10 @@ export async function authenticateRequest(
         franchise_id: appUser.franchise_id,
         franchise_name: franchise?.name,
         franchise_code: franchise?.code,
-        permissions: ensurePermissions(appUser.permissions, appUser.role as AppRole),
+        permissions: await withRelationalPermissions(
+          { ...appUser, permissions: ensurePermissions(appUser.permissions, appUser.role as AppRole) },
+          appUser.id,
+        ),
         is_super_admin: appUser.role === 'super_admin',
       };
     }
@@ -255,7 +326,12 @@ export async function authenticateRequest(
 
     // 4. Check module permission if required
     if (requirePermission) {
-      const hasPermission = user.permissions[requirePermission];
+      const relationalPermission = await getRelationalPermission(user.id, requirePermission);
+      // Once a user has a relational role assignment, it is the source of truth.
+      // Legacy JSON permissions are only used for users not yet migrated.
+      const hasPermission = relationalPermission === null
+        ? user.permissions[requirePermission]
+        : relationalPermission;
       const isSuperAdmin = user.is_super_admin && allowSuperAdminOverride;
 
       if (!hasPermission && !isSuperAdmin) {
@@ -353,6 +429,17 @@ function getDefaultPermissions(role: AppRole): UserPermissions {
         "qc.view": true,
         "qc.update": true,
       };
+    case 'delivery_staff':
+      return {
+        dashboard: false, bookings: false, customers: false, inventory: false,
+        packages: false, vendors: false, quotes: false, invoices: false,
+        laundry: false, expenses: false, deliveries: true, productArchive: false,
+        payroll: false, attendance: false, reports: false, financials: false,
+        franchises: false, staff: false, integrations: false, settings: false,
+        invoice_payment_access: false,
+        "delivery.view": true,
+        "delivery.update": true,
+      };
     case 'super_admin':
       return {
         dashboard: true,
@@ -378,6 +465,8 @@ function getDefaultPermissions(role: AppRole): UserPermissions {
         invoice_payment_access: true,
         "qc.view": true,
         "qc.update": true,
+        "delivery.view": true,
+        "delivery.update": true,
       };
     
     case 'franchise_admin':
@@ -405,6 +494,8 @@ function getDefaultPermissions(role: AppRole): UserPermissions {
         invoice_payment_access: true,
         "qc.view": true,
         "qc.update": true,
+        "delivery.view": true,
+        "delivery.update": true,
       };
     
     case 'staff':
@@ -499,13 +590,14 @@ export function canAccessFranchise(user: AuthenticatedUser, targetFranchiseId?: 
  */
 export async function requireAuth(
   request: NextRequest,
-  minRole: AppRole = 'readonly'
+  minRole: AppRole = 'readonly',
+  requirePermission?: keyof UserPermissions,
 ): Promise<{
   success: boolean;
   authContext?: { user: AuthenticatedUser; isAuthenticated: boolean };
   response?: any;
 }> {
-  const result = await authenticateRequest(request, { minRole });
+  const result = await authenticateRequest(request, { minRole, requirePermission });
 
   if (!result.authorized) {
     return {

@@ -86,7 +86,7 @@ BEGIN
     '00000000-0000-4000-8001-000000000001',
     'accounts@safawala.com',
     'Accounts Manager',
-    'staff',
+    'delivery_staff',
     v_franchise_id,
     true,
     '{"dashboard":true,"bookings":true,"customers":true,"inventory":false,"packages":false,"vendors":false,"quotes":true,"invoices":true,"laundry":false,"expenses":true,"deliveries":false,"productArchive":false,"payroll":true,"attendance":false,"reports":true,"financials":true,"franchises":false,"staff":false,"integrations":false,"settings":false}'
@@ -106,7 +106,7 @@ BEGIN
     'staff',
     v_franchise_id,
     true,
-    '{"dashboard":true,"bookings":false,"customers":false,"inventory":false,"packages":false,"vendors":false,"quotes":false,"invoices":false,"laundry":false,"expenses":false,"deliveries":true,"productArchive":false,"payroll":false,"attendance":true,"reports":false,"financials":false,"franchises":false,"staff":false,"integrations":false,"settings":false}'
+    '{"dashboard":false,"bookings":false,"customers":false,"inventory":false,"packages":false,"vendors":false,"quotes":false,"invoices":false,"laundry":false,"expenses":false,"deliveries":true,"productArchive":false,"payroll":false,"attendance":false,"reports":false,"financials":false,"franchises":false,"staff":false,"integrations":false,"settings":false,"delivery.view":true,"delivery.update":true}'
   )
   ON CONFLICT (email) DO UPDATE SET
     franchise_id = EXCLUDED.franchise_id,

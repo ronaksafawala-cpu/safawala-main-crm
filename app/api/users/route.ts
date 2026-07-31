@@ -7,7 +7,9 @@ export const runtime = 'nodejs'
 
 export async function GET(request: NextRequest) {
   try {
-    const authResult = await requireAuth(request, 'readonly')
+    // User directory is an administrative surface. Never expose it to
+    // department users (including Delivery) even when they know the URL.
+    const authResult = await requireAuth(request, 'franchise_admin')
     if (!authResult.success) return NextResponse.json(authResult.response, { status: 401 })
 
     const user = authResult.authContext!.user

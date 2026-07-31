@@ -40,9 +40,9 @@ export function PortalSidebar({ config }: PortalSidebarProps) {
         top: 0,
         left: 0,
         bottom: 0,
-        background: "#18181b",
-        borderRight: "1px solid rgba(255,255,255,0.06)",
-        boxShadow: "4px 0 32px rgba(0,0,0,0.25)",
+        background: "#2B1738",
+        borderRight: "1px solid #493455",
+        boxShadow: "4px 0 24px rgba(43,23,56,0.12)",
         display: "flex",
         flexDirection: "column",
         zIndex: 50,
@@ -52,17 +52,17 @@ export function PortalSidebar({ config }: PortalSidebarProps) {
       <div
         style={{
           padding: "20px 20px 16px",
-          borderBottom: "1px solid rgba(255,255,255,0.07)",
+          borderBottom: "1px solid #493455",
         }}
       >
         {/* Accent bar */}
-        <div style={{ height: 3, borderRadius: 2, background: config.color, marginBottom: 16 }} />
+        <div style={{ height: 3, borderRadius: 2, background: "#C8A96B", marginBottom: 16 }} />
 
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
           <div
             style={{
               width: 36, height: 36, borderRadius: 10,
-              background: `linear-gradient(135deg, ${config.color}, ${adjustColor(config.color, -30)})`,
+              background: "#4A1F5E",
               display: "flex", alignItems: "center", justifyContent: "center",
               flexShrink: 0, color: "white",
             }}
@@ -99,6 +99,7 @@ export function PortalSidebar({ config }: PortalSidebarProps) {
           // navigation while the server remains authoritative.
           if (user?.department === "warehouse" && (user?.role === "warehouse_staff" || user?.role === "staff")) return ["warehouse.view", "warehouse.update"].includes(tab.permission)
           if (user?.department === "qc" && (user?.role === "qc_staff" || user?.role === "staff")) return ["qc.view", "qc.update"].includes(tab.permission)
+          if (user?.department === "delivery" && (user?.role === "delivery_staff" || user?.role === "staff")) return ["delivery.view", "delivery.update"].includes(tab.permission)
           return false
         }).map((tab) => {
           const isActive =
@@ -118,8 +119,8 @@ export function PortalSidebar({ config }: PortalSidebarProps) {
                 padding: "10px 12px",
                 borderRadius: 12,
                 marginBottom: 2,
-                background: isActive ? `${config.color}20` : "transparent",
-                color: isActive ? config.color : "rgba(255,255,255,0.5)",
+                background: isActive ? "#4A1F5E" : "transparent",
+                color: isActive ? "#F1D696" : "#BDAFC5",
                 fontWeight: isActive ? 700 : 500,
                 fontSize: 13,
                 textDecoration: "none",
@@ -130,7 +131,7 @@ export function PortalSidebar({ config }: PortalSidebarProps) {
               {isActive && (
                 <div style={{ width: 3, height: 18, borderRadius: 2, background: config.color, flexShrink: 0 }} />
               )}
-              <span style={{ color: isActive ? config.color : "rgba(255,255,255,0.35)", flexShrink: 0, display: "flex" }}>
+              <span style={{ color: isActive ? "#F1D696" : "#C8BACF", flexShrink: 0, display: "flex" }}>
                 <PortalIcon name={tab.icon as any} size={18} />
               </span>
               <span>{tab.label}</span>
@@ -143,7 +144,7 @@ export function PortalSidebar({ config }: PortalSidebarProps) {
       <div
         style={{
           padding: "12px 16px",
-          borderTop: "1px solid rgba(255,255,255,0.07)",
+          borderTop: "1px solid #493455",
         }}
       >
         {user && (
@@ -151,7 +152,7 @@ export function PortalSidebar({ config }: PortalSidebarProps) {
             <div
               style={{
                 width: 34, height: 34, borderRadius: 10, flexShrink: 0,
-                background: `linear-gradient(135deg, ${config.color}, ${adjustColor(config.color, -30)})`,
+                background: "#4A1F5E",
                 display: "flex", alignItems: "center", justifyContent: "center",
                 color: "white", fontSize: 12, fontWeight: 800,
               }}

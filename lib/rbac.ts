@@ -10,6 +10,8 @@ export type RbacPermission =
   | "warehouse.export"
   | "qc.view"
   | "qc.update"
+  | "delivery.view"
+  | "delivery.update"
   | "users.manage"
   | "roles.manage"
   | "permissions.manage"
@@ -70,12 +72,16 @@ export async function getRbacContext(request: NextRequest): Promise<RbacContext 
     permissions.add("settings.manage")
     permissions.add("qc.view")
     permissions.add("qc.update")
+    permissions.add("delivery.view")
+    permissions.add("delivery.update")
   }
   if (auth.user.role === "franchise_admin") {
     permissions.add("warehouse.view")
     permissions.add("warehouse.update")
     permissions.add("qc.view")
     permissions.add("qc.update")
+    permissions.add("delivery.view")
+    permissions.add("delivery.update")
   }
   if (auth.user.role === "warehouse_staff" || auth.user.department === "warehouse") {
     permissions.add("warehouse.view")
@@ -84,6 +90,10 @@ export async function getRbacContext(request: NextRequest): Promise<RbacContext 
   if (auth.user.role === "qc_staff" || auth.user.department === "qc") {
     permissions.add("qc.view")
     permissions.add("qc.update")
+  }
+  if (auth.user.role === "delivery_staff" || auth.user.department === "delivery") {
+    permissions.add("delivery.view")
+    permissions.add("delivery.update")
   }
 
   return { user: auth.user, permissions }
