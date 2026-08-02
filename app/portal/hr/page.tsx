@@ -23,9 +23,13 @@ const QUICK_ACTIONS = [
   { href: "/portal/hr/recruitment",label: "Schedule Interview",       icon: "calendar",     color: "#3b82f6" },
 ]
 
+type StatValue = number | null
+
 export default function HrHomePage() {
   const [user, setUser] = useState<any>(null)
-  const [stats, setStats] = useState({ staff: 0, todayPresent: 0, pendingLeaves: 0, openRoles: 0 })
+  const [stats, setStats] = useState<{ staff: StatValue; todayPresent: StatValue; pendingLeaves: StatValue; openRoles: StatValue }>({
+    staff: null, todayPresent: null, pendingLeaves: null, openRoles: null,
+  })
 
   const today = new Date().toISOString().split("T")[0]
   const hour = new Date().getHours()
@@ -35,17 +39,29 @@ export default function HrHomePage() {
     const raw = localStorage.getItem("safawala_user")
     if (raw) { try { setUser(JSON.parse(raw)) } catch {} }
 
+    // These endpoints don't return a `total` count, only the page of rows —
+    // limit must be high enough that .length is a real total, not a page size.
+    // res.ok is checked explicitly: some of these (e.g. /api/users) require
+    // franchise_admin and 401 for a plain HR staff account — that's a 403,
+    // not zero, so it renders as "—" rather than a misleading 0.
+    async function readCount(url: string): Promise<StatValue> {
+      const res = await fetch(url)
+      if (!res.ok) return null
+      const json = await res.json()
+      return json.total ?? json.data?.length ?? 0
+    }
+
     Promise.allSettled([
-      fetch("/api/users?limit=1").then(r => r.json()),
-      fetch(`/api/attendance?date=${today}&limit=1`).then(r => r.json()),
-      fetch("/api/leave-requests?status=pending&limit=1").then(r => r.json()),
-      fetch("/api/recruitment?status=interview_scheduled&limit=1").then(r => r.json()),
+      readCount("/api/users?limit=500"),
+      readCount(`/api/attendance?date=${today}&limit=500`),
+      readCount("/api/leave-requests?status=pending&limit=500"),
+      readCount("/api/recruitment?status=interview_scheduled&limit=500"),
     ]).then(([staffRes, attRes, leaveRes, recruitRes]) => {
       setStats({
-        staff:         staffRes.status  === "fulfilled" ? (staffRes.value.total  ?? staffRes.value.data?.length  ?? 0) : 0,
-        todayPresent:  attRes.status    === "fulfilled" ? (attRes.value.total    ?? attRes.value.data?.length    ?? 0) : 0,
-        pendingLeaves: leaveRes.status  === "fulfilled" ? (leaveRes.value.total  ?? leaveRes.value.data?.length  ?? 0) : 0,
-        openRoles:     recruitRes.status === "fulfilled" ? (recruitRes.value.total ?? recruitRes.value.data?.length ?? 0) : 0,
+        staff:         staffRes.status  === "fulfilled" ? staffRes.value  : null,
+        todayPresent:  attRes.status    === "fulfilled" ? attRes.value    : null,
+        pendingLeaves: leaveRes.status  === "fulfilled" ? leaveRes.value  : null,
+        openRoles:     recruitRes.status === "fulfilled" ? recruitRes.value : null,
       })
     })
   }, [today])
@@ -59,17 +75,20 @@ export default function HrHomePage() {
         <p style={{ margin: 0, fontSize: 11, opacity: 0.65 }}>HR Portal · {new Date().toLocaleDateString("en-IN", { weekday: "long", day: "numeric", month: "short" })}</p>
       </div>
 
-      {/* Stats strip */}
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", background: "white", borderBottom: "1px solid #f1f5f9" }}>
+      {/* Stats */}
+      <div style={{ padding: "16px 16px 4px", display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 12 }}>
         {[
-          { label: "Staff",      value: stats.staff,         color: COLOR },
-          { label: "Present",    value: stats.todayPresent,  color: "#22c55e" },
-          { label: "Leaves",     value: stats.pendingLeaves, color: "#f97316" },
-          { label: "Interviews", value: stats.openRoles,     color: "#3b82f6" },
-        ].map((s, i) => (
-          <div key={s.label} style={{ padding: "12px 8px", textAlign: "center", borderRight: i < 3 ? "1px solid #f1f5f9" : "none" }}>
-            <p style={{ margin: "0 0 2px", fontSize: 20, fontWeight: 900, color: s.color }}>{s.value}</p>
-            <p style={{ margin: 0, fontSize: 8, fontWeight: 700, textTransform: "uppercase", letterSpacing: 0.5, color: "#94a3b8" }}>{s.label}</p>
+          { label: "Total Staff",           value: stats.staff,         color: COLOR,      icon: "team" },
+          { label: "Present Today",         value: stats.todayPresent,  color: "#22c55e",  icon: "check-circle" },
+          { label: "Pending Leave Requests",value: stats.pendingLeaves, color: "#f97316",  icon: "file-check" },
+          { label: "Interviews Scheduled",  value: stats.openRoles,     color: "#3b82f6",  icon: "user-plus" },
+        ].map((s) => (
+          <div key={s.label} style={{ background: "white", border: "1px solid #f1f5f9", borderRadius: 18, padding: 16 }}>
+            <div style={{ width: 40, height: 40, borderRadius: 12, background: `${s.color}15`, display: "flex", alignItems: "center", justifyContent: "center", color: s.color, marginBottom: 12 }}>
+              <PortalIcon name={s.icon} size={20} />
+            </div>
+            <p style={{ margin: "0 0 2px", fontSize: 24, fontWeight: 900, color: "#1e1208" }}>{s.value ?? "—"}</p>
+            <p style={{ margin: 0, fontSize: 11, fontWeight: 600, color: "rgba(80,55,30,0.5)" }}>{s.label}</p>
           </div>
         ))}
       </div>
