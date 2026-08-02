@@ -1,8 +1,9 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useCallback } from "react"
 import Link from "next/link"
 import { PortalIcon } from "@/components/portal/portal-icons"
+import { useAutoRefresh } from "@/lib/hooks/use-auto-refresh"
 
 const COLOR = "#6366f1"
 
@@ -31,14 +32,10 @@ export default function HrHomePage() {
     staff: null, todayPresent: null, pendingLeaves: null, openRoles: null,
   })
 
-  const today = new Date().toISOString().split("T")[0]
   const hour = new Date().getHours()
   const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening"
 
-  useEffect(() => {
-    const raw = localStorage.getItem("safawala_user")
-    if (raw) { try { setUser(JSON.parse(raw)) } catch {} }
-
+  const loadStats = useCallback(() => {
     // These endpoints don't return a `total` count, only the page of rows —
     // limit must be high enough that .length is a real total, not a page size.
     // res.ok is checked explicitly: some of these (e.g. /api/users) require
@@ -51,6 +48,7 @@ export default function HrHomePage() {
       return json.total ?? json.data?.length ?? 0
     }
 
+    const today = new Date().toISOString().split("T")[0]
     Promise.allSettled([
       readCount("/api/users?limit=500"),
       readCount(`/api/attendance?date=${today}&limit=500`),
@@ -64,7 +62,17 @@ export default function HrHomePage() {
         openRoles:     recruitRes.status === "fulfilled" ? recruitRes.value : null,
       })
     })
-  }, [today])
+  }, [])
+
+  useEffect(() => {
+    const raw = localStorage.getItem("safawala_user")
+    if (raw) { try { setUser(JSON.parse(raw)) } catch {} }
+    loadStats()
+  }, [loadStats])
+
+  // Picks up employee/attendance/leave/recruitment changes made from the
+  // Main CRM's other views (or another HR user) without a manual refresh.
+  useAutoRefresh(loadStats, 15000)
 
   return (
     <div style={{ fontFamily: "'Inter','Segoe UI',sans-serif", paddingBottom: 40 }}>

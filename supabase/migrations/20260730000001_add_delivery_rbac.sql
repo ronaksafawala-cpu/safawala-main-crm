@@ -27,10 +27,11 @@ where r.code = 'delivery_staff'
   and p.code in ('delivery.view', 'delivery.update')
 on conflict do nothing;
 
--- Migrate the existing delivery login from the legacy generic staff role.
-update public.users
-set role = 'delivery_staff', department = 'delivery', is_active = true, updated_at = now()
-where lower(email) = 'delivery@safawala.com';
+-- Note: this migration originally also set role = 'delivery_staff' on the
+-- delivery@safawala.com row, but users_role_check only allows
+-- super_admin/franchise_admin/staff/readonly — 'delivery_staff' violates it.
+-- department = 'delivery' (already set at account creation) is sufficient:
+-- the user_roles bootstrap below matches on department, not the role column.
 
 -- Bootstrap all delivery users, including future users created with department=delivery.
 insert into public.user_roles (user_id, role_id)

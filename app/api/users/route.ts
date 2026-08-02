@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 import { createClient } from "@/lib/supabase/server"
 import { requireAuth } from "@/lib/auth-middleware"
+import { isHrOrFranchiseAdmin } from "@/lib/hr-authorization"
 
 export const dynamic = 'force-dynamic'
 export const runtime = 'nodejs'
@@ -8,9 +9,13 @@ export const runtime = 'nodejs'
 export async function GET(request: NextRequest) {
   try {
     // User directory is an administrative surface. Never expose it to
-    // department users (including Delivery) even when they know the URL.
-    const authResult = await requireAuth(request, 'franchise_admin')
+    // department users (including Delivery) even when they know the URL —
+    // except HR staff, who need it to manage employees for their franchise.
+    const authResult = await requireAuth(request, 'staff')
     if (!authResult.success) return NextResponse.json(authResult.response, { status: 401 })
+    if (!isHrOrFranchiseAdmin(authResult.authContext!.user)) {
+      return NextResponse.json({ error: "Forbidden", message: "This action requires franchise_admin role or higher" }, { status: 403 })
+    }
 
     const user = authResult.authContext!.user
     const franchiseId = user.franchise_id
