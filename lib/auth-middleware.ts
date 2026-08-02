@@ -69,6 +69,23 @@ export interface AuthOptions {
  * the legacy JSON permissions as a compatibility fallback. */
 async function getRelationalPermission(userId: string, code: string): Promise<boolean | null> {
   try {
+    // The relational permissions table only knows about a small, partially
+    // rolled-out set of codes (warehouse.*, qc.*, delivery.*, users.manage,
+    // roles.manage, permissions.manage, settings.manage). Most of the app
+    // (inventory, staff, bookings, customers, ...) still runs entirely on
+    // the legacy JSON `users.permissions` column and was never added here.
+    // If `code` isn't a registered relational permission at all, this
+    // system has no opinion — defer to the legacy column instead of
+    // treating "not explicitly granted" as "explicitly denied".
+    const { data: knownPermission, error: knownError } = await supabaseServer
+      .from('permissions')
+      .select('id')
+      .eq('code', code)
+      .maybeSingle()
+
+    if (knownError) return null
+    if (!knownPermission) return null
+
     const { data: assignments, error: assignmentError } = await supabaseServer
       .from('user_roles')
       .select('role_id')
@@ -82,18 +99,10 @@ async function getRelationalPermission(userId: string, code: string): Promise<bo
       .from('role_permissions')
       .select('permission_id')
       .in('role_id', roleIds)
+      .eq('permission_id', knownPermission.id)
 
     if (linkError || !links) return null
-    const permissionIds = links.map((row: any) => row.permission_id).filter(Boolean)
-    if (permissionIds.length === 0) return false
-
-    const { data: permissions, error: permissionError } = await supabaseServer
-      .from('permissions')
-      .select('code')
-      .in('id', permissionIds)
-
-    if (permissionError || !permissions) return null
-    return permissions.some((permission: any) => permission.code === code)
+    return links.length > 0
   } catch {
     // During a staged rollout the RBAC tables may not exist yet.
     return null
