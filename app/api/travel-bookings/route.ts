@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server"
 import { authenticateRequest } from "@/lib/auth-middleware"
 import { supabaseServer } from "@/lib/supabase-server-simple"
+import { logAudit } from "@/lib/audit-log"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
@@ -176,6 +177,12 @@ export async function POST(request: NextRequest) {
           .select()
           .single()
         if (error) throw error
+
+        await logAudit(request, { id: auth.user!.id, email: auth.user!.email, franchise_id: auth.user!.franchise_id }, {
+          module: "travels", action: "booking.update", resourceType: "travel_booking", resourceId: existing.id,
+          metadata: { status, stylist_id, travel_mode },
+        })
+
         return NextResponse.json({ success: true, data })
       }
     }
@@ -196,6 +203,12 @@ export async function POST(request: NextRequest) {
       .single()
 
     if (error) throw error
+
+    await logAudit(request, { id: auth.user!.id, email: auth.user!.email, franchise_id: auth.user!.franchise_id }, {
+      module: "travels", action: "booking.create", resourceType: "travel_booking", resourceId: data.id,
+      metadata: { status: status || "pending", stylist_id, travel_mode },
+    })
+
     return NextResponse.json({ success: true, data }, { status: 201 })
   } catch (err: any) {
     console.error("travel-bookings POST error:", err)
@@ -233,6 +246,12 @@ export async function PATCH(request: NextRequest) {
       .single()
 
     if (error) throw error
+
+    await logAudit(request, { id: auth.user!.id, email: auth.user!.email, franchise_id: auth.user!.franchise_id }, {
+      module: "travels", action: "booking.status_change", resourceType: "travel_booking", resourceId: id,
+      metadata: { status, stylist_id },
+    })
+
     return NextResponse.json({ success: true, data })
   } catch (err: any) {
     return NextResponse.json({ success: false, error: err.message }, { status: 500 })
