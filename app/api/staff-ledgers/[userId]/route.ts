@@ -4,13 +4,21 @@ import { cookies } from "next/headers"
 import { authenticateRequest } from "@/lib/auth-middleware"
 
 export async function GET(request: NextRequest, { params }: { params: { userId: string } }) {
-  const auth = await authenticateRequest(request, { minRole: 'franchise_admin' })
+  // Any authenticated staff member can view their own ledger (that's the
+  // whole point of "My Ledger" in every portal); viewing someone else's
+  // still requires franchise_admin/super_admin or HR.
+  const auth = await authenticateRequest(request, { minRole: 'staff' })
   if (!auth.authorized) {
     return NextResponse.json(auth.error, { status: auth.statusCode })
   }
+  const { userId } = params
+  const isSelf = auth.user!.id === userId
+  const isAdmin = auth.user!.is_super_admin || auth.user!.role === 'franchise_admin' || auth.user!.department === 'hr'
+  if (!isSelf && !isAdmin) {
+    return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 })
+  }
   try {
     const supabase = createRouteHandlerClient({ cookies })
-    const { userId } = params
 
     if (!userId) {
       return NextResponse.json({ success: false, error: "Missing userId" }, { status: 400 })
