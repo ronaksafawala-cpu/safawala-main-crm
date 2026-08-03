@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
-import { createRouteHandlerClient } from "@supabase/auth-helpers-nextjs"
-import { cookies } from "next/headers"
 import { authenticateRequest } from "@/lib/auth-middleware"
+import { supabaseServer } from "@/lib/supabase-server-simple"
 
 export async function GET(request: NextRequest, { params }: { params: { userId: string } }) {
   // Any authenticated staff member can view their own ledger (that's the
@@ -18,7 +17,12 @@ export async function GET(request: NextRequest, { params }: { params: { userId: 
     return NextResponse.json({ success: false, error: "Forbidden" }, { status: 403 })
   }
   try {
-    const supabase = createRouteHandlerClient({ cookies })
+    // authenticateRequest already validated this request via the CRM's own
+    // cookie — this route previously re-authenticated with a Supabase Auth
+    // session client, which silently returns no rows (not an error) whenever
+    // that separate session is missing/stale, making a real personal ledger
+    // look like "no data" to the caller.
+    const supabase = supabaseServer
 
     if (!userId) {
       return NextResponse.json({ success: false, error: "Missing userId" }, { status: 400 })
