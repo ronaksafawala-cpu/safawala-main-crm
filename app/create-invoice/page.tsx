@@ -200,6 +200,24 @@ export default function CreateInvoicePage() {
 
   // Gate: must select Rental or Sale before form unlocks (skip for edits/pdf views)
   const [typeSelected, setTypeSelected] = useState(mode !== "new" || !!pdfToken)
+  const [bookingStep, setBookingStep] = useState(1)
+  const bookingSteps = [
+    { number: 1, label: "Customer", caption: "Select customer" },
+    { number: 2, label: "Booking Details", caption: "Event information" },
+    { number: 3, label: "Products", caption: "Add items" },
+    { number: 4, label: "Payment", caption: "Settle amount" },
+    { number: 5, label: "Review", caption: "Confirm booking" },
+  ]
+
+  const goToBookingStep = (step: number) => {
+    setBookingStep(Math.max(1, Math.min(5, step)))
+    window.scrollTo({ top: 0, behavior: "smooth" })
+  }
+
+  const canContinueFromStep = () => {
+    if (bookingStep === 1 && !selectedCustomer) return false
+    return true
+  }
 
   const handleTypeSelect = (type: "rental" | "sale") => {
     setInvoiceData(prev => ({ ...prev, invoice_type: type }))
@@ -3358,7 +3376,16 @@ export default function CreateInvoicePage() {
       {!typeSelected && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4"
           style={{ background: "rgba(0,0,0,0.65)", backdropFilter: "blur(6px)" }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg p-8 text-center">
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg p-8 pt-16 text-center">
+            <button
+              type="button"
+              onClick={() => router.push("/dashboard")}
+              aria-label="Close and return to dashboard"
+              title="Return to dashboard"
+              className="absolute right-5 top-5 inline-flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-500 shadow-sm transition-colors hover:border-gray-300 hover:bg-gray-50 hover:text-gray-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2"
+            >
+              <X className="h-5 w-5" />
+            </button>
             <div className="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <FileText className="w-7 h-7 text-green-600" />
             </div>
@@ -3470,7 +3497,7 @@ export default function CreateInvoicePage() {
 
       <div className="min-h-screen bg-slate-50 p-4 print:p-0 print:bg-white invoice-scaled">
       {/* Header - Hidden on print */}
-      <div className="max-w-[64%] mx-auto mb-4 flex items-center justify-between print:hidden">
+      <div className="mx-auto mb-4 flex w-full max-w-[96rem] items-center justify-between print:hidden">
         <div className="flex items-center gap-4">
           <Link href="/bookings">
             <Button variant="outline" size="sm">
@@ -3490,9 +3517,9 @@ export default function CreateInvoicePage() {
               )}
             </div>
             <p className="text-sm text-gray-600">
-              {mode === "edit" 
-                ? `Order: ${invoiceData.invoice_number || "Loading..."}` 
-                : "Fill in the details below to create a booking"}
+              {mode === "edit"
+                ? `Order: ${invoiceData.invoice_number || "Loading..."}`
+                : "Create a complete order in a few guided steps"}
             </p>
           </div>
         </div>
@@ -3547,7 +3574,7 @@ export default function CreateInvoicePage() {
 
 
       {/* Invoice Document */}
-      <div className="max-w-[64%] mx-auto bg-white rounded-lg shadow-lg print:shadow-none print:rounded-none print:max-w-full">
+      <div className="mx-auto w-full max-w-[96rem] rounded-lg bg-white shadow-lg print:shadow-none print:rounded-none print:max-w-full">
         
         {/* ========== PRINT-ONLY HEADER ========== */}
         <div className="hidden print:block bg-slate-50 border-b border-slate-300 px-3 py-2">
@@ -3700,63 +3727,113 @@ export default function CreateInvoicePage() {
             </div>
           </div>
 
+          {/* Guided booking steps */}
+          <div className="rounded-xl border border-slate-200 bg-white px-4 py-4 shadow-sm">
+            <div className="flex items-start justify-between gap-2 overflow-x-auto">
+              {bookingSteps.map((step, index) => {
+                const active = bookingStep === step.number
+                const complete = bookingStep > step.number
+                return (
+                  <div key={step.number} className="flex min-w-[110px] flex-1 items-start">
+                    <button
+                      type="button"
+                      onClick={() => complete || step.number <= bookingStep ? goToBookingStep(step.number) : undefined}
+                      className="group flex min-w-0 flex-1 flex-col items-center text-center"
+                      aria-current={active ? "step" : undefined}
+                    >
+                      <span className={cn(
+                        "flex h-9 w-9 items-center justify-center rounded-full border-2 text-sm font-bold transition-colors",
+                        active || complete
+                          ? "border-indigo-600 bg-indigo-600 text-white"
+                          : "border-slate-300 bg-white text-slate-600"
+                      )}>
+                        {complete ? <Check className="h-4 w-4" /> : step.number}
+                      </span>
+                      <span className={cn("mt-2 text-xs font-semibold", active ? "text-indigo-700" : "text-slate-700")}>{step.label}</span>
+                      <span className="mt-0.5 text-[10px] text-slate-500">{active ? "In progress" : step.caption}</span>
+                    </button>
+                    {index < bookingSteps.length - 1 && (
+                      <div className={cn("mt-4 h-px flex-1", bookingStep > step.number ? "bg-indigo-500" : "bg-slate-200")} />
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+            <p className="mt-4 text-center text-sm font-medium text-slate-700">
+              Step {bookingStep} of {bookingSteps.length} · {bookingSteps[bookingStep - 1].label}
+            </p>
+          </div>
+
 
           {/* ================= WEB-ONLY CONTENT START ================= */}
           <div className="p-4 md:p-6 print:hidden bg-white space-y-6">
 
 
 
-            <div className={cn(
-              invoiceData.invoice_type === "sale" ? "grid grid-cols-12 gap-6 items-start" : "space-y-6"
-            )}>
-              <div className={cn(
-                invoiceData.invoice_type === "sale" ? "col-span-12 lg:col-span-8 space-y-6" : "w-full"
-              )}>
-                {invoiceData.invoice_type === "sale" ? (
-                  <div className="space-y-6">
-                    {renderCustomerCard()}
-                    {renderProductSelectorCards()}
-                    {renderSettlementCards()}
+            <div className="grid grid-cols-1 gap-6 items-start lg:grid-cols-12">
+              <div className="space-y-5 lg:col-span-8">
+                {bookingStep === 1 && renderCustomerCard()}
+                {bookingStep === 2 && (
+                  <div className="space-y-4">
+                    {renderEventAndGroomBrideCards()}
+                    {invoiceData.invoice_type === "sale" && (
+                      <Card className="border border-slate-200 bg-white p-5 shadow-sm">
+                        <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
+                          <FileCheck className="h-4 w-4 text-indigo-600" />
+                          Booking details
+                        </div>
+                        <p className="mt-2 text-sm text-slate-500">Add the event date, venue and notes for this sale.</p>
+                        <Textarea
+                          value={invoiceData.notes}
+                          onChange={(e) => setInvoiceData({ ...invoiceData, notes: e.target.value })}
+                          placeholder="Notes for this booking"
+                          className="mt-4 min-h-24"
+                        />
+                      </Card>
+                    )}
                   </div>
-                ) : (
-                  <Tabs defaultValue="details" className="w-full">
-                    <TabsList className="grid grid-cols-3 bg-slate-100 p-1 rounded-lg mb-4 border border-slate-200">
-                      <TabsTrigger value="details" className="data-[state=active]:bg-white data-[state=active]:text-indigo-700 data-[state=active]:shadow-sm text-slate-500 rounded-md py-1.5 font-medium text-xs sm:text-sm transition-all flex items-center justify-center gap-1.5">
-                        <User className="h-4 w-4" />
-                        Details
-                      </TabsTrigger>
-                      <TabsTrigger value="items" className="data-[state=active]:bg-white data-[state=active]:text-indigo-700 data-[state=active]:shadow-sm text-slate-500 rounded-md py-1.5 font-medium text-xs sm:text-sm transition-all flex items-center justify-center gap-1.5">
-                        <Package className="h-4 w-4" />
-                        Products
-                      </TabsTrigger>
-                      <TabsTrigger value="settlement" className="data-[state=active]:bg-white data-[state=active]:text-indigo-700 data-[state=active]:shadow-sm text-slate-500 rounded-md py-1.5 font-medium text-xs sm:text-sm transition-all flex items-center justify-center gap-1.5">
-                        <FileCheck className="h-4 w-4" />
-                        Settlement
-                      </TabsTrigger>
-                    </TabsList>
-
-                    {/* TAB 1: CUSTOMER & EVENT DETAILS */}
-                    <TabsContent value="details" className="space-y-4 focus-visible:outline-none focus-visible:ring-0">
-                      {renderCustomerCard()}
-                      {renderEventAndGroomBrideCards()}
-                    </TabsContent>
-
-                    {/* TAB 2: PRODUCTS & ITEMS */}
-                    <TabsContent value="items" className="space-y-4 focus-visible:outline-none focus-visible:ring-0">
-                      {renderProductSelectorCards()}
-                    </TabsContent>
-
-                    {/* TAB 3: SETTLEMENT */}
-                    <TabsContent value="settlement" className="space-y-4 focus-visible:outline-none focus-visible:ring-0">
-                      {renderSettlementCards()}
-                    </TabsContent>
-                  </Tabs>
                 )}
+                {bookingStep === 3 && renderProductSelectorCards()}
+                {bookingStep === 4 && renderSettlementCards()}
+                {bookingStep === 5 && (
+                  <Card className="border border-slate-200 bg-white p-6 shadow-sm">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100 text-emerald-700"><Check className="h-5 w-5" /></div>
+                      <div>
+                        <h2 className="text-xl font-semibold text-slate-900">Review booking</h2>
+                        <p className="text-sm text-slate-500">Check the Booking Summary and confirm the order.</p>
+                      </div>
+                    </div>
+                    <div className="mt-6 grid gap-3 sm:grid-cols-2">
+                      <div className="rounded-lg border border-slate-200 p-4"><p className="text-xs text-slate-500">Customer</p><p className="mt-1 font-semibold text-slate-900">{selectedCustomer?.name || "Not selected"}</p></div>
+                      <div className="rounded-lg border border-slate-200 p-4"><p className="text-xs text-slate-500">Booking type</p><p className="mt-1 font-semibold capitalize text-slate-900">{invoiceData.invoice_type}</p></div>
+                      <div className="rounded-lg border border-slate-200 p-4"><p className="text-xs text-slate-500">Items</p><p className="mt-1 font-semibold text-slate-900">{invoiceItems.reduce((sum, item) => sum + item.quantity, 0)}</p></div>
+                      <div className="rounded-lg border border-slate-200 p-4"><p className="text-xs text-slate-500">Estimated total</p><p className="mt-1 font-semibold text-slate-900">₹{grandTotal.toLocaleString("en-IN")}</p></div>
+                    </div>
+                  </Card>
+                )}
+
+                <div className="flex items-center justify-between gap-3 border-t border-slate-200 pt-4">
+                  <Button type="button" variant="outline" onClick={() => goToBookingStep(bookingStep - 1)} disabled={bookingStep === 1}>
+                    <ArrowLeft className="mr-2 h-4 w-4" /> Back
+                  </Button>
+                  {bookingStep < 5 ? (
+                    <Button type="button" onClick={() => canContinueFromStep() && goToBookingStep(bookingStep + 1)} disabled={!canContinueFromStep()} className="bg-indigo-600 text-white hover:bg-indigo-700">
+                      Continue to {bookingSteps[bookingStep].label}
+                      <ArrowLeft className="ml-2 h-4 w-4 rotate-180" />
+                    </Button>
+                  ) : (
+                    <Button type="button" onClick={handleCreateOrder} disabled={saving || !selectedCustomer} className="bg-indigo-600 text-white hover:bg-indigo-700">
+                      {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Check className="mr-2 h-4 w-4" />}
+                      {mode === "edit" ? "Update Booking" : "Create Booking"}
+                    </Button>
+                  )}
+                </div>
               </div>
 
               {/* Right Column / POS checkout container OR bottom checkout container */}
               <div className={cn(
-                invoiceData.invoice_type === "sale" ? "col-span-12 lg:col-span-4 lg:sticky lg:top-20" : "space-y-4 mt-6"
+                "lg:col-span-4 lg:sticky lg:top-20"
               )}>
                 <Card className="shadow-sm border border-slate-200 bg-white overflow-hidden">
                       {/* Sidebar Header */}
@@ -4065,11 +4142,11 @@ export default function CreateInvoicePage() {
                         <Button 
                           size="default" 
                           onClick={handleCreateOrder} 
-                          disabled={saving || !selectedCustomer}
+                          disabled={saving || !selectedCustomer || bookingStep !== 5}
                           className="w-full bg-indigo-600 hover:bg-indigo-700 text-white h-10 font-semibold text-sm disabled:opacity-50"
                         >
                           {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Check className="h-4 w-4 mr-2" />}
-                          {mode === "edit" && editingQuote ? "CONVERT TO BOOKING" : mode === "edit" ? "UPDATE ORDER" : "CREATE ORDER"}
+                          {bookingStep !== 5 ? "REVIEW BOOKING TO CREATE" : mode === "edit" && editingQuote ? "CONVERT TO BOOKING" : mode === "edit" ? "UPDATE ORDER" : "CREATE ORDER"}
                         </Button>
                         
                         <div className="grid grid-cols-2 gap-2">
