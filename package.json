@@ -16,6 +16,7 @@
     "smoke:rls": "tsx scripts/rls-smoke-test.ts",
     "sql:run": "tsx scripts/run-sql.ts",
     "sql:rls-smoke": "pnpm sql:run scripts/rls-smoke-test.sql",
+      "description": "SafaWala CRM",
     "sql:fix:add-settings-franchise-id": "pnpm sql:run scripts/fixes/add-franchise-id-to-settings-tables.sql",
     "sql:fix:backfill-settings-franchise-id": "pnpm sql:run scripts/fixes/backfill-settings-franchise-id.sql",
     "sql:fix:users-recursion": "pnpm sql:run scripts/fixes/fix-users-recursion-rls.sql",
@@ -115,3 +116,4 @@
     "typescript": "^5"
   }
 }
+
