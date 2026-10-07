@@ -7,8 +7,6 @@
     "dev": "next dev",
     "qa": "node tools/qa-checker.mjs",
     "qa:full": "node tools/qa-checker.mjs .",
-
-
     "seed:customers": "node scripts/seed-customers.js",
     "lint": "next lint",
     "start": "next start",
@@ -16,7 +14,7 @@
     "smoke:rls": "tsx scripts/rls-smoke-test.ts",
     "sql:run": "tsx scripts/run-sql.ts",
     "sql:rls-smoke": "pnpm sql:run scripts/rls-smoke-test.sql",
-      "description": "SafaWala CRM",
+    "description": "SafaWala CRM",
     "sql:fix:add-settings-franchise-id": "pnpm sql:run scripts/fixes/add-franchise-id-to-settings-tables.sql",
     "sql:fix:backfill-settings-franchise-id": "pnpm sql:run scripts/fixes/backfill-settings-franchise-id.sql",
     "sql:fix:users-recursion": "pnpm sql:run scripts/fixes/fix-users-recursion-rls.sql",
@@ -96,7 +94,6 @@
     "tailwindcss-animate": "^1.0.7",
     "tesseract.js": "^7.0.0",
     "twilio": "^6.0.2",
-        "tailwind-scrollbar": "^3.1.0",
     "vaul": "^0.9.6",
     "xlsx": "^0.18.5",
     "zod": "^3.24.1"
@@ -110,10 +107,9 @@
     "@types/react-dom": "^18",
     "dotenv": "^16.4.5",
     "postcss": "^8.5",
-    "tailwind-scrollbar": "^4.0.2",
+    "tailwind-scrollbar": "^3.1.0",
     "tailwindcss": "^3.4.17",
     "tsx": "^4.19.2",
     "typescript": "^5"
   }
 }
-
