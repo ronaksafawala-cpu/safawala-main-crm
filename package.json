@@ -96,7 +96,7 @@
     "tailwindcss-animate": "^1.0.7",
     "tesseract.js": "^7.0.0",
     "twilio": "^6.0.2",
-    "uuid": "^13.0.0",
+        "tailwind-scrollbar": "^3.1.0",
     "vaul": "^0.9.6",
     "xlsx": "^0.18.5",
     "zod": "^3.24.1"
