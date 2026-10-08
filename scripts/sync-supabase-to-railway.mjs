@@ -9,7 +9,11 @@ for (const name of required) {
 
 const supabaseUrl = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL)
 const projectRef = supabaseUrl.hostname.split(".")[0]
-const sourceUrl = `postgresql://postgres:${encodeURIComponent(process.env.SUPABASE_DB_PASSWORD)}@db.${projectRef}.supabase.co:5432/postgres`
+const sourceHost = process.env.SUPABASE_DB_HOST || `db.${projectRef}.supabase.co`
+const sourceUser = process.env.SUPABASE_DB_USER || "postgres"
+const sourcePort = process.env.SUPABASE_DB_PORT || "5432"
+const sourceDatabase = process.env.SUPABASE_DB_NAME || "postgres"
+const sourceUrl = `postgresql://${encodeURIComponent(sourceUser)}:${encodeURIComponent(process.env.SUPABASE_DB_PASSWORD)}@${sourceHost}:${sourcePort}/${sourceDatabase}`
 
 const source = new Client({ connectionString: sourceUrl, ssl: { rejectUnauthorized: false }, connectionTimeoutMillis: 15000 })
 const destination = new Client({ connectionString: process.env.DATABASE_URL, ssl: process.env.DATABASE_URL.includes("sslmode=require") ? { rejectUnauthorized: false } : undefined, connectionTimeoutMillis: 15000 })
