@@ -9,8 +9,8 @@ for (const name of required) {
 
 const supabaseUrl = new URL(process.env.NEXT_PUBLIC_SUPABASE_URL)
 const projectRef = supabaseUrl.hostname.split(".")[0]
-const sourceHost = process.env.SUPABASE_DB_HOST || `db.${projectRef}.supabase.co`
-const sourceUser = process.env.SUPABASE_DB_USER || "postgres"
+const sourceHost = process.env.SUPABASE_DB_HOST || "aws-0-ap-south-1.pooler.supabase.com"
+const sourceUser = process.env.SUPABASE_DB_USER || `postgres.${projectRef}`
 const sourcePort = process.env.SUPABASE_DB_PORT || "5432"
 const sourceDatabase = process.env.SUPABASE_DB_NAME || "postgres"
 const sourceUrl = `postgresql://${encodeURIComponent(sourceUser)}:${encodeURIComponent(process.env.SUPABASE_DB_PASSWORD)}@${sourceHost}:${sourcePort}/${sourceDatabase}`
