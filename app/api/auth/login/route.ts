@@ -382,19 +382,25 @@ export async function POST(request: NextRequest) {
       process.env.SUPABASE_SERVICE_ROLE_KEY!
     )
 
+    // Keep the profile lookup independent from the optional franchise
+    // relationship. Some Supabase schemas do not expose that relationship
+    // through PostgREST even though the users row itself is valid.
     const { data: userProfile, error: profileError } = await serviceAdmin
       .from("users")
-      .select(`
-        *,
-        franchises (
-          id,
-          name,
-          code
-        )
-      `)
+      .select("*")
       .ilike("email", email)
       .eq("is_active", true)
-      .single()
+      .maybeSingle()
+
+    let franchiseProfile: { id: string; name: string; code: string } | null = null
+    if (userProfile?.franchise_id) {
+      const { data: franchise } = await serviceAdmin
+        .from("franchises")
+        .select("id, name, code")
+        .eq("id", userProfile.franchise_id)
+        .maybeSingle()
+      franchiseProfile = franchise
+    }
 
     if (profileError || !userProfile) {
       console.error("[v0] Profile fetch failed after auth:", profileError)
@@ -430,8 +436,8 @@ export async function POST(request: NextRequest) {
       role: userProfile.role,
       department: userProfile.department || inferredDept || null,
       franchise_id: userProfile.franchise_id,
-      franchise_name: userProfile.franchises?.name || null,
-      franchise_code: userProfile.franchises?.code || null,
+      franchise_name: franchiseProfile?.name || null,
+      franchise_code: franchiseProfile?.code || null,
       is_active: userProfile.is_active,
       permissions: permissions,
       created_at: userProfile.created_at,
