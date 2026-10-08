@@ -22,7 +22,8 @@
     "sql:setup:service-role-security": "pnpm sql:run scripts/fixes/setup-service-role-security.sql",
     "sql:apply:settings-rls": "pnpm sql:run scripts/rls/settings-rls-policies.sql",
     "sql:cleanup:delete-all-data": "pnpm sql:run scripts/cleanup/delete-all-data.sql",
-    "stock:update": "node scripts/bulk-update-stock.js"
+    "stock:update": "node scripts/bulk-update-stock.js",
+    "db:sync": "node scripts/sync-supabase-to-railway.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1073.0",
